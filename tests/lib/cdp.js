@@ -83,7 +83,9 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
     /** Wipe saved data and reload: the page starts from the sample data again. */
     fresh: async () => { await api.ev('localStorage.clear(); 0'); await api.reload(); },
     setScheme: v => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: v }] }),
-    center: sel => api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(!e) return null; e.scrollIntoView({block:'center',inline:'nearest'}); var r=e.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2];})()`),
+    /** Point inside an element (fx, fy = fraction of its width/height from the top-left), scrolled into view. */
+    point: (sel, fx = 0.5, fy = 0.5) => api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(!e) return null; e.scrollIntoView({block:'center',inline:'nearest'}); var r=e.getBoundingClientRect(); return [r.left+r.width*${fx}, r.top+r.height*${fy}];})()`),
+    center: sel => api.point(sel),
     click: async sel => {
       const c = await api.center(sel);
       if (!c) throw new Error('click: no element ' + sel);
@@ -111,9 +113,9 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); e.focus(); e.select(); return 1})()`);
       if (text === '') await api.key('Backspace', 'Backspace', 8); else await api.type(text);
     },
-    /** Real mouse drag: press on `from`, move to `to`, replay the intercepted drag as dragEnter/dragOver/drop, release. */
+    /** Real mouse drag: press on `from`, move to `to` (opts.fx / opts.fy = where inside it, default the centre), replay the intercepted drag as dragEnter/dragOver/drop, release. */
     drag: async (fromSel, toSel, opts = {}) => {
-      const a = await api.center(fromSel), t = await api.center(toSel);
+      const a = await api.center(fromSel), t = await api.point(toSel, opts.fx === undefined ? 0.5 : opts.fx, opts.fy === undefined ? 0.5 : opts.fy);
       if (!a || !t) throw new Error('drag: missing ' + (a ? toSel : fromSel));
       dragData = null;
       await send('Input.setInterceptDrags', { enabled: true });

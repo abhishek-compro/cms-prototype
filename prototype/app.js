@@ -5,6 +5,8 @@
   S.load();
 
   var ui = {
+    listTab: 'templates', // content sidebar tab: 'templates' | 'flows'
+    flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
     side: false,         // side-by-side view (off by default)
@@ -55,6 +57,7 @@
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_SEARCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
   var ICON_PLUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  var ICON_FLOW = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M2 12h7M15 12h7"/></svg>';
   var ICON_GRIP = '<svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="4" r="1.5"/><circle cx="8.5" cy="4" r="1.5"/><circle cx="3.5" cy="9" r="1.5"/><circle cx="8.5" cy="9" r="1.5"/><circle cx="3.5" cy="14" r="1.5"/><circle cx="8.5" cy="14" r="1.5"/></svg>';
   var THEME_KEY = 'cms-prototype-theme';
   var THEME_ICONS = {
@@ -135,7 +138,34 @@
       '</header>';
   }
 
-  function listHtml() {
+  function listHtml() { return ui.listTab === 'flows' ? flowsListHtml() : templatesListHtml(); }
+
+  function flowSummary(f) {
+    if (!f.steps.length) return 'No templates yet';
+    var n = f.steps.length + (f.steps.length === 1 ? ' template' : ' templates');
+    return n + ' · ' + S.timingText(f.steps[0].timing) + (f.steps.length > 1 ? ' → ' + S.timingText(f.steps[f.steps.length - 1].timing) : '');
+  }
+  var FLOW_IND = '<span class="flow-ind" title="This template is itself a flow" aria-label="This template is itself a flow">' + ICON_FLOW + '<span>Single template</span></span>';
+
+  // The Flows tab: the flows you created (reorderable), then each template that no flow of this campaign includes,
+  // listed as a flow by itself with an indicator.
+  function flowsListHtml() {
+    var q = ui.search.trim().toLowerCase();
+    var items = S.flowItems(ui.campaignId).filter(function (it) {
+      return !q || (it.kind === 'flow' ? it.flow.name : it.content.name).toLowerCase().indexOf(q) !== -1;
+    });
+    if (!items.length) return '<li class="muted small" style="padding:8px 10px">' + (q ? 'No flows found' : 'No flows yet') + '</li>';
+    return items.map(function (it) {
+      var isFlow = it.kind === 'flow', id = isFlow ? it.flow.id : it.content.id;
+      var on = ui.flowSel && ui.flowSel.kind === it.kind && ui.flowSel.id === id;
+      return '<li class="content-item flow-item' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '">' +
+        '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + (isFlow ? 'Drag to reorder, or onto a campaign to copy or move it' : 'Drag onto a campaign to copy or move it') + '">' + ICON_GRIP + '</span>' +
+        '<div class="ci-body"><div class="name">' + esc(isFlow ? it.flow.name : it.content.name) + (isFlow ? '' : ' ' + FLOW_IND) + '</div>' +
+        '<div class="flow-meta">' + esc(isFlow ? flowSummary(it.flow) : S.timingText(it.content.timing)) + '</div></div></li>';
+    }).join('');
+  }
+
+  function templatesListHtml() {
     var q = ui.search.trim().toLowerCase();
     var items = visibleContent().filter(function (c) { return !q || c.name.toLowerCase().indexOf(q) !== -1; });
     if (!items.length) return '<li class="muted small" style="padding:8px 10px">' + (q ? 'No content found' : 'No content yet') + '</li>';
@@ -155,18 +185,18 @@
   function sideToolsInner() {
     if (ui.sideBox === 'search') {
       return '<div class="tool-box">' + ICON_SEARCH +
-        '<input type="text" id="search" placeholder="Search content…" autocomplete="off" value="' + esc(ui.search) + '">' +
+        '<input type="text" id="search" placeholder="Search ' + (ui.listTab === 'flows' ? 'flows' : 'content') + '…" autocomplete="off" value="' + esc(ui.search) + '">' +
         (ui.search ? '<button class="clear-btn" data-action="clear-search" aria-label="Clear search" title="Clear">×</button>' : '') + '</div>';
     }
     if (ui.sideBox === 'add') {
       return '<div class="tool-box">' + ICON_PLUS +
-        '<input type="text" id="new-name" placeholder="New content name" autocomplete="off">' +
+        '<input type="text" id="new-name" placeholder="' + (ui.listTab === 'flows' ? 'New flow name' : 'New content name') + '" autocomplete="off">' +
         '<button class="btn primary add-confirm" data-action="new-content">Add</button></div>' +
         '<div class="form-error" id="new-error">' + esc(ui.newError) + '</div>';
     }
     return '<div class="tool-row">' +
-      '<button class="icon-btn' + (ui.search ? ' active' : '') + '" data-action="open-search" aria-label="Search content" title="' + (ui.search ? 'Search: ' + esc(ui.search) : 'Search content') + '">' + ICON_SEARCH + '</button>' +
-      '<button class="icon-btn" data-action="open-add" aria-label="New content" title="New content">' + ICON_PLUS + '</button></div>' +
+      '<button class="icon-btn' + (ui.search ? ' active' : '') + '" data-action="open-search" aria-label="Search ' + (ui.listTab === 'flows' ? 'flows' : 'content') + '" title="' + (ui.search ? 'Search: ' + esc(ui.search) : 'Search ' + (ui.listTab === 'flows' ? 'flows' : 'content')) + '">' + ICON_SEARCH + '</button>' +
+      '<button class="icon-btn" data-action="open-add" aria-label="New ' + (ui.listTab === 'flows' ? 'flow' : 'content') + '" title="New ' + (ui.listTab === 'flows' ? 'flow' : 'content') + '">' + ICON_PLUS + '</button></div>' +
       (ui.search ? '<div class="filter-chip">Search: “' + esc(ui.search) + '” <button class="clear-btn" data-action="clear-search" aria-label="Clear search" title="Clear search">×</button></div>' : '');
   }
 
@@ -218,6 +248,9 @@
 
   function sidebarHtml() {
     return '<aside class="sidebar">' +
+      '<div class="list-tabs" role="tablist">' + [['templates', 'Templates'], ['flows', 'Flows']].map(function (t) {
+        return '<button class="list-tab' + (ui.listTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.listTab === t[0]) + '" data-action="set-list-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
+      }).join('') + '</div>' +
       '<div class="side-tools" id="side-tools">' + sideToolsInner() + '</div>' +
       '<h2 class="side-title" id="list-title">' + esc(listTitle()) + '</h2>' +
       '<ul class="content-list" id="content-list">' + listHtml() + '</ul>' +
@@ -492,6 +525,16 @@
     else if (e.action === 'deployed') body = 'Template name <code>' + esc(e.detail) + '</code>';
     else if (e.action === 'content_created') body = esc(e.after);
     else if (e.action === 'part_edited') body = diffHtml(e.before, e.after);
+    else if (e.action === 'timing_edited') body = diffHtml(e.before, e.after);
+    else if (e.action === 'flow_created') body = esc(e.after);
+    else if (e.action === 'flow_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_step_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_steps_reordered') body = diffHtml(e.before, e.after);
+    else if (e.action === 'flow_timing_edited') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
+    else if (e.action === 'flow_reordered') body = esc(e.detail);
+    else if (e.action === 'flow_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'header_type_changed') body = esc(e.before || 'None') + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
@@ -512,6 +555,14 @@
   }
 
   function historyPaneInner(c) {
+    var fl = currentFlow();
+    if (fl) {
+      var fev = S.historyForFlow(fl.id);
+      return '<div class="hp-head"><div class="hp-top"><h3>History</h3><span class="grow"></span>' +
+        '<button class="btn link" data-action="toggle-history-pane" title="Hide history">Hide</button></div>' +
+        '<div class="hp-tabs" role="tablist"><button class="hp-tab active" role="tab" aria-selected="true">Flow</button></div></div>' +
+        (fev.length ? '<ul class="timeline compact">' + fev.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">No history yet.</div>');
+    }
     var side = sideActive(c);
     var lang = subjectLang(c);
     var tabs = side
@@ -531,7 +582,7 @@
     var body;
     if (active === 'other') {
       var names = S.historyFor(c.id, 'content');
-      body = '<div class="muted small" style="margin-bottom:12px">Not tied to a language: created, renamed, approval blocked/allowed, header type changed, copied or moved between campaigns.</div>' +
+      body = '<div class="muted small" style="margin-bottom:12px">Not tied to a language: created, renamed, approval blocked/allowed, header type changed, timing changed, copied or moved between campaigns.</div>' +
         (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     } else {
       var events = S.historyFor(c.id, lang);
@@ -545,22 +596,94 @@
   // Re-render only the sidebar (and the highlighted panel); never touches the textarea or its caret
   function updateHistoryPane() {
     var c = S.get(ui.selectedId);
-    if (!c) return;
+    if (!c && !currentFlow()) return;
     var pane = document.getElementById('history-pane');
     if (pane) pane.innerHTML = historyPaneInner(c);
     var panels = document.querySelectorAll('.panel[data-role]');
     for (var i = 0; i < panels.length; i++) {
-      panels[i].classList.toggle('subject', sideActive(c) && panels[i].getAttribute('data-role') === ui.histSubject);
+      panels[i].classList.toggle('subject', !!c && sideActive(c) && panels[i].getAttribute('data-role') === ui.histSubject);
     }
   }
 
+  // ---- Flows tab: selection, the flow editor, the card for a template that is a flow by itself ----------
+  function ensureFlowSel() {                 // keep the selection on something that is still listed
+    var items = S.flowItems(ui.campaignId);
+    var cur = ui.flowSel && items.filter(function (it) { return it.kind === ui.flowSel.kind && (it.kind === 'flow' ? it.flow.id : it.content.id) === ui.flowSel.id; })[0];
+    if (!cur) {
+      cur = items[0] || null;
+      ui.flowSel = cur ? { kind: cur.kind, id: cur.kind === 'flow' ? cur.flow.id : cur.content.id } : null;
+    }
+    return cur;
+  }
+  function currentFlow() {                   // the explicit flow shown in the Flows tab, if any
+    return ui.listTab === 'flows' && ui.flowSel && ui.flowSel.kind === 'flow' ? S.getFlow(ui.flowSel.id) : null;
+  }
+
+  // "<n> days [before|after] <reference date>": committed on change (Enter / blur), one history event per edit
+  function timingEditor(t, attrs) {
+    function sel(v, label) { return '<option value="' + v + '"' + (t.when === v ? ' selected' : '') + '>' + label + '</option>'; }
+    return '<span class="timing" ' + attrs + '>' +
+      '<input class="field num" type="number" min="0" max="999" step="1" data-t="days" data-change="timing" value="' + esc(t.days) + '" aria-label="Number of days">' +
+      '<span class="muted">days</span>' +
+      '<select class="field-select" data-t="when" data-change="timing" aria-label="Before or after">' + sel('before', 'before') + sel('after', 'after') + '</select>' +
+      '<input class="field ref" type="text" list="ref-dates" data-t="ref" data-change="timing" value="' + esc(t.ref) + '" aria-label="Reference date" placeholder="reference_date" autocomplete="off" spellcheck="false">' +
+      '</span>';
+  }
+
+  function flowCardHtml(c) {
+    return '<div class="flow-card"><div class="flow-card-row">' + FLOW_IND + '<strong>This template is itself a flow.</strong>' +
+      '<span class="muted small">It is in no flow of ' + (ui.campaignId ? 'this campaign' : 'its campaign') + '.</span></div>' +
+      '<div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(c.timing, 'data-tpl="' + c.id + '"') + '</div></div>';
+  }
+
+  function flowEditorHtml(f) {
+    var title = ui.renaming
+      ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(f.name) + '">' +
+        '<button class="btn primary" data-action="rename-save">Save</button><button class="btn" data-action="rename-cancel">Cancel</button></div>'
+      : '<h2>' + esc(f.name) + '</h2><button class="btn link" data-action="rename-start">Rename</button>';
+    var inFlow = f.steps.map(function (st) { return st.templateId; });
+    var addable = S.list().filter(function (c) { return inFlow.indexOf(c.id) === -1; });
+    var steps = f.steps.map(function (st, i) {
+      var c = S.get(st.templateId);
+      return '<li class="step-row" data-flow="' + f.id + '" data-idx="' + i + '">' +
+        '<span class="drag-handle" draggable="true" aria-hidden="true" title="Drag to reorder">' + ICON_GRIP + '</span>' +
+        '<span class="step-no">' + (i + 1) + '</span>' +
+        '<div class="step-main"><button class="btn link step-name" data-action="open-template" data-id="' + st.templateId + '" title="Open this template">' + esc(c ? c.name : st.templateId) + '</button>' +
+        '<div class="step-timing"><span class="muted">Sent</span>' + timingEditor(st.timing, 'data-flow="' + f.id + '" data-idx="' + i + '"') + '</div></div>' +
+        '<button class="btn link" data-action="step-remove" data-idx="' + i + '" aria-label="Remove ' + esc(c ? c.name : 'template') + ' from the flow">Remove</button></li>';
+    }).join('');
+    return '<div class="content-head"><div><div class="title">' + title + '</div>' +
+      '<div class="muted small">Flow · ' + f.steps.length + ' template' + (f.steps.length === 1 ? '' : 's') +
+      (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
+      (ui.historyOpen ? '' : '<div class="actions"><button class="btn" data-action="toggle-history-pane">Show history</button></div>') + '</div>' +
+      '<h3 class="section-title">Templates, in sending order <span class="muted" style="text-transform:none;letter-spacing:0">· drag the handle to reorder</span></h3>' +
+      (steps ? '<ol class="steps" id="steps">' + steps + '</ol>' : '<div class="hint">No templates in this flow yet. Add one below.</div>') +
+      '<div class="add-step"><select class="field-select" data-change="add-step" data-flow="' + f.id + '" aria-label="Add a template to this flow"' + (addable.length ? '' : ' disabled') + '>' +
+      '<option value="">+ Add template…</option>' + addable.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select></div>';
+  }
+
+  function flowsMainHtml(fi, c) {
+    if (!fi) return '<div class="hint">No flows here yet. Use the + button in the left bar to create one. Templates that are not in a flow are listed here as flows by themselves.</div>';
+    if (fi.kind === 'template') return flowCardHtml(fi.content) + headHtml(fi.content) + editHtml(fi.content);
+    return flowEditorHtml(fi.flow);
+  }
+
   function render() {
+    var fi = null;
+    if (ui.listTab === 'flows') {
+      fi = ensureFlowSel();
+      if (fi && fi.kind === 'template') ui.selectedId = fi.content.id;   // a template that is a flow: edit it like any template
+    }
     var c = normalize();
-    var main = c
+    var main;
+    if (ui.listTab === 'flows') main = flowsMainHtml(fi, c);
+    else main = c
       ? headHtml(c) + editHtml(c)
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
-    var pane = c && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
+    var pane = subject && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>' +
+      '<datalist id="ref-dates">' + S.REF_DATES.map(function (d) { return '<option value="' + d + '">'; }).join('') + '</datalist>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) fields[fields.length - 1].focus();
@@ -594,6 +717,23 @@
     var el = panel && panel.querySelector('[data-params="' + idx + '"]');
     if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx, false);
   }
+  // A timing row (days / before-after / reference date) changed. The reference date is normalised to a variable-style
+  // name (lowercase, spaces become _). Invalid input is refused with a message and the row goes back.
+  function saveTimingFromUi(input) {
+    var box = input.closest('.timing');
+    var daysText = box.querySelector('[data-t=days]').value.trim();
+    var timing = {
+      days: daysText === '' ? NaN : Number(daysText),
+      when: box.querySelector('[data-t=when]').value,
+      ref: box.querySelector('[data-t=ref]').value.trim().toLowerCase().replace(/\s+/g, '_')
+    };
+    var r = box.hasAttribute('data-tpl')
+      ? S.setTemplateTiming(box.getAttribute('data-tpl'), timing)
+      : S.setStepTiming(box.getAttribute('data-flow'), parseInt(box.getAttribute('data-idx'), 10), timing);
+    if (!r.ok && r.error !== 'No change') toast(r.error, true);
+    render();
+  }
+
   // Rename (or merge) a placeholder from its name field, in the body or in a URL button
   function renamePlaceholderFromUi(input, inUrl) {
     var c = S.get(ui.selectedId), lang = input.getAttribute('data-lang'), tr = S.getTr(c, lang);
@@ -660,6 +800,14 @@
     var t = ev.target, what = t.getAttribute('data-change');
     if (!what) return;
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
+    if (what === 'timing') { saveTimingFromUi(t); return; }
+    if (what === 'add-step') {
+      if (!t.value) return;
+      var addedTo = S.getFlow(t.getAttribute('data-flow'));
+      result(S.addStep(addedTo.id, t.value), 'Added to the flow, with the default timing (edit it below)');
+      render();
+      return;
+    }
     var c = S.get(ui.selectedId);
     if (what === 'toggle-side') { ui.side = t.checked; }
     else if (what === 'set-ref') { ui.refLang = t.value; }
@@ -718,7 +866,17 @@
     }
   });
 
+  function addFlow() {
+    var r = S.createFlow(document.getElementById('new-name').value, ui.campaignId);
+    if (!r.ok) { ui.newError = r.error; document.getElementById('new-error').textContent = r.error; return; }
+    ui.newError = ''; ui.sideBox = null; ui.renaming = false;
+    ui.flowSel = { kind: 'flow', id: r.flow.id };
+    render();
+    toast('Created flow "' + r.flow.name + '"' + (r.flow.campaignIds.length ? ' in ' + S.campaignName(r.flow.campaignIds[0]) : ''));
+  }
+
   function addContent() {
+    if (ui.listTab === 'flows') return addFlow();
     var input = document.getElementById('new-name');
     var r = S.createContent(input.value, 'en', ui.campaignId);
     if (!r.ok) { ui.newError = r.error; document.getElementById('new-error').textContent = r.error; return; }
@@ -733,8 +891,9 @@
   }
 
   function saveRename() {
+    var fl = currentFlow();
     var c = S.get(ui.selectedId);
-    var r = S.renameContent(c.id, document.getElementById('rename-input').value);
+    var r = fl ? S.renameFlow(fl.id, document.getElementById('rename-input').value) : S.renameContent(c.id, document.getElementById('rename-input').value);
     if (r.ok || r.error === 'Name unchanged') { ui.renaming = false; render(); if (r.ok) toast('Renamed'); }
     else toast(r.error, true);
   }
@@ -754,13 +913,16 @@
   var dialogReturnFocus = null;
 
   function dialogHtml() {
-    var d = ui.dialog, c = S.get(d.contentId), plan = S.planDrop(d.contentId, d.targetId);
+    var d = ui.dialog, isFlow = d.kind === 'flow';
+    var item = isFlow ? S.getFlow(d.flowId) : S.get(d.contentId);
+    var plan = isFlow ? S.planFlowDrop(d.flowId, d.targetId) : S.planDrop(d.contentId, d.targetId);
     var target = S.campaignName(d.targetId);
     var existing = plan.existsIn.map(function (id) {
       return '<li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>' + esc(S.campaignName(id)) +
         (id === d.targetId ? ' <span class="muted small">(this campaign)</span>' : '') + '</li>';
     }).join('');
     var names = plan.existsIn.map(S.campaignName);
+    function count(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
     var copyDesc = plan.copy.ok
       ? (names.length ? 'Keep it in ' + names.join(', ') + ' and add it to ' + target : 'Add it to ' + target)
@@ -769,15 +931,26 @@
     var moveDesc = plan.move.ok
       ? (fromNames.length ? 'Remove it from ' + fromNames.join(', ') + (plan.inTarget ? ' (it stays in ' + target + ')' : ' and add it to ' + target) : 'Add it to ' + target)
       : plan.move.reason;
+    if (isFlow) {      // a flow brings its templates along
+      if (plan.copy.ok && plan.copy.addTemplates.length) copyDesc += '. ' + count(plan.copy.addTemplates.length, 'template') + ' will be added to ' + target + ' too';
+      if (plan.move.ok) {
+        var bits = [];
+        if (plan.move.leave.length) bits.push(count(plan.move.leave.length, 'template') + ' move' + (plan.move.leave.length === 1 ? 's' : '') + ' with it');
+        if (plan.move.stay.length) bits.push(count(plan.move.stay.length, 'template') + ' stay' + (plan.move.stay.length === 1 ? 's' : '') + ' in ' + fromNames.join(', ') + ' because another flow there uses ' + (plan.move.stay.length === 1 ? 'it' : 'them') + ' (also added to ' + target + ')');
+        var staying = plan.move.addTemplates.filter(function (id) { return plan.move.leave.indexOf(id) === -1 && plan.move.stay.indexOf(id) === -1; });
+        if (staying.length) bits.push(count(staying.length, 'template') + ' will be added to ' + target);
+        if (bits.length) moveDesc += '. ' + bits.join('; ');
+      }
+    }
 
     function opt(action, label, desc, ok) {
       return '<button class="dlg-opt' + (ok ? '' : ' off') + '" data-action="' + action + '"' + (ok ? '' : ' disabled') + '><strong>' + label + '</strong><span>' + esc(desc) + '</span></button>';
     }
     return '<div class="modal-backdrop" data-action="dialog-backdrop">' +
       '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
-      '<h2 id="dlg-title">“' + esc(c.name) + '” <span class="muted">→</span> ' + esc(target) + '</h2>' +
+      '<h2 id="dlg-title">“' + esc(item.name) + '” <span class="muted">→</span> ' + esc(target) + '</h2>' +
       '<div class="dlg-label">Already in</div>' +
-      '<ul class="exists-list" aria-label="Campaigns this template is already in">' + (existing || '<li class="muted">Not in any campaign yet</li>') + '</ul>' +
+      '<ul class="exists-list" aria-label="Campaigns this ' + (isFlow ? 'flow' : 'template') + ' is already in">' + (existing || '<li class="muted">Not in any campaign yet</li>') + '</ul>' +
       '<div class="dlg-options">' +
       opt('dialog-copy', 'Copy', copyDesc, plan.copy.ok) +
       opt('dialog-move', plan.move.label || 'Move', moveDesc, plan.move.ok) +
@@ -785,13 +958,20 @@
       '</div></div></div>';
   }
 
-  function openDropDialog(contentId, targetId) {
-    if (!S.planDrop(contentId, targetId)) return;
+  function showDialog(dialog) {
     dialogReturnFocus = document.activeElement;
-    ui.dialog = { contentId: contentId, targetId: targetId };
+    ui.dialog = dialog;
     $modal.innerHTML = dialogHtml();
     var first = $modal.querySelector('.dlg-opt:not([disabled])');
     if (first) first.focus();
+  }
+  function openDropDialog(contentId, targetId) {
+    if (!S.planDrop(contentId, targetId)) return;
+    showDialog({ kind: 'content', contentId: contentId, targetId: targetId });
+  }
+  function openFlowDialog(flowId, targetId) {
+    if (!S.planFlowDrop(flowId, targetId)) return;
+    showDialog({ kind: 'flow', flowId: flowId, targetId: targetId });
   }
   function closeDialog() {
     ui.dialog = null;
@@ -800,57 +980,98 @@
     dialogReturnFocus = null;
   }
   function applyDialog(kind) {
-    var d = ui.dialog, c = S.get(d.contentId), target = S.campaignName(d.targetId);
-    var r = kind === 'copy' ? S.copyToCampaign(d.contentId, d.targetId) : S.moveToCampaign(d.contentId, d.targetId);
-    var name = c ? c.name : '';
+    var d = ui.dialog, target = S.campaignName(d.targetId), r, name;
+    if (d.kind === 'flow') {
+      name = (S.getFlow(d.flowId) || {}).name || '';
+      r = kind === 'copy' ? S.copyFlow(d.flowId, d.targetId) : S.moveFlow(d.flowId, d.targetId);
+    } else {
+      name = (S.get(d.contentId) || {}).name || '';
+      r = kind === 'copy' ? S.copyToCampaign(d.contentId, d.targetId) : S.moveToCampaign(d.contentId, d.targetId);
+    }
     closeDialog();
-    if (r.ok) { render(); toast((kind === 'copy' ? 'Copied “' : 'Moved “') + name + '” to ' + target); }
+    if (r.ok) { render(); toast((kind === 'copy' ? 'Copied ' : 'Moved ') + (d.kind === 'flow' ? 'flow ' : '') + '“' + name + '” to ' + target); }
     else toast(r.error, true);
   }
 
-  // ---- drag a content name onto a campaign ---------------------------------------------
+  // ---- drag and drop ------------------------------------------------------------------
+  // What can be dragged (always by its grip handle):
+  //   a template, or a template that is a flow by itself -> onto a campaign: Copy / Move / Cancel dialog
+  //   a flow you created                                  -> onto a campaign (same dialog), or onto another flow to reorder
+  //   a step inside a flow                                -> onto another step of the same flow to reorder
   function dropTarget(ev) {
     var b = ev.target.closest && ev.target.closest('.camp-item');
     return b && b.getAttribute('data-id') ? b : null;     // "All content" is not a target
   }
   function clearDropMarks() {
-    var els = document.querySelectorAll('.drop-over, .dragging');
-    for (var i = 0; i < els.length; i++) els[i].classList.remove('drop-over', 'dragging');
+    var els = document.querySelectorAll('.drop-over, .dragging, .drop-before, .drop-after');
+    for (var i = 0; i < els.length; i++) els[i].classList.remove('drop-over', 'dragging', 'drop-before', 'drop-after');
   }
+  function placeOf(ev, el) { var r = el.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2 ? 'before' : 'after'; }
+
   document.addEventListener('dragstart', function (ev) {
     var handle = ev.target.closest && ev.target.closest('.drag-handle');
-    var li = handle && handle.closest('.content-item[data-id]');
-    if (!li) return;                                   // only the handle starts a drag
-    ui.drag = { id: li.getAttribute('data-id') };
-    try { ev.dataTransfer.setDragImage(li, 24, 20); } catch (e) { /* ignore */ }
+    if (!handle) return;                               // only a handle starts a drag
+    var row = handle.closest('.step-row'), li = handle.closest('.content-item[data-id]');
+    var el = row || li;
+    if (!el) return;
+    if (row) ui.drag = { kind: 'step', flowId: row.getAttribute('data-flow'), idx: parseInt(row.getAttribute('data-idx'), 10) };
+    else if (li.classList.contains('flow-item') && li.getAttribute('data-kind') === 'flow') ui.drag = { kind: 'flow', id: li.getAttribute('data-id') };
+    else ui.drag = { kind: 'content', id: li.getAttribute('data-id') };   // a template (also one that is a flow by itself)
+    try { ev.dataTransfer.setDragImage(el, 24, 20); } catch (e) { /* ignore */ }
     ev.dataTransfer.effectAllowed = 'copyMove';
-    try { ev.dataTransfer.setData('text/plain', ui.drag.id); } catch (e) { /* ignore */ }
-    li.classList.add('dragging');
+    try { ev.dataTransfer.setData('text/plain', ui.drag.id || ui.drag.flowId); } catch (e) { /* ignore */ }
+    el.classList.add('dragging');
   });
+
+  // Where would this drop land? {type:'campaign'|'flow'|'step', el, place?} or null
+  function dropSpot(ev) {
+    var d = ui.drag;
+    if (!d) return null;
+    var camp = dropTarget(ev);
+    if (camp && (d.kind === 'content' || d.kind === 'flow')) return { type: 'campaign', el: camp };
+    if (d.kind === 'flow') {
+      var fi = ev.target.closest && ev.target.closest('.flow-item[data-kind="flow"]');
+      if (fi && fi.getAttribute('data-id') !== d.id) return { type: 'flow', el: fi, place: placeOf(ev, fi) };
+    }
+    if (d.kind === 'step') {
+      var sr = ev.target.closest && ev.target.closest('.step-row');
+      if (sr && sr.getAttribute('data-flow') === d.flowId && parseInt(sr.getAttribute('data-idx'), 10) !== d.idx) return { type: 'step', el: sr, place: placeOf(ev, sr) };
+    }
+    return null;
+  }
   function dragOverTarget(ev) {
-    if (!ui.drag) return;
-    var t = dropTarget(ev);
-    if (!t) return;
+    var spot = dropSpot(ev);
+    if (!spot) return;
     ev.preventDefault();                       // marks it as a valid drop target
-    ev.dataTransfer.dropEffect = 'copy';
-    var prev = document.querySelectorAll('.drop-over');
-    for (var i = 0; i < prev.length; i++) if (prev[i] !== t) prev[i].classList.remove('drop-over');
-    t.classList.add('drop-over');
+    ev.dataTransfer.dropEffect = spot.type === 'campaign' ? 'copy' : 'move';
+    var prev = document.querySelectorAll('.drop-over, .drop-before, .drop-after');
+    for (var i = 0; i < prev.length; i++) prev[i].classList.remove('drop-over', 'drop-before', 'drop-after');
+    spot.el.classList.add(spot.type === 'campaign' ? 'drop-over' : 'drop-' + spot.place);
   }
   document.addEventListener('dragenter', dragOverTarget);
   document.addEventListener('dragover', dragOverTarget);
   document.addEventListener('dragleave', function (ev) {
-    var t = dropTarget(ev);
-    if (t && !(ev.relatedTarget && t.contains(ev.relatedTarget))) t.classList.remove('drop-over');
+    var el = ev.target.closest && ev.target.closest('.camp-item, .flow-item, .step-row');
+    if (el && !(ev.relatedTarget && el.contains(ev.relatedTarget))) el.classList.remove('drop-over', 'drop-before', 'drop-after');
   });
   document.addEventListener('drop', function (ev) {
-    var t = dropTarget(ev);
-    if (!t || !ui.drag) return;
+    var spot = dropSpot(ev);
+    if (!spot) return;
     ev.preventDefault();
     var drag = ui.drag;
     clearDropMarks();
     ui.drag = null;
-    openDropDialog(drag.id, t.getAttribute('data-id'));
+    if (spot.type === 'campaign') {
+      if (drag.kind === 'flow') openFlowDialog(drag.id, spot.el.getAttribute('data-id'));
+      else openDropDialog(drag.id, spot.el.getAttribute('data-id'));
+    } else if (spot.type === 'flow') {
+      result(S.reorderFlow(drag.id, spot.el.getAttribute('data-id'), spot.place));
+      render();
+    } else {                                   // step: final index after taking the dragged one out
+      var ti = parseInt(spot.el.getAttribute('data-idx'), 10) + (spot.place === 'after' ? 1 : 0);
+      result(S.moveStep(drag.flowId, drag.idx, drag.idx < ti ? ti - 1 : ti));
+      render();
+    }
   });
   document.addEventListener('dragend', function () { clearDropMarks(); ui.drag = null; });
 
@@ -901,6 +1122,23 @@
       case 'dialog-backdrop': if (ev.target === el) closeDialog(); return;
       case 'open-add-campaign': openCampBox(); return;
       case 'add-campaign': addCampaign(); return;
+      case 'set-list-tab': ui.listTab = el.getAttribute('data-tab'); ui.sideBox = null; ui.renaming = false; break;
+      case 'select-flow':
+        ui.flowSel = { kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') };
+        if (ui.flowSel.kind === 'template') { ui.selectedId = ui.flowSel.id; ui.editLang = null; ui.refLang = null; }
+        ui.renaming = false; ui.nameOpen = false;
+        break;
+      case 'open-template': {          // jump from a flow step to the template itself
+        var tid = el.getAttribute('data-id'), tpl = S.get(tid);
+        ui.listTab = 'templates'; ui.selectedId = tid; ui.editLang = null; ui.refLang = null; ui.renaming = false;
+        if (ui.campaignId && tpl && tpl.campaignIds.indexOf(ui.campaignId) === -1) ui.campaignId = null;   // keep it visible
+        break;
+      }
+      case 'step-remove': {
+        var fl2 = currentFlow();
+        result(S.removeStep(fl2.id, parseInt(el.getAttribute('data-idx'), 10)));
+        break;
+      }
       case 'select-campaign':
         ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false; ui.nameOpen = false;
         break;

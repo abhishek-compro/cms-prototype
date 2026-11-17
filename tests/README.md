@@ -24,11 +24,13 @@ run here is reported as **skipped** with the reason, never as a pass.
 | File | What it checks |
 |---|---|
 | `unit/store.test.js` | The rules in `prototype/store.js`: names, campaigns, copy/move (`planDrop`), block approval, publishing, placeholders and renaming, validation limits, saving parts, status, `extra_content` export, CSV, history, migration of older saved data. |
+| `unit/flows.test.js` | Flows: what the Flows tab lists (single-template flows), steps and timing rules, reordering, copy/move of a flow with its templates, history, older saved data. |
 | `unit/orchestrator-parity.test.js` | Runs the **orchestrator's own code** (`campaign/models.py`, loaded via `support/repo_validator.py`): every `extra_content` the prototype exports must pass its real `validate_extra_content`, and placeholder positions must match its `get_body_params_map` (one known difference is pinned and documented). |
 | `ui/sidebar-tools.test.js` | Left bar: search and + icons, text boxes that close on blur, filter chip. |
 | `ui/campaigns.test.js`, `ui/add-campaign.test.js` | Campaigns sidebar: filtering, creating content inside a campaign, adding campaigns, old saved data. |
 | `ui/drag-drop.test.js` | Real mouse drags: the grip handle, the Copy / Move / Cancel dialog, "Can't move". |
 | `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, JSON export. |
+| `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, steps and timing, reordering flows and steps by real drags, copy/move of a flow to a campaign, single-template flows dragged like templates. |
 | `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV/JSON downloads, rename, reset. |
 
 ## How the browser tests work

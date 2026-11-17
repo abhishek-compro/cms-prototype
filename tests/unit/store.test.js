@@ -528,10 +528,11 @@ test('migration: data from before template parts -> empty header/footer/defaults
 });
 
 test('migration: current-shape data is left exactly as it is', () => {
-  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image' })], history: [] };
+  const timing = { days: 3, when: 'after', ref: 'date_of_birth' };
+  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image', timing })], history: [] };
   state.contents[0].translations[0] = Object.assign({ footer: 'f', header: 'h', defaults: { a: 'b' }, buttons: [] }, state.contents[0].translations[0]);
   const { S, saved } = load(JSON.parse(JSON.stringify(state)));
-  assert.deepEqual(JSON.parse(JSON.stringify({ campaigns: S.listCampaigns(), contents: S.list() })), { campaigns: state.campaigns, contents: state.contents });
+  assert.deepEqual(JSON.parse(JSON.stringify({ campaigns: S.listCampaigns(), flows: S.listFlows(), contents: S.list() })), { campaigns: state.campaigns, flows: [], contents: state.contents });
   assert.deepEqual(saved.contents, state.contents);
 });
 

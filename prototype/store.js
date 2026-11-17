@@ -34,13 +34,26 @@
     part_edited: 'Edited',
     header_type_changed: 'Changed header type',
     campaign_copied: 'Copied to campaign',
-    campaign_moved: 'Moved to campaign'
+    campaign_moved: 'Moved to campaign',
+    timing_edited: 'Changed timing',
+    flow_created: 'Created flow',
+    flow_renamed: 'Renamed flow',
+    flow_step_added: 'Added a template',
+    flow_step_removed: 'Removed a template',
+    flow_steps_reordered: 'Reordered the templates',
+    flow_timing_edited: 'Changed timing',
+    flow_reordered: 'Moved in the flow list',
+    flow_copied: 'Copied to campaign',
+    flow_moved: 'Moved to campaign'
   };
 
   // ---- State -----------------------------------------------------------------
-  // state = { nextId, campaigns: [Campaign], contents: [Content], history: [Event] }
+  // state = { nextId, campaigns: [Campaign], contents: [Content], flows: [Flow], history: [Event] }
+  // Flow = { id, name, campaignIds, createdAt, steps: [{ templateId, timing }] }   timing = { days, when: 'before'|'after', ref }
+  //   A flow is an ordered list of templates, each sent "<days> days before/after <ref date>". A template that is in no flow
+  //   of a campaign is itself a flow there (implicit, not stored); its own timing is Content.timing.
   // Campaign = { id, name, createdAt?, createdBy? }   (a content name can be in several campaigns via Content.campaignIds)
-  // Content = { id, name, campaignIds: [campaignId], headerType: 'none'|'image'|'video'|'document', blocked, deployCounter, createdAt, translations: [Translation] }
+  // Content = { id, name, campaignIds: [campaignId], timing, headerType: 'none'|'image'|'video'|'document', blocked, deployCounter, createdAt, translations: [Translation] }
   // Translation = { lang, text, waName, deployedText, deployedSig, footer, header, defaults, buttons }
   //   text      = the body as authored, with NAMED placeholders {{name}}. This is a layer on top of WhatsApp's
   //               numbered placeholders: the WhatsApp body ({{1}} {{2}} ...) and the name -> positions map are derived.
@@ -98,7 +111,9 @@
       if (!Array.isArray(c.campaignIds)) { c.campaignIds = c.campaignId ? [c.campaignId] : []; changed = true; }
       if ('campaignId' in c) { delete c.campaignId; changed = true; }
     });
+    if (!state.flows) { state.flows = []; changed = true; }
     state.contents.forEach(function (c) {
+      if (!c.timing) { c.timing = cloneTiming(DEFAULT_TIMING); changed = true; }
       if (!c.headerType) { c.headerType = 'none'; changed = true; }
       c.translations.forEach(function (t) {
         if (t.footer === undefined) { t.footer = ''; changed = true; }
@@ -367,6 +382,7 @@
       name: String(name).trim(),
       campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [],
       headerType: 'none',
+      timing: cloneTiming(DEFAULT_TIMING),
       blocked: false,
       deployCounter: 0,
       createdAt: clock().toISOString(),
@@ -586,6 +602,249 @@
     return out;
   }
 
+  // ---- Flows -------------------------------------------------------------------------
+  // A flow = an ordered list of templates, each with a timing "<days> days before/after <reference date>".
+  // The numbers and the reference date (e.g. expected_date_of_delivery) are dummy defaults until edited.
+  var DEFAULT_TIMING = { days: 7, when: 'before', ref: 'expected_date_of_delivery' };
+  var REF_DATES = ['expected_date_of_delivery', 'date_of_birth', 'registration_date', 'discharge_date'];   // suggestions only
+
+  function cloneTiming(t) { return { days: t.days, when: t.when, ref: t.ref }; }
+  function checkTiming(t) {
+    if (!t || typeof t.days !== 'number' || t.days % 1 !== 0 || t.days < 0 || t.days > 999) return 'Days must be a whole number from 0 to 999';
+    if (t.when !== 'before' && t.when !== 'after') return 'Choose before or after';
+    if (!/^[a-z][a-z0-9_]*$/.test(t.ref || '')) return 'The reference date is a name like expected_date_of_delivery (lowercase letters, digits and _)';
+    return null;
+  }
+  function timingText(t) {
+    return t.days === 0 ? 'on ' + t.ref : t.days + ' day' + (t.days === 1 ? '' : 's') + ' ' + t.when + ' ' + t.ref;
+  }
+  function sameTiming(a, b) { return a.days === b.days && a.when === b.when && a.ref === b.ref; }
+
+  function getFlow(id) {
+    for (var i = 0; i < state.flows.length; i++) if (state.flows[i].id === id) return state.flows[i];
+    return null;
+  }
+  function listFlows() { return state.flows; }
+  function flowsIn(campaignId) {            // in list order; null = every flow
+    return campaignId ? state.flows.filter(function (f) { return f.campaignIds.indexOf(campaignId) !== -1; }) : state.flows;
+  }
+  function flowsIncluding(templateId, campaignId) {
+    return flowsIn(campaignId).filter(function (f) { return f.steps.some(function (s) { return s.templateId === templateId; }); });
+  }
+  // A template is itself a flow in a campaign when no flow of that campaign includes it. "All content" (null)
+  // shows it when that is true in any of its campaigns (or it has none and no flow includes it).
+  function isImplicit(c, campaignId) {
+    if (campaignId) return c.campaignIds.indexOf(campaignId) !== -1 && !flowsIncluding(c.id, campaignId).length;
+    if (!c.campaignIds.length) return !flowsIncluding(c.id, null).length;
+    return c.campaignIds.some(function (k) { return !flowsIncluding(c.id, k).length; });
+  }
+  // What the Flows tab lists: the flows you created (in your order), then the templates that are flows by themselves
+  function flowItems(campaignId) {
+    var items = flowsIn(campaignId).map(function (f) { return { kind: 'flow', flow: f }; });
+    state.contents.forEach(function (c) { if (isImplicit(c, campaignId)) items.push({ kind: 'template', content: c }); });
+    return items;
+  }
+
+  function logFlow(f, action, extra) {
+    var e = { id: state.nextId++, ts: clock().toISOString(), actor: CURRENT_USER, flowId: f.id, contentId: null, contentName: f.name, lang: null, action: action, before: null, after: null, detail: null };
+    for (var k in extra) e[k] = extra[k];
+    state.history.push(e);
+  }
+  function historyForFlow(flowId) {
+    return state.history.filter(function (e) { return e.flowId === flowId; })
+      .sort(function (a, b) { return a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : b.id - a.id; });
+  }
+  function tplName(id) { var c = get(id); return c ? c.name : id; }
+  function describeSteps(f) { return f.steps.map(function (s, i) { return (i + 1) + '. ' + tplName(s.templateId); }).join('\n'); }
+
+  function validateFlowName(name, exceptId) {
+    name = String(name || '').trim();
+    if (!name) return 'Name is required';
+    var lower = name.toLowerCase();
+    for (var i = 0; i < state.flows.length; i++) {
+      if (state.flows[i].id !== exceptId && state.flows[i].name.toLowerCase() === lower) return 'A flow named "' + state.flows[i].name + '" already exists';
+    }
+    for (var j = 0; j < state.contents.length; j++) {
+      if (state.contents[j].name.toLowerCase() === lower) return 'A template is already called "' + state.contents[j].name + '" (templates that are not in a flow are listed as flows too)';
+    }
+    return null;
+  }
+
+  function createFlow(name, campaignId) {
+    var err = validateFlowName(name);
+    if (err) return fail(err);
+    var f = { id: 'f' + state.nextId++, name: String(name).trim(), campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [], createdAt: clock().toISOString(), steps: [] };
+    state.flows.push(f);
+    logFlow(f, 'flow_created', { after: f.name });
+    save();
+    return { ok: true, flow: f };
+  }
+
+  function renameFlow(id, name) {
+    var f = getFlow(id);
+    if (!f) return fail('Flow not found');
+    name = String(name || '').trim();
+    if (name === f.name) return fail('Name unchanged');
+    var err = validateFlowName(name, id);
+    if (err) return fail(err);
+    var before = f.name;
+    f.name = name;
+    logFlow(f, 'flow_renamed', { before: before, after: name });
+    save();
+    return { ok: true };
+  }
+
+  // Adding a template to a flow also puts it in the flow's campaigns, so a campaign always holds what its flows use
+  function addStep(flowId, templateId) {
+    var f = getFlow(flowId), c = get(templateId);
+    if (!f) return fail('Flow not found');
+    if (!c) return fail('Template not found');
+    if (f.steps.some(function (s) { return s.templateId === templateId; })) return fail('"' + c.name + '" is already in this flow');
+    f.steps.push({ templateId: templateId, timing: cloneTiming(c.timing || DEFAULT_TIMING) });
+    logFlow(f, 'flow_step_added', { after: c.name, detail: timingText(f.steps[f.steps.length - 1].timing) });
+    f.campaignIds.forEach(function (k) {
+      if (c.campaignIds.indexOf(k) === -1) { c.campaignIds.push(k); log(c, null, 'campaign_copied', { after: campaignName(k), detail: k }); }
+    });
+    save();
+    return { ok: true };
+  }
+
+  function removeStep(flowId, index) {
+    var f = getFlow(flowId);
+    if (!f || !f.steps[index]) return fail('Step not found');
+    var gone = f.steps.splice(index, 1)[0];
+    logFlow(f, 'flow_step_removed', { before: tplName(gone.templateId), detail: timingText(gone.timing) });
+    save();
+    return { ok: true };
+  }
+
+  function moveStep(flowId, from, to) {         // `to` is the final index of the step
+    var f = getFlow(flowId);
+    if (!f || !f.steps[from] || to < 0 || to >= f.steps.length) return fail('Step not found');
+    if (from === to) return fail('No change');
+    var before = describeSteps(f);
+    f.steps.splice(to, 0, f.steps.splice(from, 1)[0]);
+    logFlow(f, 'flow_steps_reordered', { before: before, after: describeSteps(f) });
+    save();
+    return { ok: true };
+  }
+
+  function setStepTiming(flowId, index, timing) {
+    var f = getFlow(flowId);
+    if (!f || !f.steps[index]) return fail('Step not found');
+    var err = checkTiming(timing);
+    if (err) return fail(err);
+    var step = f.steps[index];
+    if (sameTiming(step.timing, timing)) return fail('No change');
+    var before = timingText(step.timing);
+    step.timing = cloneTiming(timing);
+    logFlow(f, 'flow_timing_edited', { detail: tplName(step.templateId), before: before, after: timingText(step.timing) });
+    save();
+    return { ok: true };
+  }
+
+  // The timing of a template that is a flow by itself
+  function setTemplateTiming(contentId, timing) {
+    var c = get(contentId);
+    if (!c) return fail('Content not found');
+    var err = checkTiming(timing);
+    if (err) return fail(err);
+    if (sameTiming(c.timing, timing)) return fail('No change');
+    var before = timingText(c.timing);
+    c.timing = cloneTiming(timing);
+    log(c, null, 'timing_edited', { before: before, after: timingText(c.timing) });
+    save();
+    return { ok: true };
+  }
+
+  // Put a flow before/after another one. The list is one global order; each campaign shows its flows in that order.
+  function reorderFlow(flowId, targetId, place) {
+    var f = getFlow(flowId), t = getFlow(targetId);
+    if (!f || !t) return fail('Flow not found');
+    if (f === t) return fail('No change');
+    var before = state.flows.map(function (x) { return x.id; }).join();
+    state.flows.splice(state.flows.indexOf(f), 1);
+    state.flows.splice(state.flows.indexOf(t) + (place === 'after' ? 1 : 0), 0, f);
+    if (state.flows.map(function (x) { return x.id; }).join() === before) return fail('No change');
+    logFlow(f, 'flow_reordered', { detail: (place === 'after' ? 'after ' : 'before ') + t.name });
+    save();
+    return { ok: true };
+  }
+
+  // ---- copy / move a flow to another campaign (like content) ---------------------------
+  // Its templates come along so the target campaign holds what the flow uses:
+  //  copy: the templates are added to the target too.
+  //  move: templates only this flow uses in the source campaign move with it; templates another flow of the
+  //        source still uses stay there (and are also added to the target).
+  function planFlowDrop(flowId, targetId) {
+    var f = getFlow(flowId), target = getCampaign(targetId);
+    if (!f || !target) return null;
+    var M = f.campaignIds.slice(), inTarget = M.indexOf(targetId) !== -1;
+    var tpls = f.steps.map(function (s) { return get(s.templateId); }).filter(Boolean);
+    var addToTarget = tpls.filter(function (t) { return t.campaignIds.indexOf(targetId) === -1; }).map(function (t) { return t.id; });
+    var plan = { existsIn: M.slice(), inTarget: inTarget, templates: tpls.length, copy: { ok: true }, move: { ok: true, from: M.slice() } };
+
+    if (inTarget) plan.copy = { ok: false, reason: 'Already in ' + target.name };
+    else { plan.copy.result = M.concat(targetId); plan.copy.addTemplates = addToTarget; }
+
+    if (M.length > 1) {
+      plan.move = { ok: false, from: [], label: "Can't move",
+        reason: 'It is in ' + M.length + ' campaigns (' + M.map(campaignName).join(', ') + '), so there is no single place to move it from. Copy it instead.' };
+    } else if (inTarget) {
+      plan.move = { ok: false, from: M.slice(), reason: 'Already in ' + target.name };
+    } else {
+      var from = M[0], leave = [], stay = [];
+      tpls.forEach(function (t) {
+        if (from && t.campaignIds.indexOf(from) !== -1) {
+          var usedElsewhere = flowsIncluding(t.id, from).some(function (o) { return o.id !== f.id; });
+          (usedElsewhere ? stay : leave).push(t.id);
+        }
+      });
+      plan.move.result = [targetId];
+      plan.move.addTemplates = addToTarget;
+      plan.move.leave = leave;
+      plan.move.stay = stay;
+    }
+    return plan;
+  }
+
+  function carryTemplates(f, targetId, leaveIds, fromId) {
+    f.steps.forEach(function (s) {
+      var t = get(s.templateId);
+      if (!t) return;
+      var leaving = leaveIds.indexOf(t.id) !== -1;
+      var next = t.campaignIds.filter(function (id) { return !(leaving && id === fromId); });
+      if (next.indexOf(targetId) === -1) next.push(targetId);
+      if (next.join() === t.campaignIds.join()) return;
+      t.campaignIds = next;
+      log(t, null, leaving ? 'campaign_moved' : 'campaign_copied', { before: leaving ? campaignName(fromId) : null, after: campaignName(targetId), detail: targetId });
+    });
+  }
+
+  function copyFlow(flowId, targetId) {
+    var plan = planFlowDrop(flowId, targetId);
+    if (!plan) return fail('Flow or campaign not found');
+    if (!plan.copy.ok) return fail(plan.copy.reason);
+    var f = getFlow(flowId);
+    f.campaignIds = plan.copy.result;
+    logFlow(f, 'flow_copied', { after: campaignName(targetId), detail: targetId });
+    carryTemplates(f, targetId, [], null);
+    save();
+    return { ok: true };
+  }
+
+  function moveFlow(flowId, targetId) {
+    var plan = planFlowDrop(flowId, targetId);
+    if (!plan) return fail('Flow or campaign not found');
+    if (!plan.move.ok) return fail(plan.move.reason);
+    var f = getFlow(flowId), from = plan.move.from[0] || null;
+    f.campaignIds = plan.move.result;
+    logFlow(f, 'flow_moved', { before: from ? campaignName(from) : null, after: campaignName(targetId), detail: targetId });
+    carryTemplates(f, targetId, plan.move.leave, from);
+    save();
+    return { ok: true };
+  }
+
   // ---- CSV -------------------------------------------------------------------
   function csvCell(v) {
     v = v == null ? '' : String(v);
@@ -633,7 +892,7 @@
 
   // ---- Demo data -------------------------------------------------------------
   function seed() {
-    state = { nextId: 1, campaigns: SAMPLE_CAMPAIGNS.map(function (c) { return { id: c.id, name: c.name }; }), contents: [], history: [] };
+    state = { nextId: 1, campaigns: SAMPLE_CAMPAIGNS.map(function (c) { return { id: c.id, name: c.name }; }), contents: [], flows: [], history: [] };
     var t = Date.now() - 6 * 24 * 3600 * 1000;
     clock = function () { t += 47 * 60 * 1000 + 13000; return new Date(t); };
 
@@ -692,6 +951,12 @@
     patch(d.id, 'en', { text: 'Tip of the day: wash your hands with soap before feeding your baby.' });
     setBlocked(d.id, true);
 
+    var fl = createFlow('Newborn first weeks', 'k1').flow;
+    addStep(fl.id, w.id);
+    addStep(fl.id, d.id);
+    setStepTiming(fl.id, 0, { days: 14, when: 'before', ref: 'expected_date_of_delivery' });
+    setStepTiming(fl.id, 1, { days: 7, when: 'after', ref: 'expected_date_of_delivery' });
+
     clock = function () { return new Date(); };
     save();
   }
@@ -709,6 +974,28 @@
     getCampaign: getCampaign,
     contentsIn: contentsIn,
     createCampaign: createCampaign,
+    DEFAULT_TIMING: DEFAULT_TIMING,
+    REF_DATES: REF_DATES,
+    checkTiming: checkTiming,
+    timingText: timingText,
+    getFlow: getFlow,
+    listFlows: listFlows,
+    flowsIn: flowsIn,
+    flowsIncluding: flowsIncluding,
+    isImplicit: isImplicit,
+    flowItems: flowItems,
+    historyForFlow: historyForFlow,
+    createFlow: createFlow,
+    renameFlow: renameFlow,
+    addStep: addStep,
+    removeStep: removeStep,
+    moveStep: moveStep,
+    setStepTiming: setStepTiming,
+    setTemplateTiming: setTemplateTiming,
+    reorderFlow: reorderFlow,
+    planFlowDrop: planFlowDrop,
+    copyFlow: copyFlow,
+    moveFlow: moveFlow,
     campaignName: campaignName,
     planDrop: planDrop,
     copyToCampaign: copyToCampaign,

@@ -386,3 +386,38 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .ph-name { display: inline-flex; align-items: center; gap: 2px; }
 .ph-name .field { width: 9ch; min-width: 7ch; padding: 3px 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ph-help { margin: 0 0 8px; }
+
+/* content sidebar tabs: Templates | Flows */
+.list-tabs { display: flex; gap: 2px; margin: -4px 0 10px; border-bottom: 1px solid var(--border); }
+.list-tab { flex: 1; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); }
+.list-tab:hover { color: var(--text); background: var(--hover); border-radius: 6px 6px 0 0; }
+.list-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* flows list, single-template indicator, timing */
+.flow-meta { margin-top: 2px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.flow-ind { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 5px; border-radius: 99px; font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--accent); vertical-align: middle; white-space: nowrap; }
+.flow-card { margin-bottom: 16px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--accent-border); border-left: 3px solid var(--accent); border-radius: var(--radius); }
+.flow-card-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.flow-card-row + .flow-card-row { margin-top: 8px; }
+.timing { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.timing .field { margin: 0; }
+.timing .num { width: 5.5em; padding: 3px 6px; }
+.timing .ref { width: 21em; max-width: 100%; padding: 3px 8px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.timing .field-select { padding: 3px 6px; }
+
+/* flow editor */
+.steps { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.step-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); position: relative; }
+.step-row .drag-handle { margin: 2px 0 0 -4px; }
+.step-no { flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--code-bg); color: var(--muted); font-size: 12px; font-weight: 600; }
+.step-main { flex: 1; min-width: 0; }
+.step-name { font-weight: 600; padding: 0; text-align: left; overflow-wrap: anywhere; }
+.step-timing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.add-step { margin-top: 4px; }
+.step-row.dragging, .flow-item.dragging { opacity: .45; }
+.drop-before::before, .drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.drop-before::before { top: -5px; }
+.drop-after::after { bottom: -5px; }
+.flow-item { position: relative; }
+
+.flow-item .name { flex-wrap: wrap; }
