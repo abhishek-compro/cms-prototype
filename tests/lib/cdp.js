@@ -104,6 +104,8 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c[0], y: c[1] });
       await sleep(180);       // let the hover transition finish
     },
+    /** Move the mouse to page coordinates (for :hover effects on things that are not easy to select). */
+    moveTo: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(180); },
     clickAt: async (x, y) => {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
       await sleep(80);

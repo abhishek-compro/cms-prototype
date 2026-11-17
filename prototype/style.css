@@ -450,12 +450,10 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .out-x { padding: 0 4px; font-size: 16px; line-height: 1; }
 .add-out { margin-top: 2px; font-size: 12px; padding: 3px 10px; }
 .edge-pill { position: absolute; z-index: 3; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 99px; font-size: 11px; box-shadow: 0 1px 4px var(--shadow); }
-.edge-pill:not(:has(.edge-label)) { padding-left: 2px; }
 .edge-pill .pill-x { opacity: 0; pointer-events: none; }
 .edge-pill.hot, .edge-pill:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 1px 4px var(--shadow); }
 .edge-pill.hot .pill-x, .edge-pill:focus-within .pill-x { opacity: 1; pointer-events: auto; }
-.edge-pill:not(.labeled):not(.hot):not(:focus-within) { opacity: 0; pointer-events: none; }
-.edge-label { font-weight: 600; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edge-pill:not(.hot):not(:focus-within) { opacity: 0; pointer-events: none; }
 .pill-x { border: 0; background: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 1px 5px; border-radius: 50%; }
 .pill-x:hover { background: var(--bad-soft); color: var(--bad); }
 

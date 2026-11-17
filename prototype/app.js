@@ -940,8 +940,7 @@
         var p1 = pt(a), p2 = pt(b), dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
         var key = n.id + ':' + (o.id || ''), d = 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y;
         paths += '<g class="edge" data-edge="' + key + '"><path class="edge-hit" d="' + d + '"/><path class="edge-line" d="' + d + '" marker-end="url(#arrow)"/></g>';
-        pills += '<div class="edge-pill' + (o.label ? ' labeled' : '') + (hotEdge === key ? ' hot' : '') + '" data-edge="' + key + '" style="left:' + ((p1.x + p2.x) / 2) + 'px;top:' + ((p1.y + p2.y) / 2) + 'px" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') + '>' +
-          (o.label ? '<span class="edge-label">' + esc(o.label) + '</span>' : '') +
+        pills += '<div class="edge-pill' + (hotEdge === key ? ' hot' : '') + '" data-edge="' + key + '" style="left:' + ((p1.x + p2.x) / 2) + 'px;top:' + ((p1.y + p2.y) / 2) + 'px" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') + '>' +
           '<button class="pill-x" data-action="edge-remove" data-flow="' + f.id + '" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') +
           ' aria-label="Disconnect ' + esc(S.nodeTitle(n) + (o.label ? ' [' + o.label + ']' : '')) + ' from ' + esc(S.nodeTitle(S.getNode(f, o.to))) + '" title="Disconnect">×</button></div>';
       });

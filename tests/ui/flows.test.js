@@ -115,7 +115,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.click(await flowItem('Newborn first weeks'));
   ok('the open flow is a canvas with one box per node: input, template, logic, template, action', await cnt('.fnode') === 5 && await cnt('.fnode-template') === 2 && await cnt('.fnode-logic') === 1 && await cnt('.fnode-action') === 1 && await cnt('.fnode-input') === 1);
   ok('every connection is drawn: 4 curves, each with a pill to disconnect it', await cnt('#edge-paths .edge') === 4 && await cnt('#edge-paths .edge-line') === 4 && await cnt('.edge-pill') === 4 && await cnt('.edge-pill [data-action=edge-remove]') === 4);
-  ok('a logic node\'s edges show their condition on the pill; the others show only the disconnect button', await b.ev(`[].map.call(document.querySelectorAll('.edge-pill .edge-label'), function(e){return e.textContent}).sort().join(' | ')`) === 'No reply | Replied');
+  ok('edges carry no condition text (the conditions are on the logic node\'s own rows); a pill holds only the disconnect button, which still says which edge it is for', !await q('.edge-label') && await b.ev(`[].every.call(document.querySelectorAll('.edge-pill'), function(p){return p.textContent.trim()==='×'})`) && await b.ev(`[].some.call(document.querySelectorAll('.edge-pill .pill-x'), function(x){return /Logic 1 \\[Replied\\] from Daily health tip/.test(x.getAttribute('aria-label')) || /Logic 1 \\[Replied\\]/.test(x.getAttribute('aria-label'))})`));
   ok('an edge ends at the target node\'s input port (the curve ends where that port is)', await b.ev(`(function(){var cv=document.getElementById('canvas'), cr=cv.getBoundingClientRect(); var p=document.querySelector('#edge-paths .edge-line'); var d=p.getAttribute('d').match(/-?[\\d.]+/g).map(Number); var end=[d[d.length-2], d[d.length-1]]; return [].some.call(document.querySelectorAll('.port.in'), function(port){var r=port.getBoundingClientRect(); return Math.abs(r.left+r.width/2-cr.left-end[0])<2 && Math.abs(r.top+r.height/2-cr.top-end[1])<2})})()`));
   ok('every node has a small × centred on the corner of its border (top right), and no "Remove" text link', await b.ev(`[].every.call(document.querySelectorAll('.fnode'), function(n){var x=n.querySelector('.node-x'); if(!x||x.textContent!=='×') return false; var r=n.getBoundingClientRect(), c=x.getBoundingClientRect(); return Math.abs(c.left+c.width/2-r.right)<3 && Math.abs(c.top+c.height/2-r.top)<3 && c.width<=24})`) && !/Remove/.test(await txt('.canvas')) && await cnt('.node-x') === 5);
   ok('the × is invisible (and cannot be clicked) until its node is hovered', await b.ev(`[].every.call(document.querySelectorAll('.node-x'), function(x){var s=getComputedStyle(x); return s.opacity==='0' && s.pointerEvents==='none'})`));
@@ -139,9 +139,15 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.hover('.canvas-wrap', 0.5, 0.97);
   ok('the outline is gone when the pointer leaves', await b.ev(`getComputedStyle(document.querySelector('${await node('Daily health tip')}')).outlineStyle`) === 'none');
   ok('edge crosses are hidden until the edge is hovered', await b.ev(`[].every.call(document.querySelectorAll('.edge-pill .pill-x'), function(x){return getComputedStyle(x).opacity==='0' && getComputedStyle(x).pointerEvents==='none'})`) && await b.ev(`getComputedStyle(document.querySelector('.edge-pill:not(.labeled)')).opacity`) === '0');
+  // hover an edge: find a point along its line that is really on the line (not under a node) and put the pointer there
+  const hoverEdge = async key => {
+    const p = await b.ev(`(function(){var e=document.querySelector('#edge-paths .edge[data-edge="${key}"] .edge-hit'); if(!e) return null; e.scrollIntoView({block:'center',inline:'nearest'}); var cr=document.getElementById('canvas').getBoundingClientRect(), L=e.getTotalLength(); for (var i=0, fr=[0.5,0.4,0.6,0.3,0.7,0.2,0.8,0.1,0.9]; i<fr.length; i++) { var m=e.getPointAtLength(L*fr[i]), x=cr.left+m.x, y=cr.top+m.y, t=document.elementFromPoint(x,y); if (t===e) return [x,y]; } return null})()`);
+    if (!p) throw new Error('hoverEdge: no free point on ' + key);
+    await b.moveTo(p[0], p[1]);
+  };
   const hotLine = () => b.ev(`[].map.call(document.querySelectorAll('.edge.hot .edge-line'), function(l){var s=getComputedStyle(l); return s.strokeWidth+' '+s.stroke}).join('|')`);
   ok('no edge is highlighted at rest: all lines are the thin 2px stroke', await b.ev(`[].every.call(document.querySelectorAll('.edge-line'), function(l){return getComputedStyle(l).strokeWidth==='2px'})`) && await hotLine() === '');
-  await b.hover('.edge-pill.labeled .edge-label');
+  await hoverEdge(await b.ev(`document.querySelector('.edge-pill').dataset.edge`));
   const thick = await hotLine();
   ok('hovering an edge\'s pill highlights that edge only: thicker (4px) and in the accent colour; its cross appears', /^4px /.test(thick) && thick.split('|').length === 1 && await b.ev(`getComputedStyle(document.querySelector('.edge-pill.hot .pill-x')).opacity`) === '1' && await cnt('.edge-pill.hot') === 1, thick);
   const [hx, hy] = await b.ev(`(function(){var l=document.querySelector('.edge.hot .edge-hit'); var m=l.getPointAtLength(l.getTotalLength()*0.25), r=document.getElementById('canvas').getBoundingClientRect(); var sc=document.getElementById('canvas-wrap'); return [r.left+m.x, r.top+m.y]})()`);
@@ -327,8 +333,8 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.pointerDrag(await outPort('Logic 1', 'Replied yes'), await node('Action 1'));
   await b.pointerDrag(await outPort('Logic 1', 'No reply'), await node('Action 1'));
   ok('each of a logic node\'s edges connects on its own; two edges may lead to the same node', await edges() === 'Appointment reminder -> Welcome message | Welcome message -> Logic 1 | Logic 1 [Replied yes] -> Action 1 | Logic 1 [No reply] -> Action 1', await edges());
-  ok('a logic edge\'s pill carries its condition', await b.ev(`[].map.call(document.querySelectorAll('.edge-pill .edge-label'), function(e){return e.textContent}).sort().join(' | ')`) === 'No reply | Replied yes');
-  ok('the pill\'s cross is clickable only once its edge is hovered', await (async () => { await b.hover('.edge-pill.labeled .edge-label'); return await b.ev(`getComputedStyle(document.querySelector('.edge-pill.hot .pill-x')).pointerEvents`) === 'auto'; })());
+  ok('a logic edge\'s pill does not repeat its condition; the node\'s rows show "Replied yes" and "No reply"', !await q('.edge-label') && /Replied yes/.test(await txt(await node('Logic 1'))) && /No reply/.test(await txt(await node('Logic 1'))));
+  ok('the pill\'s cross is clickable only once its edge is hovered', await (async () => { await hoverEdge(await b.ev(`document.querySelector('.edge-pill').dataset.edge`)); return await b.ev(`getComputedStyle(document.querySelector('.edge-pill.hot .pill-x')).pointerEvents`) === 'auto'; })());
   await b.pointerDrag(await outPort('Input 1'), await node('Appointment reminder'));
   ok('an input node connects out like the others', /Input 1 -> Appointment reminder/.test(await edges()));
   await addNode('input');
@@ -346,7 +352,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
     await b.pointerDrag(await outPort('Welcome message'), await node('Logic 1'), { hold: async () => { seen = await b.ev(`!!document.getElementById('temp-edge') && !!document.querySelector('.fnode.connect-target')`); } });
     return seen;
   })());
-  await b.hover('.edge-pill[data-edge="' + await nid('Logic 1') + ':' + await outId('Logic 1', 'No reply') + '"] .edge-label');
+  await hoverEdge(await nid('Logic 1') + ':' + await outId('Logic 1', 'No reply'));
   await b.click('.edge-pill.hot [data-action=edge-remove]');
   ok('the × on a pill disconnects that edge; a logic node keeps the edge (its name stays, now open)', !/Logic 1 \[No reply\]/.test(await edges()) && /Replied yes/.test(await edges()) && await outLabels('Logic 1') === 'Replied yes | No reply');
   await editNode('Logic 1');
