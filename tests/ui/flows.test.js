@@ -449,7 +449,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await addNode('input');
   ok('+ Input adds a node (Input 2): read-only (no input boxes until clicked), an input port and an output port', await titles() === (await titles()).split(' | ').filter(t => !/^Input 2$/.test(t)).concat(['Input 2']).join(' | ') && !await q((await node('Input 2')) + ' input, ' + (await node('Input 2')) + ' select, ' + (await node('Input 2')) + ' textarea') && await cnt((await node('Input 2')) + ' .port.in') === 1 && await cnt((await node('Input 2')) + ' .port.out') === 1);
   await editNode('Input 2');
-  ok('clicking an input node opens its name (focused), with ✓ and ✕', await editing() === 1 && await val('.fnode.editing [data-edit=title]') === 'Input 2' && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'title' && await q('.fnode.editing .node-save'));
+  ok('clicking an input node turns its label into the text field (in the header, focused, no separate Name box), with ✓ and ✕', await editing() === 1 && await q('.fnode.editing .fnode-head [data-edit=title]') && !await q('.fnode.editing .fnode-title') && !await q('.fnode.editing .fnode-body') && await val('.fnode.editing [data-edit=title]') === 'Input 2' && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'title' && await q('.fnode.editing .node-save'));
   await b.fill('.fnode.editing [data-edit=title]', 'welcome MESSAGE'); await b.key('Enter', 'Enter', 13);
   ok('an input name must be unique among the flow\'s node names (any capitalisation): refused, stays in edit mode', /already called/.test(await toast()) && await editing() === 1);
   await b.fill('.fnode.editing [data-edit=title]', '   '); await b.key('Enter', 'Enter', 13);

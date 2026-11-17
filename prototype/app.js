@@ -769,7 +769,8 @@
     var editing = !!ui.nodeEdit && ui.nodeEdit.flow === f.id && ui.nodeEdit.node === n.id;
     var d = editing ? ui.nodeEdit.draft : null;
     var head = '<div class="fnode-head"><span class="ftype">' + NODE_LABEL[n.type] + '</span>' +
-      (n.type === 'template' || n.type === 'action' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
+      (n.type === 'input' && editing ? '<input class="field node-title-input" data-edit="title" data-first value="' + esc(d.title) + '" aria-label="Name of this input" autocomplete="off">'   // the label itself becomes the field
+        : n.type === 'template' || n.type === 'action' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
       '<span class="grow"></span>' +
       (editing ? '<button class="node-btn node-save" data-action="node-save" aria-label="Save changes to this node" title="Save">✓</button>' +
         '<button class="node-btn node-cancel" data-action="node-cancel" aria-label="Cancel and discard changes to this node" title="Cancel">✕</button>' : '') +
@@ -813,9 +814,7 @@
           (n.definition ? '<div class="view-def">' + esc(n.definition) + '</div>' : '') + '</div>';
       }
     } else if (n.type === 'input') {
-      if (editing) {
-        body = '<div class="fnode-body"><label class="fld"><span>Name</span><input class="field" data-edit="title" data-first value="' + esc(d.title) + '" autocomplete="off"></label></div>';
-      }
+      // nothing below the header: while editing, the header's label is the text field
     } else if (n.type === 'logic') {
       if (editing) {
         var single = d.outs.length <= 1;
