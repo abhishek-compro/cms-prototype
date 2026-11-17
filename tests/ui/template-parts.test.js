@@ -33,7 +33,7 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
     await b.ev(`[].map.call(document.querySelectorAll('.panel.edit [data-sec]'), function(e){return e.dataset.sec}).join()`) === 'header,body,placeholders,buttons,footer,add,problems');
   ok('body has a counter against the 1024 limit', /106 \/ 1024/.test(await txt(E('[data-sec=body] .sec-label'))), await txt(E('[data-sec=body] .sec-label')));
   ok('placeholders: named {{name}} -> WhatsApp position {{1}}, with its default', await phNames() === 'name:{{1}}' && await val(E('[data-input=default][data-name=name]')) === 'Friend');
-  ok('WhatsApp body preview shows the numbered version', /^Hello \{\{1\}\}, welcome/.test((await txt(E('.wa-body-text'))).trim()), await txt(E('.wa-body-text')));
+  ok('no read-only copy of the body under Placeholders (the phone preview replaced it); numbering is in the table', !await q(E('.wa-body')) && !await q(E('.wa-body-text')));
   ok('buttons: 2 cards (Quick reply, URL) with the schema fields and the per-type counters', await cnt(E('.bcard')) === 2 && await q(E('[data-input=btn-payload]')) && await q(E('[data-input=btn-url]')) && /quick replies 1 \/ 3 · URL 1 \/ 1/.test(await txt(E('[data-sec=buttons] .sec-label'))));
   ok('URL button shows its own placeholder table ({{page}} -> {{1}}, default about)', await val(E('[data-input=btn-param][data-name=page]')) === 'about');
   ok('footer has its counter against 60', /12 \/ 60/.test(await txt(E('[data-sec=footer] .sec-label'))));
@@ -88,7 +88,6 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await fill(E('[data-input=text]'), 'Hi {{first}}, {{first}} is {{age}}');
   ok('typing in the body keeps focus and the text', await b.ev(`document.activeElement.getAttribute('data-input')`) === 'text' && await val(E('[data-input=text]')) === 'Hi {{first}}, {{first}} is {{age}}');
   ok('placeholders table follows the body live: first -> {{1}} {{2}}, age -> {{3}}', await phNames() === 'first:{{1}}{{2}} age:{{3}}', await phNames());
-  ok('WhatsApp body numbers every occurrence', (await txt(E('.wa-body-text'))).trim() === 'Hi {{1}}, {{2}} is {{3}}', await txt(E('.wa-body-text')));
   ok('new placeholders start without a default and are reported as problems', /\{\{first\}\} needs a default value/.test(await probs()) && /\{\{age\}\} needs a default value/.test(await probs()), await probs());
   ok('Save is enabled, dirty note shown', !await b.ev(`document.querySelector('.panel.edit .save').disabled`) && /Unsaved/.test(await txt(E('.dirty-note'))));
   await fill(E('[data-input=default][data-name=first]'), 'Asha');
@@ -165,7 +164,6 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   ok('names are editable fields (shown as {{ name }}), and a hint explains renaming and sharing a name', await q(E('[data-change=ph-rename][data-name=name]')) && /rename it everywhere/.test(await txt(E('.ph-help'))));
   await rename(E('[data-change=ph-rename][data-name=name]'), 'friend');
   ok('renaming rewrites the body and keeps the default', await val(E('[data-input=text]')) === 'Hello {{friend}}, welcome to Noora Health. We will share simple tips to help you care for your newborn baby.' && await phNames() === 'friend:{{1}}' && await val(E('[data-input=default][data-name=friend]')) === 'Friend');
-  ok('the WhatsApp body is unchanged by a rename (still numbered)', /^Hello \{\{1\}\}, welcome/.test((await txt(E('.wa-body-text'))).trim()));
   ok('a rename is an unsaved edit: Save enabled, body counter updated', !await b.ev(`document.querySelector('.panel.edit .save').disabled`) && await q(E('[data-count=text]')));
   await b.click(E('.save'));
   tr = await trOf('Welcome message', 'en');
@@ -181,7 +179,6 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   ok('renaming to an existing name MERGES them: that one name now targets several numbers (1, 2, 3)', await phNames() === 'first:{{1}}{{2}}{{3}} city:{{4}}', await phNames());
   ok('the existing default wins in a merge', await val(E('[data-input=default][data-name=first]')) === 'Asha');
   ok('the body was rewritten and a toast explains the merge', await val(E('[data-input=text]')) === 'Hi {{first}}, aka {{first}} ({{first}}) in {{city}}' && /one value fills several WhatsApp positions/.test(await txt('#toast')));
-  ok('the WhatsApp body keeps one number per occurrence', (await txt(E('.wa-body-text'))).trim() === 'Hi {{1}}, aka {{2}} ({{3}}) in {{4}}');
   ok('the schema\'s limit of 5 uses per name still applies to a merged name', await b.ev(`JSON.stringify(Store.positionsOf(document.querySelector('.panel.edit [data-input=text]').value).first)`) === '[1,2,3]');
   await fill(E('[data-input=text]'), 'a {{x}} b {{y}} c {{y}} d {{y}} e {{y}} f {{y}}');
   await fill(E('[data-input=default][data-name=x]'), 'X'); await fill(E('[data-input=default][data-name=y]'), 'Y');

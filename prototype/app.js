@@ -390,7 +390,6 @@
         (ro ? esc(d) : '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default value" autocomplete="off">') + '</td></tr>';
     }).join('');
     return '<div class="sec" data-sec="placeholders">' + lbl('Placeholders') +
-      '<div class="wa-body"><span class="muted small">WhatsApp body</span><div class="wa-body-text">' + esc(S.whatsappBody(p.text)) + '</div></div>' +
       '<table class="ph-table"><thead><tr><th>Name</th><th>WhatsApp position</th><th>Default value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       (ro ? '' : '<div class="muted small ph-help">Edit a name to rename it everywhere. One name can fill several WhatsApp positions: use it more than once, or rename another placeholder to it.</div>') + '</div>';
   }
@@ -469,7 +468,7 @@
   function refPanelHtml(c, tr) {
     var p = S.partsOf(tr);
     return '<section class="panel ref' + subjectCls('ref') + '" data-role="ref" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Reference (read-only)</span></div>' +
+      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="ref" data-lang="' + tr.lang + '" title="Show this template as a WhatsApp message on a phone">Preview</button><span class="role">Reference (read-only)</span></div>' +
       secHeader(c, tr, p, true) + secBody(c, tr, p, true) + secPlaceholders(c, tr, p, true) + secButtons(c, tr, p, true) + secFooter(c, tr, p, true) +
       '<div class="panel-foot">' + waNameHtml(tr) + '</div></section>';
   }
@@ -478,7 +477,7 @@
     var p = currentParts(c, tr);
     var dirty = isDirty(c, tr);
     return '<section class="panel edit' + subjectCls('edit') + '" data-role="edit" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Editing</span></div>' +
+      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="edit" data-lang="' + tr.lang + '" title="Show this template (with your unsaved edits) as a WhatsApp message on a phone">Preview</button><span class="role">Editing</span></div>' +
       secHeader(c, tr, p, false) + secBody(c, tr, p, false) + secPlaceholders(c, tr, p, false) + secButtons(c, tr, p, false) + secFooter(c, tr, p, false) + secAdd(c, tr, p) + secProblems(c, p) +
       '<div class="panel-foot">' +
       '<span class="dirty-note small" style="color:var(--warn)">' + (dirty ? 'Unsaved changes' : '') + '</span>' +
@@ -1280,6 +1279,7 @@
   var dialogReturnFocus = null;
 
   function dialogHtml() {
+    if (ui.dialog.kind === 'preview') return previewHtml(ui.dialog);
     var d = ui.dialog, isFlow = d.kind === 'flow';
     var item = isFlow ? S.getFlow(d.flowId) : S.get(d.contentId);
     var plan = isFlow ? S.planFlowDrop(d.flowId, d.targetId) : S.planDrop(d.contentId, d.targetId);
@@ -1333,11 +1333,66 @@
       '<div class="dlg-options">' + options + opt('dialog-cancel', 'Cancel', 'Close without changing anything', true) + '</div></div></div>';
   }
 
+  // ---- preview: the template as a WhatsApp message on a phone (in a dialog) --------------------------------------------
+  // Shows the parts as they are now, unsaved edits included (the reference panel shows its saved parts). Placeholders are
+  // filled with their default values; one without a default stays as {{name}}, marked.
+  function waFormat(text) {                        // WhatsApp's inline formatting: *bold* _italic_ ~strike~ ```mono```
+    return text
+      .replace(/```([^`]+)```/g, '<code>$1</code>')
+      .replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?:;])/g, '$1<strong>$2</strong>')
+      .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?:;])/g, '$1<em>$2</em>')
+      .replace(/(^|[\s(])~([^~\n]+)~(?=$|[\s).,!?:;])/g, '$1<s>$2</s>')
+      .replace(/\n/g, '<br>');
+  }
+  function waBodyHtml(text, defaults) {
+    var out = '', last = 0, re = /\{\{([a-zA-Z1-9_]+)\}\}/g, m;
+    while ((m = re.exec(text))) {
+      out += waFormat(esc(text.slice(last, m.index)));
+      var d = (defaults || {})[m[1]];
+      out += d ? '<span class="wa-var" title="{{' + esc(m[1]) + '}}">' + esc(d) + '</span>' : '<span class="wa-var missing" title="No default value yet">{{' + esc(m[1]) + '}}</span>';
+      last = re.lastIndex;
+    }
+    return out + waFormat(esc(text.slice(last)));
+  }
+  var HEADER_ICON = { image: '🖼', video: '▶', document: '📄' };
+  function previewHtml(d) {
+    var c = S.get(d.contentId), p = d.parts, tr = c && S.getTr(c, d.lang);
+    if (!c || !tr) return '';
+    var head = '';
+    if (c.headerType !== 'none') {
+      var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
+      head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
+    }
+    var body = p.text.trim() ? '<div class="wa-text">' + waBodyHtml(p.text, p.defaults) + '</div>' : '<div class="wa-text muted">No text yet in this language</div>';
+    var buttons = (p.buttons || []).map(function (b) {
+      var url = b.type === 'URL';
+      return '<div class="wa-btn">' + (url ? '<span aria-hidden="true">↗</span> ' : '<span aria-hidden="true">↩</span> ') + esc(b.text || (url ? 'URL button' : 'Quick reply')) + '</div>';
+    }).join('');
+    return '<div class="modal-backdrop" data-action="dialog-backdrop">' +
+      '<div class="modal modal-phone" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
+      '<div class="dlg-head"><h2 id="dlg-title">Preview · ' + esc(S.langName(d.lang)) + ' <code>' + esc(d.lang) + '</code></h2>' +
+      '<button class="btn dlg-close" data-action="dialog-cancel" aria-label="Close preview">Close</button></div>' +
+      '<div class="phone" aria-label="Phone showing the WhatsApp message">' +
+        '<div class="phone-bar"><span>9:41</span><span class="phone-icons" aria-hidden="true">▂▄▆ ▮</span></div>' +
+        '<div class="wa-head"><span aria-hidden="true">‹</span><span class="wa-avatar" aria-hidden="true">N</span><div><div class="wa-contact">Noora Health</div><div class="wa-sub">Business account</div></div></div>' +
+        '<div class="wa-chat"><div class="wa-bubble" data-preview="bubble">' + head + body +
+          (p.footer ? '<div class="wa-foot">' + esc(p.footer) + '</div>' : '') +
+          '<div class="wa-time">9:41</div></div>' + (buttons ? '<div class="wa-btns">' + buttons + '</div>' : '') + '</div>' +
+      '</div>' +
+      '<div class="muted small phone-note">Placeholders show their default values; one without a default is marked. ' + (d.role === 'ref' ? 'This is the saved reference text.' : 'Unsaved edits are included.') + '</div>' +
+      '</div></div>';
+  }
+  function openPreview(lang, role) {
+    var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang);
+    if (!tr) return;
+    showDialog({ kind: 'preview', contentId: c.id, lang: lang, role: role, parts: S.cloneParts(role === 'ref' ? S.partsOf(tr) : currentParts(c, tr)) });
+  }
+
   function showDialog(dialog) {
     dialogReturnFocus = document.activeElement;
     ui.dialog = dialog;
     $modal.innerHTML = dialogHtml();
-    var first = $modal.querySelector('.dlg-opt:not([disabled])');
+    var first = $modal.querySelector('.dlg-opt:not([disabled]), .dlg-close');
     if (first) first.focus();
   }
   function openDropDialog(contentId, targetId) {
@@ -1573,6 +1628,7 @@
       case 'dialog-duplicate': applyDialog('duplicate'); return;
       case 'dialog-move': applyDialog('move'); return;
       case 'dialog-cancel': closeDialog(); return;
+      case 'preview': openPreview(el.getAttribute('data-lang'), el.getAttribute('data-role')); return;
       case 'dialog-backdrop': if (ev.target === el) closeDialog(); return;
       case 'open-add-campaign': openCampBox(); return;
       case 'add-campaign': addCampaign(); return;
