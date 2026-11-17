@@ -170,7 +170,7 @@
       return '<li class="content-item flow-item' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '">' +
         '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + (isFlow ? 'Drag to reorder, or onto a campaign to copy or move it' : 'Drag onto a campaign to copy or move it') + '">' + ICON_GRIP + '</span>' +
         '<div class="ci-body"><div class="name">' + esc(isFlow ? it.flow.name : it.content.name) + (isFlow ? '' : ' ' + FLOW_IND) + '</div>' +
-        '<div class="flow-meta">' + esc(isFlow ? flowSummary(it.flow) : S.timingText(it.content.timing)) + '</div></div></li>';
+        '<div class="flow-meta">' + esc(isFlow ? S.timingText(it.flow.timing) + ' · ' + flowSummary(it.flow) : S.timingText(it.content.timing)) + '</div></div></li>';
     }).join('');
   }
 
@@ -551,7 +551,7 @@
     else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_step_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_steps_reordered') body = diffHtml(e.before, e.after);
-    else if (e.action === 'flow_timing_edited') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
+    else if (e.action === 'flow_timing_edited') body = diffHtml(e.before, e.after);
     else if (e.action === 'flow_reordered') body = esc(e.detail);
     else if (e.action === 'flow_copied' || e.action === 'flow_referred') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_duplicated') body = 'Duplicated as <strong>' + esc(e.after) + '</strong> <span class="muted">in ' + esc(e.detail) + '</span>';
@@ -888,6 +888,7 @@
       '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
       (ui.historyOpen ? '' : '<div class="actions"><button class="btn" data-action="toggle-history-pane">Show history</button></div>') + '</div>' +
+      '<div class="flow-card"><div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
         kind: 'add', attrs: 'data-flow="' + f.id + '"', label: '+ Template…', aria: 'Add a template node', search: 'Search templates…', empty: 'No template matches', disabled: !addable.length,
@@ -1035,7 +1036,7 @@
     var el = panel && panel.querySelector('[data-params="' + idx + '"]');
     if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx, false);
   }
-  // The timing row of a template that is a flow by itself (days / before-after / reference date) changed. The reference
+  // The timing row of a flow, or of a template that is a flow by itself (days / before-after / reference date) changed. The reference
   // date is normalised to a variable-style name (lowercase, spaces become _). Invalid input is refused with a message
   // and the row goes back.
   function saveTimingFromUi(input) {
@@ -1046,7 +1047,8 @@
       when: box.querySelector('[data-t=when]').value,
       ref: box.querySelector('[data-t=ref]').value.trim().toLowerCase().replace(/\s+/g, '_')
     };
-    var r = S.setTemplateTiming(box.getAttribute('data-tpl'), timing);
+    var fid = box.getAttribute('data-flow-timing');
+    var r = fid ? S.setFlowTiming(fid, timing) : S.setTemplateTiming(box.getAttribute('data-tpl'), timing);
     if (!r.ok && r.error !== 'No change') toast(r.error, true);
     render();
   }

@@ -678,3 +678,33 @@ test('duplicating a flow keeps its flow-call nodes (they still call the same flo
   assert.equal(copy.nodes.find(x => x.type === 'flow').flowId, b.id);
   assert.notEqual(copy.nodes[0].id, a.nodes[0].id, 'new node ids');
 });
+
+// ---------------------------------------------------------------- the timing is the flow's
+test('a flow has one timing (dummy default); nodes carry none; setFlowTiming validates, ignores no-ops and logs', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks');
+  assert.deepEqual(f.timing, S.DEFAULT_TIMING);
+  assert.ok(f.nodes.every(n => !('timing' in n)));
+  assert.deepEqual(S.createFlow('New', null).flow.timing, { days: 7, when: 'before', ref: 'expected_date_of_delivery' });
+  assert.equal(S.setFlowTiming(f.id, { days: 2, when: 'after', ref: 'date_of_birth' }).ok, true);
+  assert.equal(S.timingText(f.timing), '2 days after date_of_birth');
+  assert.deepEqual([last(S, f).action, last(S, f).before, last(S, f).after], ['flow_timing_edited', '7 days before expected_date_of_delivery', '2 days after date_of_birth']);
+  assert.equal(S.setFlowTiming(f.id, { days: 2, when: 'after', ref: 'date_of_birth' }).error, 'No change');
+  assert.match(S.setFlowTiming(f.id, { days: -1, when: 'after', ref: 'x' }).error, /0 to 999/);
+  assert.match(S.setFlowTiming(f.id, { days: 1, when: 'later', ref: 'x' }).error, /before or after/i);
+  assert.match(S.setFlowTiming(f.id, { days: 1, when: 'after', ref: 'not a name' }).error, /reference date is a name/);
+  assert.equal(S.setFlowTiming('nope', S.DEFAULT_TIMING).error, 'Flow not found');
+  assert.equal(S.timingText(f.timing), '2 days after date_of_birth', 'refused edits change nothing');
+});
+
+test('duplicating a flow copies its timing (independent afterwards); flows saved without a timing get the default', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks');
+  S.setFlowTiming(f.id, { days: 5, when: 'after', ref: 'date_of_birth' });
+  const copy = S.duplicateFlow(f.id, 'k3').flow;
+  assert.equal(S.timingText(copy.timing), '5 days after date_of_birth');
+  S.setFlowTiming(copy.id, { days: 9, when: 'before', ref: 'x_date' });
+  assert.equal(S.timingText(f.timing), '5 days after date_of_birth');
+  const { S: S2 } = loadStore({ 'cms-prototype-v1': JSON.stringify({ nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], contents: [], flows: [{ id: 'f1', name: 'Old', campaignIds: [], createdAt: 'x', nodes: [] }] }) });
+  assert.deepEqual(S2.getFlow('f1').timing, { days: 7, when: 'before', ref: 'expected_date_of_delivery' });
+});

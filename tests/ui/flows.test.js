@@ -70,8 +70,8 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('Flows tab is selected and lists flows, not templates', await b.ev(`document.querySelector('.list-tab.active').textContent.trim()`) === 'Flows' && await cnt('#content-list .flow-item') === 2 && !await q('#content-list .content-item:not(.flow-item)'));
   ok('All content: the flow you created first, then the template that is a flow by itself', await flowNames() === 'Newborn first weeks | Appointment reminder', await flowNames());
   ok('only the template-as-flow carries the indicator, with its tooltip', await hasIndicator('Appointment reminder') && !await hasIndicator('Newborn first weeks') && await b.ev(`document.querySelector('#content-list .flow-ind').title`) === 'This template is itself a flow');
-  ok('a flow\'s entry says what it holds (no timing: a flow has none); a template that is a flow by itself shows its own timing',
-    await meta('Newborn first weeks') === '2 templates · 1 logic · 1 action · 1 input' && await meta('Appointment reminder') === '7 days before expected_date_of_delivery', await meta('Newborn first weeks'));
+  ok('a flow\'s entry shows the flow\'s timing and what it holds; a template that is a flow by itself shows its own timing',
+    await meta('Newborn first weeks') === '7 days before expected_date_of_delivery · 2 templates · 1 logic · 1 action · 1 input' && await meta('Appointment reminder') === '7 days before expected_date_of_delivery', await meta('Newborn first weeks'));
   await camp('k1');
   ok('Newborn care: just the flow - its two templates are inside it, so they are not listed alone', await flowNames() === 'Newborn first weeks', await flowNames());
   await camp('k2');
@@ -151,6 +151,25 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('hovering the line itself (not only the pill) also highlights it, via a wide invisible hit area', await b.ev(`(function(){var l=document.querySelector('.edge-hit'); return getComputedStyle(l).pointerEvents==='stroke' && parseFloat(getComputedStyle(l).strokeWidth)>=12})()`));
   ok('an input node is a plain labelled box: its header shows "Input" and its number', /Input\s*Input 1/.test(await b.ev(`document.querySelector('.fnode-input .fnode-head').textContent.replace(/\\s+/g,' ')`)) || /Input 1/.test(await txt('.fnode-input')));
 
+  // ================= the timing belongs to the flow =================
+  ok('a flow has one timing, in a card above the canvas ("Sent <n> days before/after <reference date>"), starting with the dummy 7 days before expected_date_of_delivery',
+    await cnt('.flow-card .timing') === 1 && await val('.flow-card [data-t=days]') === '7' && await val('.flow-card [data-t=when]') === 'before' && await val('.flow-card [data-t=ref]') === 'expected_date_of_delivery' && /Sent/.test(await txt('.flow-card')));
+  ok('the nodes carry no timing of their own', !await q('.fnode .timing, .fnode [data-t]'));
+  await setTiming('.flow-card .timing', 3, 'after', 'Date of Birth');
+  ok('editing it changes the flow: days, before/after, and a tidied reference date; the list entry follows', await b.ev(`${cur}.timing.days`) === 3 && await b.ev(`${cur}.timing.when`) === 'after' && await val('.flow-card [data-t=ref]') === 'date_of_birth' && /^3 days after date_of_birth · 2 templates/.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
+  await setTiming('.flow-card .timing', 0);
+  ok('0 days reads "on <reference date>"', /^on date_of_birth · /.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
+  await setTiming('.flow-card .timing', 1000);
+  ok('over 999 is refused with a message and the field goes back', /whole number from 0 to 999/.test(await toast()) && await val('.flow-card [data-t=days]') === '0');
+  await b.fill('.flow-card [data-t=ref]', '!!'); await b.key('Enter', 'Enter', 13);
+  ok('a reference that is not a name is refused', /reference date is a name/.test(await toast()) && await val('.flow-card [data-t=ref]') === 'date_of_birth', await toast());
+  await b.click('[data-action=toggle-history-pane]');
+  const fh = await historyText();
+  ok('each timing change is in the flow\'s history (before → after, by the user)', /Changed timing/.test(fh) && /Demo user/.test(fh) && /expected_date_of_delivery/.test(fh) && /date_of_birth/.test(fh), fh.slice(0, 300));
+  await b.click('[data-action=toggle-history-pane]');
+  await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
+  ok('the timing survives a reload', await val('.flow-card [data-t=days]') === '0' && await val('.flow-card [data-t=ref]') === 'date_of_birth');
+
   // ================= create a flow and add nodes =================
   await camp('k2');
   await b.click('[data-action=open-add]'); await b.type('Appointment reminder'); await b.key('Enter', 'Enter', 13);
@@ -182,7 +201,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('the picker still lists a template that is already in the flow, but disabled with the reason', await comboOpts(addCombo) === 'Welcome message|Appointment reminder(off)|Daily health tip', await comboOpts(addCombo));
   await addTemplateNode('Welcome message');
   ok('a second template is a second node; its campaigns are unchanged (Welcome message stays only in Newborn care)', await titles() === 'Appointment reminder | Welcome message' && await b.ev(`Store.list()[0].campaignIds.join()`) === 'k1');
-  ok('the list entry counts the flow\'s templates', await meta('Postnatal reminders') === '2 templates', await meta('Postnatal reminders'));
+  ok('the list entry counts the flow\'s templates', await meta('Postnatal reminders') === '7 days before expected_date_of_delivery · 2 templates', await meta('Postnatal reminders'));
   await b.click((await node('Welcome message')) + ' [data-action=open-template]');
   ok('the Open link of a template node opens that template in the Templates tab', await b.ev(`document.querySelector('.list-tab.active').textContent.trim()`) === 'Templates' && await txt('.content-head h2') === 'Welcome message');
   await tab('flows');

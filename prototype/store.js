@@ -138,7 +138,8 @@
       delete f.steps;
       changed = true;
     });
-    state.flows.forEach(function (f) {          // template nodes no longer carry a timing; input nodes are plain
+    state.flows.forEach(function (f) {          // the timing is the flow's (dummy default); template nodes carry none; input nodes are plain
+      if (!f.timing) { f.timing = cloneTiming(DEFAULT_TIMING); changed = true; }
       f.nodes.forEach(function (n) {
         if ('timing' in n) { delete n.timing; changed = true; }
         if (n.type === 'input' && ('name' in n || 'inputType' in n || 'description' in n)) {
@@ -724,7 +725,7 @@
   function createFlow(name, campaignId) {
     var err = validateFlowName(name);
     if (err) return fail(err);
-    var f = { id: 'f' + state.nextId++, name: String(name).trim(), campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [], createdAt: clock().toISOString(), nodes: [] };
+    var f = { id: 'f' + state.nextId++, name: String(name).trim(), campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [], createdAt: clock().toISOString(), timing: cloneTiming(DEFAULT_TIMING), nodes: [] };
     state.flows.push(f);
     logFlow(f, 'flow_created', { after: f.name });
     save();
@@ -891,6 +892,20 @@
     var before = timingText(c.timing);
     c.timing = cloneTiming(timing);
     log(c, null, 'timing_edited', { before: before, after: timingText(c.timing) });
+    save();
+    return { ok: true };
+  }
+
+  // The timing of a flow ("N days before/after <reference date>"): one per flow, not per node
+  function setFlowTiming(flowId, timing) {
+    var f = getFlow(flowId);
+    if (!f) return fail('Flow not found');
+    var err = checkTiming(timing);
+    if (err) return fail(err);
+    if (sameTiming(f.timing, timing)) return fail('No change');
+    var before = timingText(f.timing);
+    f.timing = cloneTiming(timing);
+    logFlow(f, 'flow_timing_edited', { before: before, after: timingText(f.timing) });
     save();
     return { ok: true };
   }
@@ -1127,7 +1142,7 @@
     var f = getFlow(flowId), ids = {};
     f.nodes.forEach(function (n) { ids[n.id] = 'n' + state.nextId++; });
     var copy = {
-      id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(),
+      id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(), timing: cloneTiming(f.timing || DEFAULT_TIMING),
       nodes: f.nodes.map(function (n) {
         if (n.type === 'template') return { id: ids[n.id], type: 'template', templateId: n.templateId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
         if (n.type === 'action') return { id: ids[n.id], type: 'action', name: n.name, definition: n.definition, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
@@ -1325,6 +1340,7 @@
     removeNode: removeNode,
     moveNode: moveNode,
     setTemplateTiming: setTemplateTiming,
+    setFlowTiming: setFlowTiming,
     connect: connect,
     disconnect: disconnect,
     updateLogic: updateLogic,
