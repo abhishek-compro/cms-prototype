@@ -35,7 +35,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   const setTiming = async (boxSel, days, when, ref) => {
     if (days !== undefined) { await b.fill(boxSel + ' [data-t=days]', String(days)); await b.key('Enter', 'Enter', 13); }
     if (when !== undefined) { await b.ev(`(function(){var s=document.querySelector(${JSON.stringify(boxSel + ' [data-t=when]')}); s.value=${JSON.stringify(when)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`); }
-    if (ref !== undefined) { await b.fill(boxSel + ' [data-t=ref]', ref); await b.key('Enter', 'Enter', 13); }
+    if (ref !== undefined) { await b.ev(`(function(){var s=document.querySelector(${JSON.stringify(boxSel + ' [data-t=ref]')}); s.value=${JSON.stringify(ref)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`); }
   };
   const addNode = type => b.click('.flow-toolbar [data-action=add-node][data-type=' + type + ']');
   // searchable pickers: open with a click on the button, then click an option (or type to filter first)
@@ -95,19 +95,18 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('editing the days updates the card, the list and the saved template', await val('.flow-card [data-t=days]') === '3' && await meta('Appointment reminder') === '3 days before expected_date_of_delivery' && await b.ev(`Store.list()[1].timing.days`) === 3, await meta('Appointment reminder'));
   await setTiming('.flow-card .timing', undefined, 'after');
   ok('before / after can be switched', await meta('Appointment reminder') === '3 days after expected_date_of_delivery');
-  await setTiming('.flow-card .timing', undefined, undefined, 'Date Of Birth');
-  ok('the reference date is any name: spaces and capitals are tidied to date_of_birth', await val('.flow-card [data-t=ref]') === 'date_of_birth' && await meta('Appointment reminder') === '3 days after date_of_birth', await val('.flow-card [data-t=ref]'));
+  ok('the reference date is a dropdown (not a text box) offering the known dates, including date_joined and baby_dob', await b.ev(`document.querySelector('.flow-card [data-t=ref]').tagName`) === 'SELECT' && await b.ev(`[].map.call(document.querySelectorAll('.flow-card [data-t=ref] option'), function(o){return o.value}).join('|')`) === 'expected_date_of_delivery|date_joined|baby_dob|date_of_birth|registration_date|discharge_date');
+  await setTiming('.flow-card .timing', undefined, undefined, 'date_joined');
+  ok('choosing another reference date applies it', await val('.flow-card [data-t=ref]') === 'date_joined' && await meta('Appointment reminder') === '3 days after date_joined', await val('.flow-card [data-t=ref]'));
   await setTiming('.flow-card .timing', 0);
-  ok('0 days reads "on <reference date>"', await meta('Appointment reminder') === 'on date_of_birth');
+  ok('0 days reads "on <reference date>"', await meta('Appointment reminder') === 'on date_joined');
   await setTiming('.flow-card .timing', -2);
   ok('a negative number is refused with a message and the field goes back', /whole number from 0 to 999/.test(await toast()) && await val('.flow-card [data-t=days]') === '0');
   await setTiming('.flow-card .timing', 1000);
   ok('over 999 is refused too', /whole number from 0 to 999/.test(await toast()) && await val('.flow-card [data-t=days]') === '0');
-  await setTiming('.flow-card .timing', undefined, undefined, '1st date');
-  ok('a reference that is not a name is refused', /reference date is a name/.test(await toast()) && await val('.flow-card [data-t=ref]') === 'date_of_birth', await toast());
   await b.click('[data-action=toggle-history-pane]'); await b.click('.hp-tab[data-tab=other]');
   const other = await historyText();
-  ok('each timing change is in the template\'s Other history (by the user, before -> after)', /Changed timing/.test(other) && /Demo user/.test(other) && /expected_date_of_delivery/.test(other) && /date_of_birth/.test(other), other.slice(0, 300));
+  ok('each timing change is in the template\'s Other history (by the user, before -> after)', /Changed timing/.test(other) && /Demo user/.test(other) && /expected_date_of_delivery/.test(other) && /date_joined/.test(other), other.slice(0, 300));
   await b.click('[data-action=toggle-history-pane]');
 
   // ================= the seed flow on the canvas =================
@@ -159,20 +158,25 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('a flow has one timing, in a card above the canvas ("Sent <n> days before/after <reference date>"), starting with the dummy 7 days before expected_date_of_delivery',
     await cnt('.flow-card .timing') === 1 && await val('.flow-card [data-t=days]') === '7' && await val('.flow-card [data-t=when]') === 'before' && await val('.flow-card [data-t=ref]') === 'expected_date_of_delivery' && /Sent/.test(await txt('.flow-card')));
   ok('the nodes carry no timing of their own', !await q('.fnode .timing, .fnode [data-t]'));
-  await setTiming('.flow-card .timing', 3, 'after', 'Date of Birth');
-  ok('editing it changes the flow: days, before/after, and a tidied reference date; the list entry follows', await b.ev(`${cur}.timing.days`) === 3 && await b.ev(`${cur}.timing.when`) === 'after' && await val('.flow-card [data-t=ref]') === 'date_of_birth' && /^3 days after date_of_birth · 2 templates/.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
+  await setTiming('.flow-card .timing', 3, 'after', 'baby_dob');
+  ok('editing it changes the flow: days, before/after and the reference date; the list entry follows', await b.ev(`${cur}.timing.days`) === 3 && await b.ev(`${cur}.timing.when`) === 'after' && await val('.flow-card [data-t=ref]') === 'baby_dob' && /^3 days after baby_dob · 2 templates/.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
   await setTiming('.flow-card .timing', 0);
-  ok('0 days reads "on <reference date>"', /^on date_of_birth · /.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
+  ok('0 days reads "on <reference date>"', /^on baby_dob · /.test(await meta('Newborn first weeks')), await meta('Newborn first weeks'));
   await setTiming('.flow-card .timing', 1000);
   ok('over 999 is refused with a message and the field goes back', /whole number from 0 to 999/.test(await toast()) && await val('.flow-card [data-t=days]') === '0');
-  await b.fill('.flow-card [data-t=ref]', '!!'); await b.key('Enter', 'Enter', 13);
-  ok('a reference that is not a name is refused', /reference date is a name/.test(await toast()) && await val('.flow-card [data-t=ref]') === 'date_of_birth', await toast());
   await b.click('[data-action=toggle-history-pane]');
   const fh = await historyText();
-  ok('each timing change is in the flow\'s history (before → after, by the user)', /Changed timing/.test(fh) && /Demo user/.test(fh) && /expected_date_of_delivery/.test(fh) && /date_of_birth/.test(fh), fh.slice(0, 300));
+  ok('each timing change is in the flow\'s history (before → after, by the user)', /Changed timing/.test(fh) && /Demo user/.test(fh) && /expected_date_of_delivery/.test(fh) && /baby_dob/.test(fh), fh.slice(0, 300));
   await b.click('[data-action=toggle-history-pane]');
   await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
-  ok('the timing survives a reload', await val('.flow-card [data-t=days]') === '0' && await val('.flow-card [data-t=ref]') === 'date_of_birth');
+  ok('the timing survives a reload', await val('.flow-card [data-t=days]') === '0' && await val('.flow-card [data-t=ref]') === 'baby_dob');
+  await b.ev(`Store.setFlowTiming(${cur}.id, {days: 0, when: 'before', ref: 'my_old_date'}); 0`);
+  await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
+  ok('a reference saved earlier that is not in the list stays selectable (and selected)', await val('.flow-card [data-t=ref]') === 'my_old_date' && await b.ev(`document.querySelectorAll('.flow-card [data-t=ref] option').length`) === 7);
+  await setTiming('.flow-card .timing', undefined, undefined, 'baby_dob');
+  ok('(choosing from the list replaces it)', await val('.flow-card [data-t=ref]') === 'baby_dob');
+  await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
+  ok('...and it is no longer offered', await b.ev(`document.querySelectorAll('.flow-card [data-t=ref] option').length`) === 6);
 
   // ================= direction: left to right or top down =================
   const portBox = (sel, which) => b.ev(`(function(){var n=document.querySelector(${JSON.stringify(sel)}), p=n.querySelector('.port.${which}').getBoundingClientRect(), r=n.getBoundingClientRect(); return [Math.round(p.left+p.width/2-r.left), Math.round(p.top+p.height/2-r.top), Math.round(r.width), Math.round(r.height)]})()`);

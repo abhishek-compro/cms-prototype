@@ -648,7 +648,9 @@
       '<input class="field num" type="number" min="0" max="999" step="1" data-t="days" data-change="timing" value="' + esc(t.days) + '" aria-label="Number of days">' +
       '<span class="muted">days</span>' +
       '<select class="field-select" data-t="when" data-change="timing" aria-label="Before or after">' + sel('before', 'before') + sel('after', 'after') + '</select>' +
-      '<input class="field ref" type="text" list="ref-dates" data-t="ref" data-change="timing" value="' + esc(t.ref) + '" aria-label="Reference date" placeholder="reference_date" autocomplete="off" spellcheck="false">' +
+      '<select class="field-select ref" data-t="ref" data-change="timing" aria-label="Reference date">' +
+        (S.REF_DATES.indexOf(t.ref) === -1 ? '<option value="' + esc(t.ref) + '" selected>' + esc(t.ref) + '</option>' : '') +   // a value saved earlier that is not in the list stays selectable
+        S.REF_DATES.map(function (d) { return '<option value="' + d + '"' + (t.ref === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select>' +
       '</span>';
   }
 
@@ -1037,8 +1039,7 @@
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
     var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
     var pane = subject && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>' +
-      '<datalist id="ref-dates">' + S.REF_DATES.map(function (d) { return '<option value="' + d + '">'; }).join('') + '</datalist>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas

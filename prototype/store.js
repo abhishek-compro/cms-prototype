@@ -647,7 +647,7 @@
   // (branch on a condition) are joined by edges. A template node has one outgoing edge; a logic node has any number,
   // each named by its condition. Edges may not make a loop. The numbers and reference date are dummy until edited.
   var DEFAULT_TIMING = { days: 7, when: 'before', ref: 'expected_date_of_delivery' };
-  var REF_DATES = ['expected_date_of_delivery', 'date_of_birth', 'registration_date', 'discharge_date'];   // suggestions only
+  var REF_DATES = ['expected_date_of_delivery', 'date_joined', 'baby_dob', 'date_of_birth', 'registration_date', 'discharge_date'];   // the dropdown's options (the store itself accepts any variable-style name)
   var EDGE_LABEL_MAX = 40;
 
   function cloneTiming(t) { return { days: t.days, when: t.when, ref: t.ref }; }
