@@ -83,8 +83,11 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
     /** Wipe saved data and reload: the page starts from the sample data again. */
     fresh: async () => { await api.ev('localStorage.clear(); 0'); await api.reload(); },
     setScheme: v => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: v }] }),
-    /** Point inside an element (fx, fy = fraction of its width/height from the top-left), scrolled into view. */
-    point: (sel, fx = 0.5, fy = 0.5) => api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(!e) return null; e.scrollIntoView({block:'center',inline:'nearest'}); var r=e.getBoundingClientRect(); return [r.left+r.width*${fx}, r.top+r.height*${fy}];})()`),
+    /**
+     * Point inside an element (fx, fy = fraction of its width/height from the top-left), scrolled into view first
+     * unless scroll === false (use that for the END of a drag: scrolling again would move the start point).
+     */
+    point: (sel, fx = 0.5, fy = 0.5, scroll = true) => api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(!e) return null; if(${scroll}) e.scrollIntoView({block:'center',inline:'nearest'}); var r=e.getBoundingClientRect(); return [r.left+r.width*${fx}, r.top+r.height*${fy}];})()`),
     center: sel => api.point(sel),
     click: async sel => {
       const c = await api.center(sel);
@@ -93,6 +96,13 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c[0], y: c[1], button: 'left', clickCount: 1 });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c[0], y: c[1], button: 'left', clickCount: 1 });
       await sleep(80);
+    },
+    /** Move the mouse over an element (for :hover effects). */
+    hover: async (sel, fx = 0.5, fy = 0.5) => {
+      const c = await api.point(sel, fx, fy);
+      if (!c) throw new Error('hover: no element ' + sel);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c[0], y: c[1] });
+      await sleep(180);       // let the hover transition finish
     },
     clickAt: async (x, y) => {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
@@ -115,7 +125,7 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
     },
     /** Real mouse drag: press on `from`, move to `to` (opts.fx / opts.fy = where inside it, default the centre), replay the intercepted drag as dragEnter/dragOver/drop, release. */
     drag: async (fromSel, toSel, opts = {}) => {
-      const a = await api.center(fromSel), t = await api.point(toSel, opts.fx === undefined ? 0.5 : opts.fx, opts.fy === undefined ? 0.5 : opts.fy);
+      const a = await api.center(fromSel), t = await api.point(toSel, opts.fx === undefined ? 0.5 : opts.fx, opts.fy === undefined ? 0.5 : opts.fy, false);
       if (!a || !t) throw new Error('drag: missing ' + (a ? toSel : fromSel));
       dragData = null;
       await send('Input.setInterceptDrags', { enabled: true });
@@ -138,6 +148,27 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
       await send('Input.setInterceptDrags', { enabled: false });
       await sleep(150);
+    },
+    /**
+     * Plain mouse drag (press, move in steps, release) for things that use mousedown/mousemove/mouseup rather than
+     * HTML5 drag and drop, e.g. moving a node on the flow canvas or drawing an edge from a port.
+     * from/to: selectors; opts.fx/fy (start) and opts.tx/ty (end) = where inside each element (default centre).
+     * Or pass an array [dx, dy] as `to` to drag by an offset from the start point. opts.scroll === false: do not scroll the start into view.
+     */
+    pointerDrag: async (fromSel, to, opts = {}) => {
+      const a = await api.point(fromSel, opts.fx === undefined ? 0.5 : opts.fx, opts.fy === undefined ? 0.5 : opts.fy, opts.scroll !== false);
+      if (!a) throw new Error('pointerDrag: no element ' + fromSel);
+      const t = Array.isArray(to) ? [a[0] + to[0], a[1] + to[1]] : await api.point(to, opts.tx === undefined ? 0.5 : opts.tx, opts.ty === undefined ? 0.5 : opts.ty, false);
+      if (!t) throw new Error('pointerDrag: no element ' + to);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a[0], y: a[1] });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a[0], y: a[1], button: 'left', clickCount: 1 });
+      const steps = opts.steps || 6;
+      for (let i = 1; i <= steps; i++) {
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a[0] + (t[0] - a[0]) * i / steps, y: a[1] + (t[1] - a[1]) * i / steps, button: 'left', buttons: 1 });
+      }
+      if (opts.hold) await opts.hold();
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
+      await sleep(120);
     },
     /** PNG screenshot, e.g. when debugging a failing test. */
     shot: async file => { const s = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(file, Buffer.from(s.result.data, 'base64')); },

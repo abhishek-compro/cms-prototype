@@ -406,18 +406,109 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .timing .field-select { padding: 3px 6px; }
 
 /* flow editor */
-.steps { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.step-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); position: relative; }
-.step-row .drag-handle { margin: 2px 0 0 -4px; }
-.step-no { flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--code-bg); color: var(--muted); font-size: 12px; font-weight: 600; }
-.step-main { flex: 1; min-width: 0; }
-.step-name { font-weight: 600; padding: 0; text-align: left; overflow-wrap: anywhere; }
-.step-timing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-.add-step { margin-top: 4px; }
-.step-row.dragging, .flow-item.dragging { opacity: .45; }
+.flow-item.dragging { opacity: .45; }
 .drop-before::before, .drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--accent); pointer-events: none; }
 .drop-before::before { top: -5px; }
 .drop-after::after { bottom: -5px; }
 .flow-item { position: relative; }
 
 .flow-item .name { flex-wrap: wrap; }
+
+/* flow canvas: nodes and edges */
+.flow-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0 10px; }
+.flow-help { margin-left: 4px; }
+.canvas-wrap { overflow: auto; max-height: 72vh; min-height: 300px; border: 1px solid var(--border); border-radius: var(--radius); background-color: var(--surface-2); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+.canvas { position: relative; margin-top: 12px; }   /* room above, so the corner cross of a node at the very top is not clipped */
+.edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; }
+.edges path { fill: none; stroke: var(--muted); stroke-width: 2; }
+.edges .edge-hit { stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.edges .edge.hot .edge-line { stroke: var(--accent); stroke-width: 4; }
+.edges #temp-edge { stroke: var(--accent); stroke-dasharray: 5 4; }
+.arrow-head { fill: var(--muted); stroke: none; }
+.canvas-empty { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.fnode { position: absolute; width: 270px; z-index: 1; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; box-shadow: 0 2px 8px var(--shadow); }
+.fnode-logic { border-left-color: var(--warn); }
+.fnode-action { border-left-color: var(--ok); }
+.fnode-input { border-left-color: var(--muted); }
+.fnode.connect-target { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fnode-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: grab; user-select: none; }
+.fnode-head:active { cursor: grabbing; }
+.fnode-title { font-weight: 600; padding: 0; text-align: left; overflow-wrap: anywhere; }
+.ftype { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.fnode-logic .ftype { background: var(--warn-soft); color: var(--warn); }
+.fnode-action .ftype { background: var(--ok-soft); color: var(--ok); }
+.fnode-input .ftype { background: var(--code-bg); color: var(--muted); }
+.fnode-body { padding: 8px 10px 10px; }
+.fnode .field { width: 100%; margin: 0; }
+.fnode textarea.field { resize: vertical; font: inherit; }
+.port { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 2px solid var(--muted); z-index: 2; }
+.port.in { left: -11px; top: 12px; }
+.port.out { right: -9px; top: 12px; cursor: crosshair; border-color: var(--accent); }
+.port.out:hover { background: var(--accent); }
+.out-row { position: relative; display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.out-row .port.out { top: 50%; margin-top: -7px; right: -19px; }
+.out-x { padding: 0 4px; font-size: 16px; line-height: 1; }
+.add-out { margin-top: 2px; font-size: 12px; padding: 3px 10px; }
+.edge-pill { position: absolute; z-index: 3; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 99px; font-size: 11px; box-shadow: 0 1px 4px var(--shadow); }
+.edge-pill:not(:has(.edge-label)) { padding-left: 2px; }
+.edge-pill .pill-x { opacity: 0; pointer-events: none; }
+.edge-pill.hot, .edge-pill:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 1px 4px var(--shadow); }
+.edge-pill.hot .pill-x, .edge-pill:focus-within .pill-x { opacity: 1; pointer-events: auto; }
+.edge-pill:not(.labeled):not(.hot):not(:focus-within) { opacity: 0; pointer-events: none; }
+.edge-label { font-weight: 600; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill-x { border: 0; background: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 1px 5px; border-radius: 50%; }
+.pill-x:hover { background: var(--bad-soft); color: var(--bad); }
+
+/* remove a node: a small cross on the corner of its border, shown only while the node is hovered (or the button has focus) */
+.node-x { position: absolute; top: -10px; right: -10px; z-index: 4; width: 20px; height: 20px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--muted); font-size: 14px; line-height: 1; box-shadow: 0 1px 4px var(--shadow); opacity: 0; pointer-events: none; transition: opacity .12s; }
+.fnode:hover .node-x, .node-x:focus { opacity: 1; pointer-events: auto; }
+.node-x:hover { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+
+/* template node: choose its template */
+.tpl-pick { display: flex; align-items: center; gap: 8px; }
+.tpl-pick .field-select { flex: 1; min-width: 0; }
+.fnode-template .fnode-body { padding-top: 6px; }
+
+/* flow node (calls another flow) */
+.fnode-flow { border-left-color: var(--text); }
+.fnode-flow .ftype { background: var(--hover); color: var(--text); }
+
+/* searchable picker */
+.combo { position: relative; display: inline-block; max-width: 100%; }
+.fnode .combo { display: block; flex: 1; min-width: 0; }
+.combo-btn { width: 100%; max-width: 100%; text-align: left; padding: 5px 26px 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
+.combo-btn::after { content: "▾"; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 11px; }
+.combo-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+.combo-pop { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; width: 260px; max-width: 80vw; padding: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); }
+.combo.open .combo-pop { display: block; }
+.fnode:has(.combo.open) { z-index: 20; }
+.combo-search { margin-bottom: 6px; }
+.combo-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; }
+.combo-opt { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.combo-opt:hover, .combo-opt.active { background: var(--accent-soft); }
+.combo-opt.current .combo-name { font-weight: 600; }
+.combo-opt.current .combo-name::before { content: "✓ "; color: var(--accent); }
+.combo-opt.disabled { color: var(--muted); cursor: not-allowed; }
+.combo-opt.disabled:hover { background: none; }
+.combo-empty { display: none; padding: 6px 8px; }
+
+/* nodes: read-only by default, click to edit; ✓ saves, ✕ cancels, nothing else works meanwhile */
+.fnode-body.view { padding: 6px 10px 10px; }
+.fnode.editable:not(.editing) { cursor: pointer; }
+.fnode.editable:not(.editing):hover { border-color: var(--accent-border); }
+.view-row { display: flex; align-items: center; gap: 8px; }
+.view-name { overflow-wrap: anywhere; }
+.view-def { margin-top: 4px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.out-row.view { padding: 3px 0; }
+.out-label { flex: 1; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.fnode.editing { z-index: 25; outline: 2px solid var(--accent); outline-offset: 2px; cursor: default; }
+.node-btn { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); font-size: 13px; line-height: 1; cursor: pointer; }
+.node-save { color: var(--ok); border-color: var(--ok); }
+.node-save:hover { background: var(--ok-soft); }
+.node-cancel { color: var(--muted); }
+.node-cancel:hover { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.fnode.attention { animation: nudge .4s; }
+@keyframes nudge { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+
+.fnode-head .grow { flex: 1; }
+.fnode:hover { outline: 2px solid var(--accent); outline-offset: 1px; }

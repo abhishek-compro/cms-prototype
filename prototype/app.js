@@ -18,6 +18,10 @@
     search: '',
     renaming: false,
     newError: '',
+    nodeEdit: null,      // the node being edited {flow, node, type, draft}; while set, nothing outside that node can be used
+    justDragged: false,  // a node was just dragged: the click that follows must not open it for editing
+    conn: null,          // flow canvas: an edge being drawn {flow, node, out}
+    nodeDrag: null,      // flow canvas: a node being moved
     drag: null,          // {id}: the content name being dragged
     dialog: null,        // {contentId, targetId}: copy/move dialog after dropping on a campaign
     campBox: false,      // campaigns sidebar: the new-campaign text box is open (closes on blur)
@@ -141,9 +145,14 @@
   function listHtml() { return ui.listTab === 'flows' ? flowsListHtml() : templatesListHtml(); }
 
   function flowSummary(f) {
-    if (!f.steps.length) return 'No templates yet';
-    var n = f.steps.length + (f.steps.length === 1 ? ' template' : ' templates');
-    return n + ' · ' + S.timingText(f.steps[0].timing) + (f.steps.length > 1 ? ' → ' + S.timingText(f.steps[f.steps.length - 1].timing) : '');
+    if (!f.nodes.length) return 'No nodes yet';
+    var count = {};
+    f.nodes.forEach(function (n) { count[n.type] = (count[n.type] || 0) + 1; });
+    var parts = [];
+    if (count.template) parts.push(count.template + (count.template === 1 ? ' template' : ' templates'));
+    ['logic', 'action', 'input'].forEach(function (t) { if (count[t]) parts.push(count[t] + ' ' + t + (count[t] > 1 && t !== 'logic' ? 's' : '')); });
+    if (count.flow) parts.push(count.flow + (count.flow === 1 ? ' flow call' : ' flow calls'));
+    return parts.join(' · ');
   }
   var FLOW_IND = '<span class="flow-ind" title="This template is itself a flow" aria-label="This template is itself a flow">' + ICON_FLOW + '<span>Single template</span></span>';
 
@@ -528,6 +537,17 @@
     else if (e.action === 'timing_edited') body = diffHtml(e.before, e.after);
     else if (e.action === 'flow_created') body = esc(e.after) + (e.detail ? ' <span class="muted">· ' + esc(e.detail) + '</span>' : '');
     else if (e.action === 'flow_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_node_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_node_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_call_changed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_node_changed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_edge_connected') body = esc(e.detail) + (e.before ? ' <span class="muted">· was → ' + esc(e.before) + '</span>' : '');
+    else if (e.action === 'flow_edge_disconnected') body = esc(e.before);
+    else if (e.action === 'flow_out_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_out_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_out_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_action_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_action_defined') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
     else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_step_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_steps_reordered') body = diffHtml(e.before, e.after);
@@ -637,31 +657,309 @@
       '<div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(c.timing, 'data-tpl="' + c.id + '"') + '</div></div>';
   }
 
+  // ---- a searchable picker (templates, flows): used by template nodes, flow nodes and the "+ Template…" / "+ Flow…" buttons ---
+  // A button showing the current choice opens a list with a search box. Typing filters by name (any part of it);
+  // ArrowUp/Down move, Enter picks, Escape or a click elsewhere closes. Options that cannot be chosen are shown disabled with why.
+  function comboHtml(o) {
+    return '<div class="combo" data-combo="' + o.kind + '" ' + o.attrs + '>' +
+      '<button type="button" class="combo-btn" data-action="combo-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="' + esc(o.aria) + '"' + (o.first ? ' data-first' : '') + (o.disabled ? ' disabled' : '') + '>' + esc(o.label) + '</button>' +
+      '<div class="combo-pop"><input type="text" class="field combo-search" placeholder="' + esc(o.search) + '" aria-label="' + esc(o.search) + '" autocomplete="off" spellcheck="false">' +
+      '<ul class="combo-list" role="listbox">' + o.options.map(function (opt) {
+        return '<li role="option" class="combo-opt' + (opt.current ? ' current' : '') + (opt.disabled ? ' disabled' : '') + '" data-action="combo-pick" data-id="' + opt.id + '" aria-selected="' + !!opt.current + '"' + (opt.disabled ? ' aria-disabled="true"' : '') + '>' +
+          '<span class="combo-name">' + esc(opt.label) + '</span>' + (opt.note ? ' <span class="muted small">' + esc(opt.note) + '</span>' : '') + '</li>';
+      }).join('') + '</ul><div class="combo-empty muted small">' + esc(o.empty) + '</div></div></div>';
+  }
+  function comboOptions(combo) { return [].slice.call(combo.querySelectorAll('.combo-opt')); }
+  function comboVisible(combo) { return comboOptions(combo).filter(function (li) { return li.style.display !== 'none' && !li.classList.contains('disabled'); }); }
+  function closeCombos(except) {
+    var open = document.querySelectorAll('.combo.open');
+    for (var i = 0; i < open.length; i++) if (open[i] !== except) { open[i].classList.remove('open'); open[i].querySelector('.combo-btn').setAttribute('aria-expanded', 'false'); }
+  }
+  function filterCombo(combo, q) {
+    q = q.trim().toLowerCase();
+    var shown = 0;
+    comboOptions(combo).forEach(function (li) {
+      var show = !q || li.querySelector('.combo-name').textContent.toLowerCase().indexOf(q) !== -1;
+      li.style.display = show ? '' : 'none'; li.classList.remove('active');
+      if (show) shown++;
+    });
+    combo.querySelector('.combo-empty').style.display = shown ? 'none' : 'block';
+    var first = comboVisible(combo)[0];
+    if (first) first.classList.add('active');       // Enter picks this one
+  }
+  function openCombo(combo) {
+    closeCombos(combo);
+    combo.classList.add('open');
+    combo.querySelector('.combo-btn').setAttribute('aria-expanded', 'true');
+    var search = combo.querySelector('.combo-search');
+    search.value = '';
+    filterCombo(combo, '');
+    search.focus();
+  }
+  function moveCombo(combo, step) {
+    var list = comboVisible(combo), cur = list.filter(function (li) { return li.classList.contains('active'); })[0];
+    if (!list.length) return;
+    var next = list[(list.indexOf(cur) + step + list.length) % list.length];
+    if (cur) cur.classList.remove('active');
+    next.classList.add('active');
+    next.scrollIntoView({ block: 'nearest' });
+  }
+  function pickCombo(li) {
+    var combo = li.closest('.combo');
+    if (li.classList.contains('disabled')) return;
+    var id = li.getAttribute('data-id'), flow = combo.getAttribute('data-flow'), node = combo.getAttribute('data-node'), kind = combo.getAttribute('data-combo');
+    closeCombos();
+    if (kind === 'node' || kind === 'fnode') {           // staged: the node's ✓ saves it, ✕ discards it
+      if (ui.nodeEdit) { if (kind === 'node') ui.nodeEdit.draft.templateId = id; else ui.nodeEdit.draft.flowId = id; }
+      ui.focusNext = '.fnode.editing .node-save';
+      render();
+      return;
+    }
+    var r = kind === 'addflow' ? S.addFlowNode(flow, id) : S.addTemplateNode(flow, id);
+    result(r, kind === 'addflow' ? 'Flow call added' : 'Added to the flow');
+    render();
+  }
+
+  // ---- the flow canvas: nodes joined by edges ---------------------------------------------
+  // Template node: a template + its timing. Logic node: branches, with any number of outgoing edges named by condition.
+  // Action node: a named action you define. Input node: something the flow takes in (a start point).
+  var NODE_LABEL = { template: 'Template', flow: 'Flow', logic: 'Logic', action: 'Action', input: 'Input' };
+
+  // The flows a flow node of `f` can call: every other flow; those it cannot call are listed disabled with why
+  function flowOptions(f, node) {
+    return S.listFlows().filter(function (g) { return g.id !== f.id; }).map(function (g) {
+      var current = !!node && node.flowId === g.id;
+      var bad = current ? null : S.callProblem(f.id, g.id, node && node.id);
+      return { id: g.id, label: g.name, current: current, disabled: !!bad, note: bad ? (bad.code === 'loop' ? 'calls this flow' : 'already in this flow') : '' };
+    });
+  }
+
+  var EDITABLE = { template: true, flow: true, action: true, logic: true };   // input nodes have nothing to edit
+
+  function draftOfNode(n) {
+    if (n.type === 'template') return { templateId: n.templateId };
+    if (n.type === 'flow') return { flowId: n.flowId };
+    if (n.type === 'action') return { name: n.name, definition: n.definition };
+    return { outs: n.outs.map(function (o) { return { id: o.id, label: o.label }; }) };
+  }
+
+  function nodeHtml(f, n) {
+    var attrs = 'data-flow="' + f.id + '" data-node="' + n.id + '"';
+    var title = S.nodeTitle(n);
+    var editing = !!ui.nodeEdit && ui.nodeEdit.flow === f.id && ui.nodeEdit.node === n.id;
+    var d = editing ? ui.nodeEdit.draft : null;
+    var head = '<div class="fnode-head"><span class="ftype">' + NODE_LABEL[n.type] + '</span>' +
+      (n.type === 'template' || n.type === 'action' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
+      '<span class="grow"></span>' +
+      (editing ? '<button class="node-btn node-save" data-action="node-save" aria-label="Save changes to this node" title="Save">✓</button>' +
+        '<button class="node-btn node-cancel" data-action="node-cancel" aria-label="Cancel and discard changes to this node" title="Cancel">✕</button>' : '') +
+      '</div>';
+    var body = '';
+
+    if (n.type === 'template') {
+      if (editing) {
+        var used = S.flowTemplateIds(f), others = used.filter(function (id) { return id !== n.templateId; });
+        body = '<div class="fnode-body"><div class="fld"><span>Template</span>' + comboHtml({
+          kind: 'node', attrs: attrs, first: true, label: S.nodeTitle({ type: 'template', templateId: d.templateId }), aria: 'Template of this node. Click to choose another.', search: 'Search templates…', empty: 'No template matches',
+          options: S.list().map(function (c) {
+            var taken = others.indexOf(c.id) !== -1;
+            return { id: c.id, label: c.name, current: c.id === d.templateId, disabled: taken, note: taken ? 'already in this flow' : '' };
+          })
+        }) + '</div></div>';
+      } else {
+        body = '<div class="fnode-body view"><div class="muted small">Template</div><div class="view-row"><strong class="view-name">' + esc(title) + '</strong>' +
+          '<button class="btn link" data-action="open-template" data-id="' + n.templateId + '" title="Open this template">Open</button></div></div>';
+      }
+    } else if (n.type === 'flow') {
+      if (editing) {
+        body = '<div class="fnode-body"><div class="fld"><span>Calls the flow</span>' + comboHtml({
+          kind: 'fnode', attrs: attrs, first: true, label: S.nodeTitle({ type: 'flow', flowId: d.flowId }), aria: 'Flow called by this node. Click to choose another.', search: 'Search flows…', empty: 'No flow matches',
+          options: flowOptions(f, { id: n.id, flowId: d.flowId })
+        }) + '</div></div>';
+      } else {
+        body = '<div class="fnode-body view"><div class="muted small">Calls the flow</div><div class="view-row"><strong class="view-name">' + esc(title) + '</strong>' +
+          '<button class="btn link" data-action="open-flow" data-id="' + n.flowId + '" title="Open this flow">Open</button></div></div>';
+      }
+    } else if (n.type === 'action') {
+      if (editing) {
+        body = '<div class="fnode-body"><label class="fld"><span>Name</span><input class="field" data-edit="name" data-first value="' + esc(d.name) + '" autocomplete="off"></label>' +
+          '<label class="fld"><span>Definition</span><textarea class="field" data-edit="definition" rows="3" placeholder="Describe what this action does">' + esc(d.definition) + '</textarea></label></div>';
+      } else {
+        body = '<div class="fnode-body view"><div class="view-row"><strong class="view-name">' + esc(title) + '</strong></div>' +
+          '<div class="view-def">' + (n.definition ? esc(n.definition) : '<span class="muted">No definition yet. Click to add one.</span>') + '</div></div>';
+      }
+    } else if (n.type === 'logic') {
+      if (editing) {
+        var single = d.outs.length <= 1;
+        body = '<div class="fnode-body"><div class="muted small" style="margin-bottom:4px">Outgoing edges, named by condition</div>' + d.outs.map(function (o, i) {
+          return '<div class="out-row"><input class="field" data-edit="out" data-i="' + i + '"' + (i === 0 ? ' data-first' : '') + ' value="' + esc(o.label) + '" placeholder="Condition" aria-label="Condition for outgoing edge ' + (i + 1) + '" autocomplete="off">' +
+            '<button class="btn link out-x" data-action="edit-out-remove" data-i="' + i + '" aria-label="Remove outgoing edge ' + (i + 1) + '" title="' + (single ? 'A logic node needs at least one outgoing edge' : 'Remove this outgoing edge') + '"' + (single ? ' disabled' : '') + '>×</button>' +
+            (o.id ? '<span class="port out" ' + attrs + ' data-out="' + o.id + '" data-port="out" title="Drag onto another node to connect this edge"></span>' : '') + '</div>';
+        }).join('') + '<button class="btn add-out" data-action="edit-out-add">+ Add outgoing edge</button></div>';
+      } else {
+        body = '<div class="fnode-body view">' + n.outs.map(function (o) {
+          return '<div class="out-row view"><span class="out-label">' + esc(o.label) + '</span>' +
+            '<span class="port out" ' + attrs + ' data-out="' + o.id + '" data-port="out" title="Drag onto another node to connect this edge"></span></div>';
+        }).join('') + '</div>';
+      }
+    }
+    return '<div class="fnode fnode-' + n.type + (EDITABLE[n.type] ? ' editable' : '') + (editing ? ' editing' : '') + '" ' + attrs + ' style="left:' + n.x + 'px;top:' + n.y + 'px"' +
+      (EDITABLE[n.type] && !editing ? ' title="Click to edit"' : '') + '>' +
+      (editing ? '' : '<button class="node-x" data-action="node-remove" ' + attrs + ' aria-label="Remove ' + esc(title) + '" title="Remove this node">×</button>') +
+      '<span class="port in" ' + attrs + ' data-port="in" title="Edges end here"></span>' +
+      head + body +
+      (n.type === 'logic' ? '' : '<span class="port out" ' + attrs + ' data-port="out" title="Drag onto another node to connect"></span>') + '</div>';
+  }
+
+  // ---- editing a node: edit, then ✓ save or ✕ cancel. Nothing else can be used meanwhile. ----------
+  function startNodeEdit(flowId, nodeId) {
+    var f = S.getFlow(flowId), n = f && S.getNode(f, nodeId);
+    if (!n || !EDITABLE[n.type] || ui.nodeEdit) return;
+    ui.nodeEdit = { flow: flowId, node: nodeId, type: n.type, draft: draftOfNode(n) };
+    ui.focusNext = '.fnode.editing [data-first]';
+    render();
+    var first = document.querySelector('.fnode.editing .combo-btn[data-first]');
+    if (first) first.focus({ preventScroll: true });
+  }
+  function cancelNodeEdit() { ui.nodeEdit = null; render(); }
+  function saveNodeEdit() {
+    var e = ui.nodeEdit;
+    if (!e) return;
+    var r = e.type === 'template' ? S.changeNodeTemplate(e.flow, e.node, e.draft.templateId)
+      : e.type === 'flow' ? S.changeNodeFlow(e.flow, e.node, e.draft.flowId)
+      : e.type === 'action' ? S.updateAction(e.flow, e.node, { name: e.draft.name, definition: e.draft.definition })
+      : S.updateLogic(e.flow, e.node, e.draft.outs);
+    if (r.ok || r.error === 'No change') {           // saved (or nothing changed): back to reading mode
+      ui.nodeEdit = null;
+      render();
+      if (r.ok) toast('Saved');
+    } else {
+      toast(r.error, true);                           // refused: stay in edit mode so it can be fixed (or cancelled)
+    }
+  }
+  function editingEl() { return ui.nodeEdit ? document.querySelector('.fnode.editing') : null; }
+  function outsideEdit(ev) {
+    var el = editingEl();
+    return !!el && !!ev.target && !!ev.target.closest && !el.contains(ev.target);
+  }
+  function nudgeEdit() {                              // "you are still editing this": shake the node and say so
+    var el = editingEl();
+    if (!el) return;
+    el.classList.remove('attention'); void el.offsetWidth; el.classList.add('attention');
+    toast('Save (✓) or cancel (✕) your changes to this node first', true);
+  }
+  // Capture phase: runs before every other handler, so a click, focus or Tab outside the node never reaches the page
+  ['mousedown', 'click', 'dblclick', 'contextmenu', 'dragstart'].forEach(function (type) {
+    document.addEventListener(type, function (ev) {
+      if (!outsideEdit(ev)) return;
+      ev.preventDefault(); ev.stopPropagation();
+      if (type === 'mousedown') nudgeEdit();
+    }, true);
+  });
+  document.addEventListener('focusin', function (ev) {
+    if (!outsideEdit(ev)) return;
+    var el = editingEl(), first = el.querySelector('[data-first]') || el.querySelector('.node-save');
+    if (first) first.focus();
+  }, true);
+  document.addEventListener('keydown', function (ev) {      // Tab stays inside the node
+    var el = editingEl();
+    if (!el || ev.key !== 'Tab') return;
+    var items = [].slice.call(el.querySelectorAll('input:not([disabled]), textarea, select, button:not([disabled])')).filter(function (x) { return x.offsetParent !== null && !x.classList.contains('node-x'); });
+    if (!items.length) return;
+    var idx = items.indexOf(document.activeElement);
+    if (ev.shiftKey ? (idx <= 0) : (idx === -1 || idx === items.length - 1)) { ev.preventDefault(); items[ev.shiftKey ? items.length - 1 : 0].focus(); }
+  }, true);
+
+  function canvasSize(f) {
+    var w = 900, h = 420;
+    f.nodes.forEach(function (n) { w = Math.max(w, n.x + 340); h = Math.max(h, n.y + 300); });
+    return { w: w, h: h };
+  }
+
   function flowEditorHtml(f) {
     var title = ui.renaming
       ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(f.name) + '">' +
         '<button class="btn primary" data-action="rename-save">Save</button><button class="btn" data-action="rename-cancel">Cancel</button></div>'
       : '<h2>' + esc(f.name) + '</h2><button class="btn link" data-action="rename-start">Rename</button>';
-    var inFlow = f.steps.map(function (st) { return st.templateId; });
+    var inFlow = S.flowTemplateIds(f);
     var addable = S.list().filter(function (c) { return inFlow.indexOf(c.id) === -1; });
-    var steps = f.steps.map(function (st, i) {
-      var c = S.get(st.templateId);
-      return '<li class="step-row" data-flow="' + f.id + '" data-idx="' + i + '">' +
-        '<span class="drag-handle" draggable="true" aria-hidden="true" title="Drag to reorder">' + ICON_GRIP + '</span>' +
-        '<span class="step-no">' + (i + 1) + '</span>' +
-        '<div class="step-main"><button class="btn link step-name" data-action="open-template" data-id="' + st.templateId + '" title="Open this template">' + esc(c ? c.name : st.templateId) + '</button>' +
-        '<div class="step-timing"><span class="muted">Sent</span>' + timingEditor(st.timing, 'data-flow="' + f.id + '" data-idx="' + i + '"') + '</div></div>' +
-        '<button class="btn link" data-action="step-remove" data-idx="' + i + '" aria-label="Remove ' + esc(c ? c.name : 'template') + ' from the flow">Remove</button></li>';
-    }).join('');
+    var size = canvasSize(f);
     return '<div class="content-head"><div><div class="title">' + title + '</div>' +
-      '<div class="muted small">Flow · ' + f.steps.length + ' template' + (f.steps.length === 1 ? '' : 's') +
+      '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
       (ui.historyOpen ? '' : '<div class="actions"><button class="btn" data-action="toggle-history-pane">Show history</button></div>') + '</div>' +
-      '<h3 class="section-title">Templates, in sending order <span class="muted" style="text-transform:none;letter-spacing:0">· drag the handle to reorder</span></h3>' +
-      (steps ? '<ol class="steps" id="steps">' + steps + '</ol>' : '<div class="hint">No templates in this flow yet. Add one below.</div>') +
-      '<div class="add-step"><select class="field-select" data-change="add-step" data-flow="' + f.id + '" aria-label="Add a template to this flow"' + (addable.length ? '' : ' disabled') + '>' +
-      '<option value="">+ Add template…</option>' + addable.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select></div>';
+      '<div class="flow-toolbar">' +
+      comboHtml({
+        kind: 'add', attrs: 'data-flow="' + f.id + '"', label: '+ Template…', aria: 'Add a template node', search: 'Search templates…', empty: 'No template matches', disabled: !addable.length,
+        options: S.list().map(function (c) { var inIt = inFlow.indexOf(c.id) !== -1; return { id: c.id, label: c.name, disabled: inIt, note: inIt ? 'already in this flow' : '' }; })
+      }) +
+      comboHtml({
+        kind: 'addflow', attrs: 'data-flow="' + f.id + '"', label: '+ Flow…', aria: 'Add a node that calls another flow', search: 'Search flows…', empty: 'No flow matches', disabled: !flowOptions(f, null).length,
+        options: flowOptions(f, null)
+      }) +
+      ['logic', 'action', 'input'].map(function (t) { return '<button class="btn" data-action="add-node" data-type="' + t + '">+ ' + NODE_LABEL[t] + '</button>'; }).join('') +
+      '<span class="muted small flow-help">Drag a node by its header to move it. Drag from the dot on its right edge onto another node to connect.</span></div>' +
+      '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
+      '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
+      f.nodes.map(function (n) { return nodeHtml(f, n); }).join('') +
+      '<div id="edge-pills"></div>' +
+      (f.nodes.length ? '' : '<div class="canvas-empty muted">Empty flow. Add a template, logic, action or input node above.</div>') +
+      '</div></div>';
   }
+
+  // Hovering an edge (its line or its pill) highlights it and shows its disconnect cross
+  var hotEdge = null;
+  function setHotEdge(key) {
+    hotEdge = key;
+    [].forEach.call(document.querySelectorAll('#edge-paths .edge, #edge-pills .edge-pill'), function (el) {
+      el.classList.toggle('hot', !!key && el.getAttribute('data-edge') === key);
+    });
+  }
+  document.addEventListener('mouseover', function (ev) {
+    var e = ev.target.closest && ev.target.closest('.edge, .edge-pill');
+    if (e) setHotEdge(e.getAttribute('data-edge'));
+    else if (hotEdge) setHotEdge(null);
+  });
+
+  // Draw every edge as a curve from its port to the target node's input port, with a pill (condition name + disconnect)
+  function drawEdges() {
+    var canvas = document.getElementById('canvas');
+    if (!canvas) return;
+    var f = S.getFlow(canvas.getAttribute('data-flow'));
+    if (!f) return;
+    var cr = canvas.getBoundingClientRect(), paths = '', pills = '';
+    function pt(el) { var r = el.getBoundingClientRect(); return { x: r.left + r.width / 2 - cr.left, y: r.top + r.height / 2 - cr.top }; }
+    f.nodes.forEach(function (n) {
+      var outs = n.type === 'logic' ? n.outs.map(function (o) { return { id: o.id, label: o.label, to: o.to }; }) : [{ id: null, label: '', to: n.next }];
+      outs.forEach(function (o) {
+        if (!o.to) return;
+        var a = canvas.querySelector('.port.out[data-node="' + n.id + '"]' + (o.id ? '[data-out="' + o.id + '"]' : ''));
+        var b = canvas.querySelector('.port.in[data-node="' + o.to + '"]');
+        if (!a || !b) return;
+        var p1 = pt(a), p2 = pt(b), dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
+        var key = n.id + ':' + (o.id || ''), d = 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y;
+        paths += '<g class="edge" data-edge="' + key + '"><path class="edge-hit" d="' + d + '"/><path class="edge-line" d="' + d + '" marker-end="url(#arrow)"/></g>';
+        pills += '<div class="edge-pill' + (o.label ? ' labeled' : '') + (hotEdge === key ? ' hot' : '') + '" data-edge="' + key + '" style="left:' + ((p1.x + p2.x) / 2) + 'px;top:' + ((p1.y + p2.y) / 2) + 'px" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') + '>' +
+          (o.label ? '<span class="edge-label">' + esc(o.label) + '</span>' : '') +
+          '<button class="pill-x" data-action="edge-remove" data-flow="' + f.id + '" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') +
+          ' aria-label="Disconnect ' + esc(S.nodeTitle(n) + (o.label ? ' [' + o.label + ']' : '')) + ' from ' + esc(S.nodeTitle(S.getNode(f, o.to))) + '" title="Disconnect">×</button></div>';
+      });
+    });
+    var g = document.getElementById('edge-paths'), pl = document.getElementById('edge-pills');
+    if (g) g.innerHTML = paths.replace(/class="edge" data-edge="([^"]*)"/g, function (m, k) { return 'class="edge' + (hotEdge === k ? ' hot' : '') + '" data-edge="' + k + '"'; });
+    if (pl) pl.innerHTML = pills;
+  }
+
+  function resizeCanvas() {            // after a node was dragged: grow the canvas if needed, redraw the edges
+    var canvas = document.getElementById('canvas');
+    var f = canvas && S.getFlow(canvas.getAttribute('data-flow'));
+    if (!f) return;
+    var size = canvasSize(f), svg = document.getElementById('edges');
+    canvas.style.width = size.w + 'px'; canvas.style.height = size.h + 'px';
+    if (svg) { svg.setAttribute('width', size.w); svg.setAttribute('height', size.h); }
+    drawEdges();
+  }
+
 
   function flowsMainHtml(fi, c) {
     if (!fi) return '<div class="hint">No flows here yet. Use the + button in the left bar to create one. Templates that are not in a flow are listed here as flows by themselves.</div>';
@@ -669,7 +967,24 @@
     return flowEditorHtml(fi.flow);
   }
 
+  function scrollSnapshot() {
+    var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas');
+    return { flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
+  }
+  function scrollRestore(snap) {       // re-rendering the flow editor must not throw you back to the top-left of the canvas
+    var cv = document.getElementById('canvas');
+    if (!cv || cv.getAttribute('data-flow') !== snap.flow) return;
+    var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap');
+    if (m) m.scrollTop = snap.main;
+    if (w) { w.scrollLeft = snap.left; w.scrollTop = snap.top; }
+  }
+
   function render() {
+    if (ui.nodeEdit) {
+      var shown = currentFlow(), here = shown && shown.id === ui.nodeEdit.flow && S.getNode(shown, ui.nodeEdit.node);
+      if (!here) ui.nodeEdit = null;
+    }
+    var snap = scrollSnapshot();
     var fi = null;
     if (ui.listTab === 'flows') {
       fi = ensureFlowSel();
@@ -687,12 +1002,14 @@
       '<datalist id="ref-dates">' + S.REF_DATES.map(function (d) { return '<option value="' + d + '">'; }).join('') + '</datalist>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
-      if (fields.length) fields[fields.length - 1].focus();
+      if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
       ui.focusNext = null;
     }
     else if (ui.renaming) { var r = document.getElementById('rename-input'); if (r) { r.focus(); r.select(); } }
     else if (ui.sideBox) focusSideBox();
     else if (ui.campBox) focusCampBox();
+    drawEdges();
+    scrollRestore(snap);
   }
 
   // ---- events ----------------------------------------------------------------
@@ -718,8 +1035,9 @@
     var el = panel && panel.querySelector('[data-params="' + idx + '"]');
     if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx, false);
   }
-  // A timing row (days / before-after / reference date) changed. The reference date is normalised to a variable-style
-  // name (lowercase, spaces become _). Invalid input is refused with a message and the row goes back.
+  // The timing row of a template that is a flow by itself (days / before-after / reference date) changed. The reference
+  // date is normalised to a variable-style name (lowercase, spaces become _). Invalid input is refused with a message
+  // and the row goes back.
   function saveTimingFromUi(input) {
     var box = input.closest('.timing');
     var daysText = box.querySelector('[data-t=days]').value.trim();
@@ -728,9 +1046,7 @@
       when: box.querySelector('[data-t=when]').value,
       ref: box.querySelector('[data-t=ref]').value.trim().toLowerCase().replace(/\s+/g, '_')
     };
-    var r = box.hasAttribute('data-tpl')
-      ? S.setTemplateTiming(box.getAttribute('data-tpl'), timing)
-      : S.setStepTiming(box.getAttribute('data-flow'), parseInt(box.getAttribute('data-idx'), 10), timing);
+    var r = S.setTemplateTiming(box.getAttribute('data-tpl'), timing);
     if (!r.ok && r.error !== 'No change') toast(r.error, true);
     render();
   }
@@ -769,6 +1085,7 @@
 
   document.addEventListener('input', function (ev) {
     var t = ev.target;
+    if (t.classList && t.classList.contains('combo-search')) { filterCombo(t.closest('.combo'), t.value); return; }
     if (t.id === 'search') {
       ui.search = t.value;
       document.getElementById('content-list').innerHTML = listHtml();
@@ -778,6 +1095,12 @@
       } else if (!t.value && clear) {
         clear.remove();
       }
+      return;
+    }
+    var edit = t.getAttribute && t.getAttribute('data-edit');
+    if (edit && ui.nodeEdit) {
+      if (edit === 'out') ui.nodeEdit.draft.outs[parseInt(t.getAttribute('data-i'), 10)].label = t.value;
+      else ui.nodeEdit.draft[edit] = t.value;
       return;
     }
     var kind = t.getAttribute('data-input');
@@ -802,13 +1125,6 @@
     if (!what) return;
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
     if (what === 'timing') { saveTimingFromUi(t); return; }
-    if (what === 'add-step') {
-      if (!t.value) return;
-      var addedTo = S.getFlow(t.getAttribute('data-flow'));
-      result(S.addStep(addedTo.id, t.value), 'Added to the flow, with the default timing (edit it below)');
-      render();
-      return;
-    }
     var c = S.get(ui.selectedId);
     if (what === 'toggle-side') { ui.side = t.checked; }
     else if (what === 'set-ref') { ui.refLang = t.value; }
@@ -838,6 +1154,22 @@
   });
 
   document.addEventListener('keydown', function (ev) {
+    var combo = ev.target.closest && ev.target.closest('.combo');
+    if (combo && combo.classList.contains('open')) {
+      if (ev.key === 'Escape') { ev.preventDefault(); closeCombos(); combo.querySelector('.combo-btn').focus(); return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); moveCombo(combo, ev.key === 'ArrowDown' ? 1 : -1); return; }
+      if (ev.key === 'Enter' && ev.target.classList.contains('combo-search')) {
+        ev.preventDefault();
+        var active = combo.querySelector('.combo-opt.active');
+        if (active) pickCombo(active);
+        return;
+      }
+    }
+    if (ui.nodeEdit) {
+      if (ev.key === 'Escape') { ev.preventDefault(); cancelNodeEdit(); return; }
+      var inField = ev.target.getAttribute && ev.target.getAttribute('data-edit');
+      if (ev.key === 'Enter' && inField && (ev.target.tagName !== 'TEXTAREA' || ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); saveNodeEdit(); return; }
+    }
     if (ui.dialog) {
       if (ev.key === 'Escape') { ev.preventDefault(); closeDialog(); return; }
       if (ev.key === 'Tab') {                      // keep focus inside the dialog
@@ -1010,7 +1342,6 @@
   // What can be dragged (always by its grip handle):
   //   a template, or a template that is a flow by itself -> onto a campaign: Copy / Move / Cancel dialog
   //   a flow you created                                  -> onto a campaign (same dialog), or onto another flow to reorder
-  //   a step inside a flow                                -> onto another step of the same flow to reorder
   function dropTarget(ev) {
     var b = ev.target.closest && ev.target.closest('.camp-item');
     return b && b.getAttribute('data-id') ? b : null;     // "All content" is not a target
@@ -1024,11 +1355,10 @@
   document.addEventListener('dragstart', function (ev) {
     var handle = ev.target.closest && ev.target.closest('.drag-handle');
     if (!handle) return;                               // only a handle starts a drag
-    var row = handle.closest('.step-row'), li = handle.closest('.content-item[data-id]');
-    var el = row || li;
+    var li = handle.closest('.content-item[data-id]');
+    var el = li;
     if (!el) return;
-    if (row) ui.drag = { kind: 'step', flowId: row.getAttribute('data-flow'), idx: parseInt(row.getAttribute('data-idx'), 10) };
-    else if (li.classList.contains('flow-item') && li.getAttribute('data-kind') === 'flow') ui.drag = { kind: 'flow', id: li.getAttribute('data-id') };
+    if (li.classList.contains('flow-item') && li.getAttribute('data-kind') === 'flow') ui.drag = { kind: 'flow', id: li.getAttribute('data-id') };
     else ui.drag = { kind: 'content', id: li.getAttribute('data-id') };   // a template (also one that is a flow by itself)
     try { ev.dataTransfer.setDragImage(el, 24, 20); } catch (e) { /* ignore */ }
     ev.dataTransfer.effectAllowed = 'copyMove';
@@ -1046,10 +1376,6 @@
       var fi = ev.target.closest && ev.target.closest('.flow-item[data-kind="flow"]');
       if (fi && fi.getAttribute('data-id') !== d.id) return { type: 'flow', el: fi, place: placeOf(ev, fi) };
     }
-    if (d.kind === 'step') {
-      var sr = ev.target.closest && ev.target.closest('.step-row');
-      if (sr && sr.getAttribute('data-flow') === d.flowId && parseInt(sr.getAttribute('data-idx'), 10) !== d.idx) return { type: 'step', el: sr, place: placeOf(ev, sr) };
-    }
     return null;
   }
   function dragOverTarget(ev) {
@@ -1064,7 +1390,7 @@
   document.addEventListener('dragenter', dragOverTarget);
   document.addEventListener('dragover', dragOverTarget);
   document.addEventListener('dragleave', function (ev) {
-    var el = ev.target.closest && ev.target.closest('.camp-item, .flow-item, .step-row');
+    var el = ev.target.closest && ev.target.closest('.camp-item, .flow-item');
     if (el && !(ev.relatedTarget && el.contains(ev.relatedTarget))) el.classList.remove('drop-over', 'drop-before', 'drop-after');
   });
   document.addEventListener('drop', function (ev) {
@@ -1077,16 +1403,89 @@
     if (spot.type === 'campaign') {
       if (drag.kind === 'flow') openFlowDialog(drag.id, spot.el.getAttribute('data-id'));
       else openDropDialog(drag.id, spot.el.getAttribute('data-id'));
-    } else if (spot.type === 'flow') {
+    } else {                                   // reorder: put the flow before/after the one it was dropped on
       result(S.reorderFlow(drag.id, spot.el.getAttribute('data-id'), spot.place));
-      render();
-    } else {                                   // step: final index after taking the dragged one out
-      var ti = parseInt(spot.el.getAttribute('data-idx'), 10) + (spot.place === 'after' ? 1 : 0);
-      result(S.moveStep(drag.flowId, drag.idx, drag.idx < ti ? ti - 1 : ti));
       render();
     }
   });
   document.addEventListener('dragend', function () { clearDropMarks(); ui.drag = null; });
+
+  // ---- flow canvas pointer interactions: move a node by its header, draw an edge from a port --------
+  function setTempEdge(canvas, p1, p2) {
+    var g = document.getElementById('edge-paths'), path = document.getElementById('temp-edge');
+    if (!path) { path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.id = 'temp-edge'; g.appendChild(path); }
+    var dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
+    path.setAttribute('d', 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y);
+  }
+  function clearConnectUi() {
+    var t = document.getElementById('temp-edge');
+    if (t) t.remove();
+    var hot = document.querySelectorAll('.connect-target');
+    for (var i = 0; i < hot.length; i++) hot[i].classList.remove('connect-target');
+  }
+  function nodeUnder(ev) {
+    var el = document.elementFromPoint(ev.clientX, ev.clientY);
+    return el && el.closest ? el.closest('.fnode') : null;
+  }
+
+  document.addEventListener('mousedown', function (ev) {
+    if (ev.button !== 0) return;
+    var canvas = document.getElementById('canvas');
+    if (!canvas || !canvas.contains(ev.target)) return;
+    var port = ev.target.closest('.port.out');
+    if (port) {
+      ev.preventDefault();
+      ui.conn = { flow: canvas.getAttribute('data-flow'), node: port.getAttribute('data-node'), out: port.getAttribute('data-out') || null };
+      return;
+    }
+    var head = ev.target.closest('.fnode-head');
+    if (head && !ev.target.closest('button, input, select, textarea')) {
+      ev.preventDefault();
+      var el = head.parentNode;
+      ui.nodeDrag = { flow: canvas.getAttribute('data-flow'), node: el.getAttribute('data-node'), el: el, sx: ev.clientX, sy: ev.clientY,
+        left: parseInt(el.style.left, 10) || 0, top: parseInt(el.style.top, 10) || 0, moved: false };
+    }
+  });
+  document.addEventListener('mousemove', function (ev) {
+    var canvas = document.getElementById('canvas');
+    if (!canvas) return;
+    if (ui.conn) {
+      var cr = canvas.getBoundingClientRect();
+      var port = canvas.querySelector('.port.out[data-node="' + ui.conn.node + '"]' + (ui.conn.out ? '[data-out="' + ui.conn.out + '"]' : ''));
+      if (!port) return;
+      var r = port.getBoundingClientRect();
+      setTempEdge(canvas, { x: r.left + r.width / 2 - cr.left, y: r.top + r.height / 2 - cr.top }, { x: ev.clientX - cr.left, y: ev.clientY - cr.top });
+      var hot = document.querySelectorAll('.connect-target');
+      for (var i = 0; i < hot.length; i++) hot[i].classList.remove('connect-target');
+      var over = nodeUnder(ev);
+      if (over && over.getAttribute('data-node') !== ui.conn.node) over.classList.add('connect-target');
+    } else if (ui.nodeDrag) {
+      var d = ui.nodeDrag;
+      d.x = Math.max(0, d.left + ev.clientX - d.sx); d.y = Math.max(0, d.top + ev.clientY - d.sy);
+      if (Math.abs(ev.clientX - d.sx) + Math.abs(ev.clientY - d.sy) > 2) d.moved = true;
+      d.el.style.left = d.x + 'px'; d.el.style.top = d.y + 'px';
+      drawEdges();
+    }
+  });
+  document.addEventListener('mouseup', function (ev) {
+    if (ui.conn) {
+      var c = ui.conn, over = nodeUnder(ev);
+      ui.conn = null;
+      clearConnectUi();
+      if (over && over.getAttribute('data-node') !== c.node) {
+        var r = S.connect(c.flow, c.node, c.out, over.getAttribute('data-node'));
+        if (!r.ok && r.error !== 'No change') toast(r.error, true);
+        render();
+      }
+    } else if (ui.nodeDrag) {
+      var d = ui.nodeDrag;
+      ui.nodeDrag = null;
+      if (d.moved) {
+        S.moveNode(d.flow, d.node, d.x, d.y); resizeCanvas();
+        ui.justDragged = true; setTimeout(function () { ui.justDragged = false; }, 0);   // the click that follows a drag is not a click on the node
+      }
+    }
+  });
 
   function pickSubject(ev) {
     var panel = ev.target.closest && ev.target.closest('.panel[data-role]');
@@ -1118,6 +1517,12 @@
   });
 
   document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('.combo')) closeCombos();
+    var nodeEl = ev.target.closest('.fnode');
+    if (nodeEl && !ui.nodeEdit && !ui.justDragged && !ev.target.closest('button, a, input, select, textarea, .port, .combo')) {
+      startNodeEdit(nodeEl.getAttribute('data-flow'), nodeEl.getAttribute('data-node'));
+      return;
+    }
     pickSubject(ev);
     var el = ev.target.closest('[data-action]');
     if (!el) return;
@@ -1137,6 +1542,18 @@
       case 'dialog-backdrop': if (ev.target === el) closeDialog(); return;
       case 'open-add-campaign': openCampBox(); return;
       case 'add-campaign': addCampaign(); return;
+      case 'combo-toggle': {
+        var cb = el.closest('.combo');
+        if (cb.classList.contains('open')) closeCombos(); else openCombo(cb);
+        return;
+      }
+      case 'combo-pick': pickCombo(el); return;
+      case 'open-flow': {              // jump from a flow node to the flow it calls
+        var target = S.getFlow(el.getAttribute('data-id'));
+        ui.listTab = 'flows'; ui.flowSel = { kind: 'flow', id: target.id }; ui.renaming = false;
+        if (ui.campaignId && target.campaignIds.indexOf(ui.campaignId) === -1) ui.campaignId = null;   // keep it listed
+        break;
+      }
       case 'set-list-tab': ui.listTab = el.getAttribute('data-tab'); ui.sideBox = null; ui.renaming = false; break;
       case 'select-flow':
         ui.flowSel = { kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') };
@@ -1149,11 +1566,23 @@
         if (ui.campaignId && tpl && tpl.campaignIds.indexOf(ui.campaignId) === -1) ui.campaignId = null;   // keep it visible
         break;
       }
-      case 'step-remove': {
-        var fl2 = currentFlow();
-        result(S.removeStep(fl2.id, parseInt(el.getAttribute('data-idx'), 10)));
+      case 'add-node': {
+        var fl2 = currentFlow(), kind = el.getAttribute('data-type');
+        result(kind === 'logic' ? S.addLogicNode(fl2.id) : kind === 'action' ? S.addActionNode(fl2.id) : S.addInputNode(fl2.id));
         break;
       }
+      case 'node-remove': result(S.removeNode(el.getAttribute('data-flow'), el.getAttribute('data-node'))); break;
+      case 'node-save': saveNodeEdit(); return;
+      case 'node-cancel': cancelNodeEdit(); return;
+      case 'edit-out-add': {                 // a new edge, named Condition N (the first number not used by this node's edges)
+        var labels = ui.nodeEdit.draft.outs.map(function (o) { return o.label.toLowerCase(); }), k = 1;
+        while (labels.indexOf('condition ' + k) !== -1) k++;
+        ui.nodeEdit.draft.outs.push({ id: null, label: 'Condition ' + k });
+        ui.focusNext = '.fnode.editing .out-row:last-of-type input';
+        break;
+      }
+      case 'edit-out-remove': ui.nodeEdit.draft.outs.splice(parseInt(el.getAttribute('data-i'), 10), 1); break;
+      case 'edge-remove': result(S.disconnect(el.getAttribute('data-flow'), el.getAttribute('data-node'), el.getAttribute('data-out') || null)); break;
       case 'select-campaign':
         ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false; ui.nameOpen = false;
         break;

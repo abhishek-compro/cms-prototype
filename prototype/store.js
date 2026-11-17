@@ -38,9 +38,20 @@
     timing_edited: 'Changed timing',
     flow_created: 'Created flow',
     flow_renamed: 'Renamed flow',
-    flow_step_added: 'Added a template',
+    flow_step_added: 'Added a template',                 // older events (flows were a list before they were a graph)
     flow_step_removed: 'Removed a template',
     flow_steps_reordered: 'Reordered the templates',
+    flow_node_added: 'Added a node',
+    flow_node_removed: 'Removed a node',
+    flow_node_changed: 'Changed a node\'s template',
+    flow_call_changed: 'Changed the flow a node calls',
+    flow_edge_connected: 'Connected',
+    flow_edge_disconnected: 'Disconnected',
+    flow_out_added: 'Added an outgoing edge',
+    flow_out_removed: 'Removed an outgoing edge',
+    flow_out_renamed: 'Renamed an edge',
+    flow_action_renamed: 'Renamed an action',
+    flow_action_defined: 'Changed an action\'s definition',
     flow_timing_edited: 'Changed timing',
     flow_reordered: 'Moved in the flow list',
     flow_copied: 'Copied to campaign',          // older events; now flow_referred
@@ -51,9 +62,13 @@
 
   // ---- State -----------------------------------------------------------------
   // state = { nextId, campaigns: [Campaign], contents: [Content], flows: [Flow], history: [Event] }
-  // Flow = { id, name, campaignIds, createdAt, steps: [{ templateId, timing }] }   timing = { days, when: 'before'|'after', ref }
-  //   A flow is an ordered list of templates, each sent "<days> days before/after <ref date>". A template that is in no flow
-  //   of a campaign is itself a flow there (implicit, not stored); its own timing is Content.timing.
+  // Flow = { id, name, campaignIds, createdAt, nodes: [Node] }   a graph of nodes joined by edges
+  //   Node = { id, type: 'template', templateId, next: nodeId|null, x, y }   one outgoing edge
+  //        | { id, type: 'logic', title, outs: [{ id, label, to: nodeId|null }], x, y }   any number of outgoing edges, each named by its condition
+  //        | { id, type: 'action', name, definition, next: nodeId|null, x, y }   a named action you define in words; one outgoing edge
+  //        | { id, type: 'flow', flowId, next: nodeId|null, x, y }   calls another flow (enters it, then continues along its own edge); never itself, never a loop of calls
+  //        | { id, type: 'input', title, next: nodeId|null, x, y }   a plain numbered node with nothing to fill in; edges can end at it and leave it like any other
+  //   A template that is in no flow of a campaign is itself a flow there (implicit, not stored); its own timing is Content.timing: { days, when: 'before'|'after', ref }.
   // Campaign = { id, name, createdAt?, createdBy? }   (a content name can be in several campaigns via Content.campaignIds)
   // Content = { id, name, campaignIds: [campaignId], timing, headerType: 'none'|'image'|'video'|'document', blocked, deployCounter, createdAt, translations: [Translation] }
   // Translation = { lang, text, waName, deployedText, deployedSig, footer, header, defaults, buttons }
@@ -114,6 +129,25 @@
       if ('campaignId' in c) { delete c.campaignId; changed = true; }
     });
     if (!state.flows) { state.flows = []; changed = true; }
+    state.flows.forEach(function (f) {          // flows used to be an ordered list of steps: now a chain of connected template nodes
+      if (f.nodes) return;
+      var steps = f.steps || [], ids = steps.map(function () { return 'n' + state.nextId++; });
+      f.nodes = steps.map(function (st, i) {
+        return { id: ids[i], type: 'template', templateId: st.templateId, next: ids[i + 1] || null, x: 40 + (i % 3) * 340, y: 40 + Math.floor(i / 3) * 260 };
+      });
+      delete f.steps;
+      changed = true;
+    });
+    state.flows.forEach(function (f) {          // template nodes no longer carry a timing; input nodes are plain
+      f.nodes.forEach(function (n) {
+        if ('timing' in n) { delete n.timing; changed = true; }
+        if (n.type === 'input' && ('name' in n || 'inputType' in n || 'description' in n)) {
+          n.title = n.name || n.title || 'Input';
+          delete n.name; delete n.inputType; delete n.description;
+          changed = true;
+        }
+      });
+    });
     state.contents.forEach(function (c) {
       if (!c.timing) { c.timing = cloneTiming(DEFAULT_TIMING); changed = true; }
       if (!c.headerType) { c.headerType = 'none'; changed = true; }
@@ -605,10 +639,12 @@
   }
 
   // ---- Flows -------------------------------------------------------------------------
-  // A flow = an ordered list of templates, each with a timing "<days> days before/after <reference date>".
-  // The numbers and the reference date (e.g. expected_date_of_delivery) are dummy defaults until edited.
+  // A flow is a graph. Template nodes (a template, sent "<days> days before/after <reference date>") and logic nodes
+  // (branch on a condition) are joined by edges. A template node has one outgoing edge; a logic node has any number,
+  // each named by its condition. Edges may not make a loop. The numbers and reference date are dummy until edited.
   var DEFAULT_TIMING = { days: 7, when: 'before', ref: 'expected_date_of_delivery' };
   var REF_DATES = ['expected_date_of_delivery', 'date_of_birth', 'registration_date', 'discharge_date'];   // suggestions only
+  var EDGE_LABEL_MAX = 40;
 
   function cloneTiming(t) { return { days: t.days, when: t.when, ref: t.ref }; }
   function checkTiming(t) {
@@ -630,8 +666,22 @@
   function flowsIn(campaignId) {            // in list order; null = every flow
     return campaignId ? state.flows.filter(function (f) { return f.campaignIds.indexOf(campaignId) !== -1; }) : state.flows;
   }
+  function getNode(f, id) {
+    for (var i = 0; i < f.nodes.length; i++) if (f.nodes[i].id === id) return f.nodes[i];
+    return null;
+  }
+  function templateNodes(f) { return f.nodes.filter(function (n) { return n.type === 'template'; }); }
+  function flowTemplateIds(f) { return templateNodes(f).map(function (n) { return n.templateId; }); }
+  function nodeTitle(n) {
+    if (n.type === 'template') return tplName(n.templateId);
+    if (n.type === 'flow') { var g = getFlow(n.flowId); return g ? g.name : n.flowId; }   // the called flow's name, so it follows a rename
+    return n.type === 'action' ? n.name : n.title;
+  }   // action nodes are named by you; logic and input nodes are numbered
+  function targetsOf(n) {
+    return n.type === 'logic' ? n.outs.map(function (o) { return o.to; }).filter(Boolean) : (n.next ? [n.next] : []);
+  }
   function flowsIncluding(templateId, campaignId) {
-    return flowsIn(campaignId).filter(function (f) { return f.steps.some(function (s) { return s.templateId === templateId; }); });
+    return flowsIn(campaignId).filter(function (f) { return flowTemplateIds(f).indexOf(templateId) !== -1; });
   }
   // A template is itself a flow in a campaign when no flow of that campaign includes it. "All content" (null)
   // shows it when that is true in any of its campaigns (or it has none and no flow includes it).
@@ -657,7 +707,6 @@
       .sort(function (a, b) { return a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : b.id - a.id; });
   }
   function tplName(id) { var c = get(id); return c ? c.name : id; }
-  function describeSteps(f) { return f.steps.map(function (s, i) { return (i + 1) + '. ' + tplName(s.templateId); }).join('\n'); }
 
   function validateFlowName(name, exceptId) {
     name = String(name || '').trim();
@@ -675,7 +724,7 @@
   function createFlow(name, campaignId) {
     var err = validateFlowName(name);
     if (err) return fail(err);
-    var f = { id: 'f' + state.nextId++, name: String(name).trim(), campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [], createdAt: clock().toISOString(), steps: [] };
+    var f = { id: 'f' + state.nextId++, name: String(name).trim(), campaignIds: campaignId && getCampaign(campaignId) ? [campaignId] : [], createdAt: clock().toISOString(), nodes: [] };
     state.flows.push(f);
     logFlow(f, 'flow_created', { after: f.name });
     save();
@@ -696,56 +745,145 @@
     return { ok: true };
   }
 
-  // Adding a template to a flow also puts it in the flow's campaigns, so a campaign always holds what its flows use
-  function addStep(flowId, templateId) {
-    var f = getFlow(flowId), c = get(templateId);
-    if (!f) return fail('Flow not found');
-    if (!c) return fail('Template not found');
-    if (f.steps.some(function (s) { return s.templateId === templateId; })) return fail('"' + c.name + '" is already in this flow');
-    f.steps.push({ templateId: templateId, timing: cloneTiming(c.timing || DEFAULT_TIMING) });
-    logFlow(f, 'flow_step_added', { after: c.name, detail: timingText(f.steps[f.steps.length - 1].timing) });
+  // ---- nodes --------------------------------------------------------------------------
+  // A new node takes the first free slot of a three-column grid, so it never lands on top of an existing (or moved) node
+  function nextPosition(f) {
+    for (var i = 0; ; i++) {
+      var x = 40 + (i % 3) * 340, y = 40 + Math.floor(i / 3) * 260;
+      var taken = f.nodes.some(function (n) { return Math.abs(n.x - x) < 300 && Math.abs(n.y - y) < 220; });   // nodes are ~270 x 120-200 px
+      if (!taken) return { x: x, y: y };
+    }
+  }
+
+  // A template joining a flow also joins the flow's campaigns, so a campaign always holds what its flows use
+  function joinFlowCampaigns(f, c) {
     f.campaignIds.forEach(function (k) {
       if (c.campaignIds.indexOf(k) === -1) { c.campaignIds.push(k); log(c, null, 'campaign_copied', { after: campaignName(k), detail: k }); }
     });
+  }
+
+  // A template appears once per flow. (Template nodes carry no timing; only a template that is a flow by itself has one.)
+  function addTemplateNode(flowId, templateId) {
+    var f = getFlow(flowId), c = get(templateId);
+    if (!f) return fail('Flow not found');
+    if (!c) return fail('Template not found');
+    if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
+    var p = nextPosition(f);
+    var node = { id: 'n' + state.nextId++, type: 'template', templateId: templateId, next: null, x: p.x, y: p.y };
+    f.nodes.push(node);
+    logFlow(f, 'flow_node_added', { after: c.name, detail: 'Template' });
+    joinFlowCampaigns(f, c);
+    save();
+    return { ok: true, node: node };
+  }
+
+  // Point a template node at a different template. Its edges stay; a template can still only be in a flow once.
+  // The old template is no longer used by this flow (so it may become a flow by itself in its campaign again).
+  function changeNodeTemplate(flowId, nodeId, templateId) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId), c = get(templateId);
+    if (!node || node.type !== 'template') return fail('Template node not found');
+    if (!c) return fail('Template not found');
+    if (node.templateId === templateId) return fail('No change');
+    if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
+    var before = tplName(node.templateId);
+    node.templateId = templateId;
+    logFlow(f, 'flow_node_changed', { before: before, after: c.name });
+    joinFlowCampaigns(f, c);
     save();
     return { ok: true };
   }
 
-  function removeStep(flowId, index) {
+  // ---- flow nodes: enter / call another flow -------------------------------------------------
+  function callsFlow(from, targetId, seen) {     // does `from` call the flow `targetId`, directly or through other flows?
+    seen = seen || {};
+    if (!from || seen[from.id]) return false;
+    seen[from.id] = true;
+    return from.nodes.some(function (n) { return n.type === 'flow' && !!n.flowId && (n.flowId === targetId || callsFlow(getFlow(n.flowId), targetId, seen)); });
+  }
+  // Why flow `f` cannot call flow `g` (from a node, or a new one), or null. exceptNodeId = the node being changed.
+  function callProblem(flowId, calledId, exceptNodeId) {
+    var f = getFlow(flowId), g = getFlow(calledId);
+    if (!f || !g) return { code: 'missing', message: 'Flow not found' };
+    if (f.id === g.id) return { code: 'self', message: 'A flow cannot call itself' };
+    if (f.nodes.some(function (n) { return n.type === 'flow' && n.flowId === g.id && n.id !== exceptNodeId; })) return { code: 'dup', message: '"' + g.name + '" is already called in this flow' };
+    if (callsFlow(g, f.id)) return { code: 'loop', message: '"' + g.name + '" already calls "' + f.name + '" (directly or through other flows), so this would make them call each other in a loop' };
+    return null;
+  }
+
+  // The called flow may be in any campaign; calling it does not move or copy it
+  function addFlowNode(flowId, calledId) {
+    var f = getFlow(flowId), g = getFlow(calledId);
+    if (!f) return fail('Flow not found');
+    if (!g) return fail('Flow to call not found');
+    var bad = callProblem(flowId, calledId);
+    if (bad) return fail(bad.message);
+    var p = nextPosition(f);
+    var node = { id: 'n' + state.nextId++, type: 'flow', flowId: calledId, next: null, x: p.x, y: p.y };
+    f.nodes.push(node);
+    logFlow(f, 'flow_node_added', { after: g.name, detail: 'Flow call' });
+    save();
+    return { ok: true, node: node };
+  }
+
+  function changeNodeFlow(flowId, nodeId, calledId) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId), g = getFlow(calledId);
+    if (!node || node.type !== 'flow') return fail('Flow node not found');
+    if (!g) return fail('Flow to call not found');
+    if (node.flowId === calledId) return fail('No change');
+    var bad = callProblem(flowId, calledId, nodeId);
+    if (bad) return fail(bad.message);
+    var before = nodeTitle(node);
+    node.flowId = calledId;
+    logFlow(f, 'flow_call_changed', { before: before, after: g.name });
+    save();
+    return { ok: true };
+  }
+
+  function uniqueLabel(node, base) {            // "Condition 1", "Condition 2", ... not already used by this node
+    var used = node.outs.map(function (o) { return o.label.toLowerCase(); }), n = 1;
+    while (used.indexOf((base + ' ' + n).toLowerCase()) !== -1) n++;
+    return base + ' ' + n;
+  }
+
+  // A logic node starts with two outgoing edges to name (and connect)
+  function addLogicNode(flowId) {
     var f = getFlow(flowId);
-    if (!f || !f.steps[index]) return fail('Step not found');
-    var gone = f.steps.splice(index, 1)[0];
-    logFlow(f, 'flow_step_removed', { before: tplName(gone.templateId), detail: timingText(gone.timing) });
+    if (!f) return fail('Flow not found');
+    var p = nextPosition(f), n = 1;
+    var titles = f.nodes.filter(function (x) { return x.type === 'logic'; }).map(function (x) { return x.title; });
+    while (titles.indexOf('Logic ' + n) !== -1) n++;
+    var node = { id: 'n' + state.nextId++, type: 'logic', title: 'Logic ' + n, outs: [], x: p.x, y: p.y };
+    node.outs.push({ id: 'o' + state.nextId++, label: uniqueLabel(node, 'Condition'), to: null });
+    node.outs.push({ id: 'o' + state.nextId++, label: uniqueLabel(node, 'Condition'), to: null });
+    f.nodes.push(node);
+    logFlow(f, 'flow_node_added', { after: node.title, detail: 'Logic node' });
+    save();
+    return { ok: true, node: node };
+  }
+
+  function removeNode(flowId, nodeId) {         // edges that pointed at it are left unconnected
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node) return fail('Node not found');
+    f.nodes.splice(f.nodes.indexOf(node), 1);
+    f.nodes.forEach(function (n) {
+      if (n.type === 'logic') n.outs.forEach(function (o) { if (o.to === nodeId) o.to = null; });
+      else if (n.next === nodeId) n.next = null;
+    });
+    logFlow(f, 'flow_node_removed', { before: nodeTitle(node), detail: node.type === 'template' ? 'Template' : node.type === 'flow' ? 'Flow call' : node.type === 'action' ? 'Action node' : node.type === 'input' ? 'Input node' : 'Logic node' });
     save();
     return { ok: true };
   }
 
-  function moveStep(flowId, from, to) {         // `to` is the final index of the step
-    var f = getFlow(flowId);
-    if (!f || !f.steps[from] || to < 0 || to >= f.steps.length) return fail('Step not found');
-    if (from === to) return fail('No change');
-    var before = describeSteps(f);
-    f.steps.splice(to, 0, f.steps.splice(from, 1)[0]);
-    logFlow(f, 'flow_steps_reordered', { before: before, after: describeSteps(f) });
+  // Position on the canvas only: not an event worth a history entry
+  function moveNode(flowId, nodeId, x, y) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node) return fail('Node not found');
+    node.x = Math.max(0, Math.round(x)); node.y = Math.max(0, Math.round(y));
     save();
     return { ok: true };
   }
 
-  function setStepTiming(flowId, index, timing) {
-    var f = getFlow(flowId);
-    if (!f || !f.steps[index]) return fail('Step not found');
-    var err = checkTiming(timing);
-    if (err) return fail(err);
-    var step = f.steps[index];
-    if (sameTiming(step.timing, timing)) return fail('No change');
-    var before = timingText(step.timing);
-    step.timing = cloneTiming(timing);
-    logFlow(f, 'flow_timing_edited', { detail: tplName(step.templateId), before: before, after: timingText(step.timing) });
-    save();
-    return { ok: true };
-  }
-
-  // The timing of a template that is a flow by itself
+  // The timing of a template that is a flow by itself (not in any flow of the campaign)
   function setTemplateTiming(contentId, timing) {
     var c = get(contentId);
     if (!c) return fail('Content not found');
@@ -759,7 +897,146 @@
     return { ok: true };
   }
 
-  // Put a flow before/after another one. The list is one global order; each campaign shows its flows in that order.
+  // ---- action nodes: a name and a definition in words ("Label the contact high-risk", ...) -------
+  var ACTION_NAME_MAX = 60, ACTION_DEFINITION_MAX = 500;
+
+  function checkNodeName(f, name, exceptNodeId) {          // node names are shown in edges and history, so keep them distinct
+    if (!name) return 'Name the action';
+    if (name.length > ACTION_NAME_MAX) return 'Keep the name to ' + ACTION_NAME_MAX + ' characters';
+    var lower = name.toLowerCase();
+    if (f.nodes.some(function (n) { return n.id !== exceptNodeId && nodeTitle(n).toLowerCase() === lower; })) return 'Another node in this flow is already called "' + name + '"';
+    return null;
+  }
+
+  function addActionNode(flowId) {
+    var f = getFlow(flowId);
+    if (!f) return fail('Flow not found');
+    var p = nextPosition(f), n = 1;
+    while (checkNodeName(f, 'Action ' + n)) n++;
+    var node = { id: 'n' + state.nextId++, type: 'action', name: 'Action ' + n, definition: '', next: null, x: p.x, y: p.y };
+    f.nodes.push(node);
+    logFlow(f, 'flow_node_added', { after: node.name, detail: 'Action node' });
+    save();
+    return { ok: true, node: node };
+  }
+
+  // Rename and/or redefine an action: pass the fields you want to change
+  function updateAction(flowId, nodeId, changes) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node || node.type !== 'action') return fail('Action node not found');
+    var name = changes.name === undefined ? node.name : String(changes.name).trim();
+    var definition = changes.definition === undefined ? node.definition : String(changes.definition);
+    var err = changes.name !== undefined ? checkNodeName(f, name, nodeId) : null;
+    if (err) return fail(err);
+    if (definition.length > ACTION_DEFINITION_MAX) return fail('Keep the definition to ' + ACTION_DEFINITION_MAX + ' characters (it is ' + definition.length + ')');
+    if (name === node.name && definition === node.definition) return fail('No change');
+    var oldName = node.name, oldDef = node.definition;
+    node.name = name; node.definition = definition;
+    if (name !== oldName) logFlow(f, 'flow_action_renamed', { before: oldName, after: name });
+    if (definition !== oldDef) logFlow(f, 'flow_action_defined', { detail: name, before: oldDef, after: definition });
+    save();
+    return { ok: true };
+  }
+
+  // ---- input nodes: a plain node (nothing to fill in), numbered Input 1, Input 2, ... ----------
+  function addInputNode(flowId) {
+    var f = getFlow(flowId);
+    if (!f) return fail('Flow not found');
+    var p = nextPosition(f), n = 1;
+    while (checkNodeName(f, 'Input ' + n)) n++;
+    var node = { id: 'n' + state.nextId++, type: 'input', title: 'Input ' + n, next: null, x: p.x, y: p.y };
+    f.nodes.push(node);
+    logFlow(f, 'flow_node_added', { after: node.title, detail: 'Input node' });
+    save();
+    return { ok: true, node: node };
+  }
+
+  // ---- edges --------------------------------------------------------------------------
+  function edgeText(f, from, outId, to) {
+    var o = from.type === 'logic' ? from.outs.filter(function (x) { return x.id === outId; })[0] : null;
+    return nodeTitle(from) + (o ? ' [' + o.label + ']' : '') + ' → ' + (to ? nodeTitle(to) : 'nothing');
+  }
+  function findOut(from, outId) { return from.type === 'logic' ? from.outs.filter(function (o) { return o.id === outId; })[0] || null : null; }
+  function reaches(f, startId, goalId) {        // can you get from start to goal by following edges?
+    var seen = {}, found = false;
+    (function walk(id) {
+      if (found || seen[id]) return;
+      if (id === goalId) { found = true; return; }
+      seen[id] = true;
+      var n = getNode(f, id);
+      if (n) targetsOf(n).forEach(walk);
+    })(startId);
+    return found;
+  }
+
+  // Connect the outgoing edge of `fromId` to `toId`. A template or action node has one edge (outId is ignored); a logic node
+  // connects the edge `outId`. Replacing an existing connection is fine. Loops are refused.
+  function connect(flowId, fromId, outId, toId) {
+    var f = getFlow(flowId);
+    if (!f) return fail('Flow not found');
+    var from = getNode(f, fromId), to = getNode(f, toId);
+    if (!from || !to) return fail('Node not found');
+    if (fromId === toId) return fail('A node cannot connect to itself');
+    var out = findOut(from, outId);
+    if (from.type === 'logic' && !out) return fail('Choose one of the node\'s outgoing edges');
+    if ((from.type !== 'logic' ? from.next : out.to) === toId) return fail('No change');
+    if (reaches(f, toId, fromId)) return fail('That would make a loop');
+    var before = from.type !== 'logic' ? from.next : out.to;
+    if (from.type !== 'logic') from.next = toId; else out.to = toId;
+    logFlow(f, 'flow_edge_connected', { detail: edgeText(f, from, outId, to), before: before ? nodeTitle(getNode(f, before)) : null, after: nodeTitle(to) });
+    save();
+    return { ok: true };
+  }
+
+  function disconnect(flowId, fromId, outId) {
+    var f = getFlow(flowId), from = f && getNode(f, fromId);
+    if (!from) return fail('Node not found');
+    var out = findOut(from, outId), cur = from.type !== 'logic' ? from.next : (out && out.to);
+    if (from.type === 'logic' && !out) return fail('Choose one of the node\'s outgoing edges');
+    if (!cur) return fail('Not connected');
+    var text = edgeText(f, from, outId, getNode(f, cur));
+    if (from.type !== 'logic') from.next = null; else out.to = null;
+    logFlow(f, 'flow_edge_disconnected', { before: text });
+    save();
+    return { ok: true };
+  }
+
+  // The dynamic part of a logic node: its outgoing edges can be added, removed and named by the condition they stand for.
+  // Saved all at once (that is how the editor works: you edit, then save or cancel). `outs` is the wanted list in order:
+  // { id } keeps an existing edge (and its connection), no id adds a new one; existing edges that are missing are removed.
+  function updateLogic(flowId, nodeId, outs) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node || node.type !== 'logic') return fail('Logic node not found');
+    if (!outs.length) return fail('A logic node needs at least one outgoing edge');
+    var seen = [], wanted = [];
+    for (var i = 0; i < outs.length; i++) {
+      var label = String(outs[i].label == null ? '' : outs[i].label).trim();
+      if (!label) return fail('Name the condition of every outgoing edge');
+      if (label.length > EDGE_LABEL_MAX) return fail('Keep each condition name to ' + EDGE_LABEL_MAX + ' characters');
+      if (seen.indexOf(label.toLowerCase()) !== -1) return fail('Two edges of ' + node.title + ' are both called "' + label + '"');
+      seen.push(label.toLowerCase());
+      if (outs[i].id && !findOut(node, outs[i].id)) return fail('Edge not found');
+      wanted.push({ id: outs[i].id || null, label: label });
+    }
+    var keptIds = wanted.filter(function (w) { return w.id; }).map(function (w) { return w.id; });
+    var removed = node.outs.filter(function (o) { return keptIds.indexOf(o.id) === -1; });
+    var renamed = wanted.filter(function (w) { return w.id && findOut(node, w.id).label !== w.label; });
+    var added = wanted.filter(function (w) { return !w.id; });
+    if (!removed.length && !renamed.length && !added.length) return fail('No change');
+    var next = wanted.map(function (w) {
+      if (w.id) { var o = findOut(node, w.id); return { id: o.id, label: w.label, to: o.to }; }
+      return { id: 'o' + state.nextId++, label: w.label, to: null };
+    });
+    removed.forEach(function (o) { logFlow(f, 'flow_out_removed', { before: o.label, detail: node.title + (o.to ? ' (was → ' + tplOrNode(f, o.to) + ')' : '') }); });
+    renamed.forEach(function (w) { logFlow(f, 'flow_out_renamed', { before: findOut(node, w.id).label, after: w.label, detail: node.title }); });
+    added.forEach(function (w) { logFlow(f, 'flow_out_added', { after: w.label, detail: node.title }); });
+    node.outs = next;
+    save();
+    return { ok: true };
+  }
+  function tplOrNode(f, id) { var n = getNode(f, id); return n ? nodeTitle(n) : id; }
+
+  // The flow list is one global order; each campaign shows its flows in that order
   function reorderFlow(flowId, targetId, place) {
     var f = getFlow(flowId), t = getFlow(targetId);
     if (!f || !t) return fail('Flow not found');
@@ -775,7 +1052,7 @@
 
   // ---- refer / duplicate / move a flow to another campaign ---------------------------
   //  refer: the SAME flow is also in the target (one flow, edits apply everywhere).
-  //  duplicate: a new, independent flow in the target with the same steps and timing.
+  //  duplicate: a new, independent flow in the target with the same graph.
   //  move: the flow leaves its campaign for the target.
   // Templates are shared, never duplicated. They come along so the target campaign holds what the flow uses:
   //  refer / duplicate: the templates are added to the target too.
@@ -791,7 +1068,7 @@
     var f = getFlow(flowId), target = getCampaign(targetId);
     if (!f || !target) return null;
     var M = f.campaignIds.slice(), inTarget = M.indexOf(targetId) !== -1;
-    var tpls = f.steps.map(function (s) { return get(s.templateId); }).filter(Boolean);
+    var tpls = flowTemplateIds(f).map(function (id) { return get(id); }).filter(Boolean);
     var addToTarget = tpls.filter(function (t) { return t.campaignIds.indexOf(targetId) === -1; }).map(function (t) { return t.id; });
     var plan = { existsIn: M.slice(), inTarget: inTarget, templates: tpls.length, refer: { ok: true }, duplicate: { ok: true }, move: { ok: true, from: M.slice() } };
 
@@ -821,11 +1098,11 @@
   }
 
   function carryTemplates(f, targetId, leaveIds, fromId) {
-    f.steps.forEach(function (s) {
-      var t = get(s.templateId);
+    flowTemplateIds(f).forEach(function (id) {
+      var t = get(id);
       if (!t) return;
       var leaving = leaveIds.indexOf(t.id) !== -1;
-      var next = t.campaignIds.filter(function (id) { return !(leaving && id === fromId); });
+      var next = t.campaignIds.filter(function (k) { return !(leaving && k === fromId); });
       if (next.indexOf(targetId) === -1) next.push(targetId);
       if (next.join() === t.campaignIds.join()) return;
       t.campaignIds = next;
@@ -845,14 +1122,22 @@
     return { ok: true };
   }
 
-  // A new flow in the target, placed right after the original in the list, with its own steps and timing
+  // A new flow in the target, placed right after the original, with its own copy of the graph (new ids, same positions)
   function duplicateFlow(flowId, targetId) {
     var plan = planFlowDrop(flowId, targetId);
     if (!plan) return fail('Flow or campaign not found');
-    var f = getFlow(flowId);
+    var f = getFlow(flowId), ids = {};
+    f.nodes.forEach(function (n) { ids[n.id] = 'n' + state.nextId++; });
     var copy = {
       id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(),
-      steps: f.steps.map(function (st) { return { templateId: st.templateId, timing: cloneTiming(st.timing) }; })
+      nodes: f.nodes.map(function (n) {
+        if (n.type === 'template') return { id: ids[n.id], type: 'template', templateId: n.templateId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
+        if (n.type === 'action') return { id: ids[n.id], type: 'action', name: n.name, definition: n.definition, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
+        if (n.type === 'flow') return { id: ids[n.id], type: 'flow', flowId: n.flowId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
+        if (n.type === 'input') return { id: ids[n.id], type: 'input', title: n.title, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
+        return { id: ids[n.id], type: 'logic', title: n.title, x: n.x, y: n.y,
+          outs: n.outs.map(function (o) { return { id: 'o' + state.nextId++, label: o.label, to: o.to ? ids[o.to] : null }; }) };
+      })
     };
     state.flows.splice(state.flows.indexOf(f) + 1, 0, copy);
     logFlow(copy, 'flow_created', { after: copy.name, detail: 'Duplicate of ' + f.name });
@@ -980,11 +1265,18 @@
     patch(d.id, 'en', { text: 'Tip of the day: wash your hands with soap before feeding your baby.' });
     setBlocked(d.id, true);
 
+    // Welcome message -> Logic 1 -> (Replied) Daily health tip; "No reply" is left unconnected to show an open edge
     var fl = createFlow('Newborn first weeks', 'k1').flow;
-    addStep(fl.id, w.id);
-    addStep(fl.id, d.id);
-    setStepTiming(fl.id, 0, { days: 14, when: 'before', ref: 'expected_date_of_delivery' });
-    setStepTiming(fl.id, 1, { days: 7, when: 'after', ref: 'expected_date_of_delivery' });
+    var nW = addTemplateNode(fl.id, w.id).node, nL = addLogicNode(fl.id).node, nD = addTemplateNode(fl.id, d.id).node;
+    updateLogic(fl.id, nL.id, [{ id: nL.outs[0].id, label: 'Replied' }, { id: nL.outs[1].id, label: 'No reply' }]);
+    var nI = addInputNode(fl.id).node;
+    var nA = addActionNode(fl.id).node;
+    updateAction(fl.id, nA.id, { name: 'Alert health worker', definition: 'If the family has not replied, notify the assigned community health worker to call them.' });
+    connect(fl.id, nI.id, null, nW.id);
+    connect(fl.id, nW.id, null, nL.id);
+    connect(fl.id, nL.id, nL.outs[0].id, nD.id);
+    connect(fl.id, nL.id, nL.outs[1].id, nA.id);
+    [[nI, 40, 40], [nW, 380, 40], [nL, 720, 40], [nD, 1100, 40], [nA, 1100, 260]].forEach(function (p) { moveNode(fl.id, p[0].id, p[1], p[2]); });   // tidy layout
 
     clock = function () { return new Date(); };
     save();
@@ -1007,20 +1299,37 @@
     REF_DATES: REF_DATES,
     checkTiming: checkTiming,
     timingText: timingText,
+    EDGE_LABEL_MAX: EDGE_LABEL_MAX,
     getFlow: getFlow,
     listFlows: listFlows,
     flowsIn: flowsIn,
     flowsIncluding: flowsIncluding,
+    flowTemplateIds: flowTemplateIds,
+    templateNodes: templateNodes,
+    getNode: getNode,
+    nodeTitle: nodeTitle,
     isImplicit: isImplicit,
     flowItems: flowItems,
     historyForFlow: historyForFlow,
     createFlow: createFlow,
     renameFlow: renameFlow,
-    addStep: addStep,
-    removeStep: removeStep,
-    moveStep: moveStep,
-    setStepTiming: setStepTiming,
+    addTemplateNode: addTemplateNode,
+    changeNodeTemplate: changeNodeTemplate,
+    addFlowNode: addFlowNode,
+    changeNodeFlow: changeNodeFlow,
+    callProblem: callProblem,
+    addLogicNode: addLogicNode,
+    addActionNode: addActionNode,
+    addInputNode: addInputNode,
+    updateAction: updateAction,
+    ACTION_NAME_MAX: ACTION_NAME_MAX,
+    ACTION_DEFINITION_MAX: ACTION_DEFINITION_MAX,
+    removeNode: removeNode,
+    moveNode: moveNode,
     setTemplateTiming: setTemplateTiming,
+    connect: connect,
+    disconnect: disconnect,
+    updateLogic: updateLogic,
     reorderFlow: reorderFlow,
     planFlowDrop: planFlowDrop,
     referFlow: referFlow,
