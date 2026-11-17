@@ -786,7 +786,7 @@
           '<label class="fld"><span>Definition</span><textarea class="field" data-edit="definition" rows="3" placeholder="Describe what this action does">' + esc(d.definition) + '</textarea></label></div>';
       } else {
         body = '<div class="fnode-body view"><div class="view-row"><strong class="view-name">' + esc(title) + '</strong></div>' +
-          '<div class="view-def">' + (n.definition ? esc(n.definition) : '<span class="muted">No definition yet. Click to add one.</span>') + '</div></div>';
+          (n.definition ? '<div class="view-def">' + esc(n.definition) + '</div>' : '') + '</div>';
       }
     } else if (n.type === 'logic') {
       if (editing) {

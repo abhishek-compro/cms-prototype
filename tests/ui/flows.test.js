@@ -339,7 +339,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   // ================= action and input nodes =================
   await addNode('action');
   const act = (await titles()).split(' | ').filter(t => /^Action/.test(t))[0];
-  ok('+ Action adds an action node, read-only: its name and a hint to add a definition', await q((await node(act)) + '.fnode-action') && !await q((await node(act)) + ' input, ' + (await node(act)) + ' textarea') && /No definition yet/.test(await txt(await node(act))));
+  ok('+ Action adds an action node, read-only: just its name; with no definition, no definition area is shown', await q((await node(act)) + '.fnode-action') && !await q((await node(act)) + ' input, ' + (await node(act)) + ' textarea') && !await q((await node(act)) + ' .view-def') && !/No definition/.test(await txt(await node(act))));
   await editNode(act);
   ok('clicking it opens a name field (focused) and a definition field', await val('.fnode.editing [data-edit=name]') === act && await q('.fnode.editing textarea[data-edit=definition]') && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'name');
   await b.fill('.fnode.editing [data-edit=name]', 'Alert health worker');
@@ -347,6 +347,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.key('Enter', 'Enter', 13);
   ok('Enter in the definition adds a line instead of saving (Ctrl+Enter saves)', await editing() === 1);
   await saveEdit();
+  ok('once defined, the definition shows under the name', await q((await node('Alert health worker')) + ' .view-def'));
   ok('✓ saves both name and definition', await editing() === 0 && await titles() === (await titles()).replace(act, 'Alert health worker') && /^Notify the community health worker to call the family\./.test(await b.ev(`${cur}.nodes.filter(function(n){return n.name==='Alert health worker'})[0].definition`)));
   await addNode('action');
   const act2 = (await titles()).split(' | ').filter(t => /^Action/.test(t))[0];
