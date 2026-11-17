@@ -539,6 +539,7 @@
     else if (e.action === 'flow_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_node_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_node_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_values_edited') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
     else if (e.action === 'flow_call_changed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_node_changed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_edge_connected') body = esc(e.detail) + (e.before ? ' <span class="muted">· was → ' + esc(e.before) + '</span>' : '');
@@ -710,7 +711,13 @@
     var id = li.getAttribute('data-id'), flow = combo.getAttribute('data-flow'), node = combo.getAttribute('data-node'), kind = combo.getAttribute('data-combo');
     closeCombos();
     if (kind === 'node' || kind === 'fnode') {           // staged: the node's ✓ saves it, ✕ discards it
-      if (ui.nodeEdit) { if (kind === 'node') ui.nodeEdit.draft.templateId = id; else ui.nodeEdit.draft.flowId = id; }
+      if (ui.nodeEdit) {
+        if (kind === 'node') {            // values belong to a template's placeholders: another template starts with none (the original keeps its own)
+          var orig = S.getNode(S.getFlow(flow), node);
+          ui.nodeEdit.draft.templateId = id;
+          ui.nodeEdit.draft.values = orig && orig.templateId === id ? Object.assign({}, orig.values || {}) : {};
+        } else ui.nodeEdit.draft.flowId = id;
+      }
       ui.focusNext = '.fnode.editing .node-save';
       render();
       return;
@@ -737,10 +744,21 @@
   var EDITABLE = { template: true, flow: true, action: true, logic: true };   // input nodes have nothing to edit
 
   function draftOfNode(n) {
-    if (n.type === 'template') return { templateId: n.templateId };
+    if (n.type === 'template') return { templateId: n.templateId, values: Object.assign({}, n.values || {}) };
     if (n.type === 'flow') return { flowId: n.flowId };
     if (n.type === 'action') return { name: n.name, definition: n.definition };
     return { outs: n.outs.map(function (o) { return { id: o.id, label: o.label }; }) };
+  }
+
+  // Placeholder values of a template node (this flow only): one field per placeholder name of the template, all
+  // languages together; blank = use the template's own default (shown as the hint)
+  function valuesEditHtml(d) {
+    var vals = S.nodeValues({ templateId: d.templateId, values: d.values });
+    if (!vals.length) return '<div class="muted small vals-none">This template has no placeholders.</div>';
+    return '<div class="vals"><div class="muted small">Placeholder values in this flow (blank uses the template\'s default)</div>' + vals.map(function (v) {
+      return '<label class="val-row"><span class="val-name">{{' + esc(v.name) + '}}</span>' +
+        '<input class="field" data-edit="value" data-name="' + esc(v.name) + '" value="' + esc(v.value) + '" placeholder="' + esc(v.def || 'no default') + '" autocomplete="off" maxlength="200" aria-label="Value of ' + esc(v.name) + ' in this flow"></label>';
+    }).join('') + '</div>';
   }
 
   function nodeHtml(f, n) {
@@ -765,10 +783,14 @@
             var taken = others.indexOf(c.id) !== -1;
             return { id: c.id, label: c.name, current: c.id === d.templateId, disabled: taken, note: taken ? 'already in this flow' : '' };
           })
-        }) + '</div></div>';
+        }) + '</div>' + valuesEditHtml(d) + '</div>';
       } else {
+        var shown = S.nodeValues(n).filter(function (v) { return v.overridden; });
         body = '<div class="fnode-body view"><div class="muted small">Template</div><div class="view-row"><strong class="view-name">' + esc(title) + '</strong>' +
-          '<button class="btn link" data-action="open-template" data-id="' + n.templateId + '" title="Open this template">Open</button></div></div>';
+          '<button class="btn link" data-action="open-template" data-id="' + n.templateId + '" title="Open this template">Open</button></div>' +
+          (shown.length ? '<div class="view-vals" aria-label="Placeholder values in this flow">' + shown.map(function (v) {
+            return '<div><span class="muted">{{' + esc(v.name) + '}}</span> ' + esc(v.value) + '</div>';
+          }).join('') + '</div>' : '') + '</div>';
       }
     } else if (n.type === 'flow') {
       if (editing) {
@@ -825,7 +847,7 @@
   function saveNodeEdit() {
     var e = ui.nodeEdit;
     if (!e) return;
-    var r = e.type === 'template' ? S.changeNodeTemplate(e.flow, e.node, e.draft.templateId)
+    var r = e.type === 'template' ? S.updateTemplateNode(e.flow, e.node, { templateId: e.draft.templateId, values: e.draft.values })
       : e.type === 'flow' ? S.changeNodeFlow(e.flow, e.node, e.draft.flowId)
       : e.type === 'action' ? S.updateAction(e.flow, e.node, { name: e.draft.name, definition: e.draft.definition })
       : S.updateLogic(e.flow, e.node, e.draft.outs);
@@ -899,9 +921,13 @@
         options: flowOptions(f, null)
       }) +
       ['logic', 'action', 'input'].map(function (t) { return '<button class="btn" data-action="add-node" data-type="' + t + '">+ ' + NODE_LABEL[t] + '</button>'; }).join('') +
-      '<span class="muted small flow-help">Drag a node by its header to move it. Drag from the dot on its right edge onto another node to connect.</span></div>' +
-      '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
-      '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
+      '<span class="seg dir-toggle" role="group" aria-label="Direction of the edges">' + [['lr', '→ Left to right'], ['td', '↓ Top down']].map(function (d) {
+        var on = S.flowDirection(f) === d[0];
+        return '<button type="button" class="btn' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '">' + d[1] + '</button>';
+      }).join('') + '</span>' +
+      '<span class="muted small flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect.</span></div>' +
+      '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas' + (S.flowDirection(f) === 'td' ? ' td' : '') + '" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
+      '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
       f.nodes.map(function (n) { return nodeHtml(f, n); }).join('') +
       '<div id="edge-pills"></div>' +
       (f.nodes.length ? '' : '<div class="canvas-empty muted">Empty flow. Add a template, logic, action or input node above.</div>') +
@@ -922,6 +948,12 @@
     else if (hotEdge) setHotEdge(null);
   });
 
+  // A curve from p1 to p2 that leaves p1 and arrives at p2 sideways (left to right) or vertically (top down)
+  function edgePath(p1, p2, dir) {
+    if (dir === 'td') { var dy = Math.max(50, Math.abs(p2.y - p1.y) / 2); return 'M' + p1.x + ' ' + p1.y + ' C' + p1.x + ' ' + (p1.y + dy) + ' ' + p2.x + ' ' + (p2.y - dy) + ' ' + p2.x + ' ' + p2.y; }
+    var dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
+    return 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y;
+  }
   // Draw every edge as a curve from its port to the target node's input port, with a pill (condition name + disconnect)
   function drawEdges() {
     var canvas = document.getElementById('canvas');
@@ -937,8 +969,8 @@
         var a = canvas.querySelector('.port.out[data-node="' + n.id + '"]' + (o.id ? '[data-out="' + o.id + '"]' : ''));
         var b = canvas.querySelector('.port.in[data-node="' + o.to + '"]');
         if (!a || !b) return;
-        var p1 = pt(a), p2 = pt(b), dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
-        var key = n.id + ':' + (o.id || ''), d = 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y;
+        var p1 = pt(a), p2 = pt(b);
+        var key = n.id + ':' + (o.id || ''), d = edgePath(p1, p2, S.flowDirection(f));
         paths += '<g class="edge" data-edge="' + key + '"><path class="edge-hit" d="' + d + '"/><path class="edge-line" d="' + d + '" marker-end="url(#arrow)"/></g>';
         pills += '<div class="edge-pill' + (hotEdge === key ? ' hot' : '') + '" data-edge="' + key + '" style="left:' + ((p1.x + p2.x) / 2) + 'px;top:' + ((p1.y + p2.y) / 2) + 'px" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') + '>' +
           '<button class="pill-x" data-action="edge-remove" data-flow="' + f.id + '" data-node="' + n.id + '"' + (o.id ? ' data-out="' + o.id + '"' : '') +
@@ -1101,6 +1133,7 @@
     var edit = t.getAttribute && t.getAttribute('data-edit');
     if (edit && ui.nodeEdit) {
       if (edit === 'out') ui.nodeEdit.draft.outs[parseInt(t.getAttribute('data-i'), 10)].label = t.value;
+      else if (edit === 'value') ui.nodeEdit.draft.values[t.getAttribute('data-name')] = t.value;
       else ui.nodeEdit.draft[edit] = t.value;
       return;
     }
@@ -1415,8 +1448,8 @@
   function setTempEdge(canvas, p1, p2) {
     var g = document.getElementById('edge-paths'), path = document.getElementById('temp-edge');
     if (!path) { path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.id = 'temp-edge'; g.appendChild(path); }
-    var dx = Math.max(50, Math.abs(p2.x - p1.x) / 2);
-    path.setAttribute('d', 'M' + p1.x + ' ' + p1.y + ' C' + (p1.x + dx) + ' ' + p1.y + ' ' + (p2.x - dx) + ' ' + p2.y + ' ' + p2.x + ' ' + p2.y);
+    var cv = document.getElementById('canvas');
+    path.setAttribute('d', edgePath(p1, p2, cv && cv.classList.contains('td') ? 'td' : 'lr'));
   }
   function clearConnectUi() {
     var t = document.getElementById('temp-edge');
@@ -1573,6 +1606,7 @@
         break;
       }
       case 'node-remove': result(S.removeNode(el.getAttribute('data-flow'), el.getAttribute('data-node'))); break;
+      case 'flow-direction': result(S.setFlowDirection(el.closest('.flow-toolbar') ? document.getElementById('canvas').getAttribute('data-flow') : '', el.getAttribute('data-dir'))); break;
       case 'node-save': saveNodeEdit(); return;
       case 'node-cancel': cancelNodeEdit(); return;
       case 'edit-out-add': {                 // a new edge, named Condition N (the first number not used by this node's edges)

@@ -30,7 +30,7 @@ run here is reported as **skipped** with the reason, never as a pass.
 | `ui/campaigns.test.js`, `ui/add-campaign.test.js` | Campaigns sidebar: filtering, creating content inside a campaign, adding campaigns, old saved data. |
 | `ui/drag-drop.test.js` | Real mouse drags: the grip handle, the Copy / Move / Cancel dialog, "Can't move". |
 | `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, JSON export. |
-| `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
+| `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
 | `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV/JSON downloads, rename, reset. |
 
 ## How the browser tests work

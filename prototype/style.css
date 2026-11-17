@@ -510,3 +510,22 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 
 .fnode-head .grow { flex: 1; }
 .fnode:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.view-vals { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.vals { margin-top: 8px; }
+.val-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.val-name { flex: 0 0 auto; max-width: 40%; font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.val-row .field { flex: 1; min-width: 0; }
+.vals-none { margin-top: 8px; }
+
+/* top-down mode: edges arrive at the top of a node and leave from the bottom */
+.seg { display: inline-flex; margin-left: 8px; }
+.seg .btn { border-radius: 0; }
+.seg .btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.seg .btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
+.seg .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.canvas.td .port.in { left: 50%; top: -9px; margin-left: -7px; }
+.canvas.td .fnode > .port.out { right: auto; left: 50%; top: auto; bottom: -9px; margin-left: -7px; }
+.canvas.td .fnode-body.view .out-row.view { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; margin: 0 6px 12px 0; padding: 3px 8px 8px; min-width: 70px; border: 1px solid var(--border); border-radius: 8px; }
+.canvas.td .fnode-logic .fnode-body.view { display: flex; flex-wrap: wrap; padding-bottom: 6px; }
+.canvas.td .out-row.view .port.out { top: auto; bottom: -9px; right: auto; left: 50%; margin: 0 0 0 -7px; }

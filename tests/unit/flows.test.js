@@ -708,3 +708,102 @@ test('duplicating a flow copies its timing (independent afterwards); flows saved
   const { S: S2 } = loadStore({ 'cms-prototype-v1': JSON.stringify({ nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], contents: [], flows: [{ id: 'f1', name: 'Old', campaignIds: [], createdAt: 'x', nodes: [] }] }) });
   assert.deepEqual(S2.getFlow('f1').timing, { days: 7, when: 'before', ref: 'expected_date_of_delivery' });
 });
+
+// ---------------------------------------------------------------- placeholder values of a template node (per flow)
+test('placeholderNames: the union over all languages (one name used in several languages is one value); nodeValues shows the template default as the fallback', () => {
+  const S = fresh();
+  const a = tpl(S, 'Appointment reminder'), w = tpl(S, 'Welcome message'), d = tpl(S, 'Daily health tip');
+  assert.deepEqual(S.placeholderNames(a.id), ['date', 'time']);
+  assert.deepEqual(S.placeholderNames(w.id), ['name']);
+  assert.deepEqual(S.placeholderNames(d.id), []);
+  const f = S.createFlow('Vals', null).flow, n = S.addTemplateNode(f.id, a.id).node;
+  assert.deepEqual(S.nodeValues(n), [
+    { name: 'date', value: '', def: 'Monday 12 December', overridden: false },
+    { name: 'time', value: '', def: '10:30 AM', overridden: false }]);
+});
+
+test('updateTemplateNode saves values for this node only (the template and other flows keep the defaults); blank = default; logged', () => {
+  const S = fresh();
+  const a = tpl(S, 'Appointment reminder');
+  const f = S.createFlow('One', null).flow, g = S.createFlow('Two', null).flow;
+  const n = S.addTemplateNode(f.id, a.id).node, m = S.addTemplateNode(g.id, a.id).node;
+  const before = JSON.stringify(a.translations);
+  assert.equal(S.updateTemplateNode(f.id, n.id, { values: { date: ' Friday 3 March ', time: '' } }).ok, true);
+  assert.deepEqual(n.values, { date: 'Friday 3 March' }, 'trimmed; blank is not stored');
+  assert.deepEqual(S.nodeValues(n).map(v => [v.name, v.value, v.overridden]), [['date', 'Friday 3 March', true], ['time', '', false]]);
+  assert.deepEqual(m.values, {}, 'another flow using the same template is unaffected');
+  assert.equal(JSON.stringify(a.translations), before, 'the template itself is unchanged');
+  assert.deepEqual([last(S, f).action, last(S, f).detail, last(S, f).before, last(S, f).after], ['flow_values_edited', 'Appointment reminder', '(template defaults)', 'date = Friday 3 March']);
+  assert.equal(S.updateTemplateNode(f.id, n.id, { values: { date: 'Friday 3 March' } }).error, 'No change');
+  assert.equal(S.updateTemplateNode(f.id, n.id, { values: {} }).ok, true, 'clearing goes back to the defaults');
+  assert.deepEqual(n.values, {});
+});
+
+test('updateTemplateNode validates before changing anything: length, unknown names are ignored, one template per flow', () => {
+  const S = fresh();
+  const a = tpl(S, 'Appointment reminder'), w = tpl(S, 'Welcome message');
+  const f = S.createFlow('One', null).flow, n = S.addTemplateNode(f.id, a.id).node;
+  S.addTemplateNode(f.id, w.id);
+  assert.match(S.updateTemplateNode(f.id, n.id, { values: { date: 'x'.repeat(201) } }).error, /200 characters/);
+  assert.deepEqual(n.values, {});
+  assert.equal(S.updateTemplateNode(f.id, n.id, { values: { date: 'x'.repeat(200), bogus: 'y' } }).ok, true);
+  assert.deepEqual(Object.keys(n.values), ['date'], 'a name the template does not have is dropped');
+  assert.match(S.updateTemplateNode(f.id, n.id, { templateId: w.id }).error, /already in this flow/);
+  assert.equal(n.templateId, a.id);
+  assert.match(S.updateTemplateNode(f.id, n.id, { templateId: 'nope' }).error, /not found/);
+});
+
+test('changing the template of a node (with values) saves both together; the old values do not carry over; duplicating a flow copies the values', () => {
+  const S = fresh();
+  const a = tpl(S, 'Appointment reminder'), w = tpl(S, 'Welcome message');
+  const f = S.createFlow('One', 'k1').flow, n = S.addTemplateNode(f.id, a.id).node;
+  S.updateTemplateNode(f.id, n.id, { values: { date: 'Friday' } });
+  const copy = S.duplicateFlow(f.id, 'k3').flow;
+  assert.deepEqual(copy.nodes[0].values, { date: 'Friday' });
+  copy.nodes[0].values.date = 'changed';
+  assert.deepEqual(n.values, { date: 'Friday' }, 'the copy is independent');
+  assert.equal(S.updateTemplateNode(f.id, n.id, { templateId: w.id, values: { name: 'Asha' } }).ok, true);
+  assert.deepEqual([n.templateId, n.values], [w.id, { name: 'Asha' }]);
+  assert.equal(S.updateTemplateNode(f.id, n.id, { templateId: a.id }).ok, true);
+  assert.deepEqual(n.values, {}, 'switching template alone starts with no values');
+});
+
+// ---------------------------------------------------------------- direction: left to right or top down
+test('setFlowDirection: lr by default; switching swaps in that direction\'s own layout (auto layered the first time), and back restores the original', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks');
+  const pos = () => Object.fromEntries(f.nodes.map(n => [S.nodeTitle(n), [n.x, n.y]]));
+  const lr = pos();
+  assert.equal(S.flowDirection(f), 'lr');
+  assert.equal(S.setFlowDirection(f.id, 'lr').error, 'No change');
+  assert.match(S.setFlowDirection(f.id, 'diagonal').error, /left to right or top down/);
+  assert.equal(S.setFlowDirection('nope', 'td').error, 'Flow not found');
+  assert.equal(S.setFlowDirection(f.id, 'td').ok, true);
+  const td = pos();
+  assert.deepEqual([td['Input 1'], td['Welcome message'], td['Logic 1']], [[40, 40], [40, 260], [40, 480]], 'ranks follow the edges, top to bottom, in one column');
+  assert.equal(td['Daily health tip'][1], 700);
+  assert.equal(td['Alert health worker'][1], 700);
+  assert.notEqual(td['Daily health tip'][0], td['Alert health worker'][0], 'siblings sit side by side');
+  const moved = f.nodes[0];
+  S.moveNode(f.id, moved.id, 500, 500);
+  assert.equal(S.setFlowDirection(f.id, 'lr').ok, true);
+  assert.deepEqual(pos(), lr, 'the left-to-right layout is exactly as it was');
+  S.setFlowDirection(f.id, 'td');
+  assert.deepEqual([moved.x, moved.y], [500, 500], 'and the top-down layout keeps what was moved in it');
+  assert.equal(S.historyForFlow(f.id).filter(e => /direction/i.test(e.action)).length, 0, 'layout only: not a history event');
+});
+
+test('a duplicate keeps the direction and both layouts; new nodes in a top-down flow land on the grid', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks');
+  S.setFlowDirection(f.id, 'td');
+  const copy = S.duplicateFlow(f.id, 'k3').flow;
+  assert.equal(S.flowDirection(copy), 'td');
+  assert.deepEqual(copy.nodes.map(n => [n.x, n.y]), f.nodes.map(n => [n.x, n.y]));
+  S.setFlowDirection(copy.id, 'lr');
+  assert.deepEqual(copy.nodes.map(n => [n.x, n.y]).sort(), [[40, 40], [380, 40], [720, 40], [1100, 40], [1100, 260]].sort());
+  const g = S.createFlow('New', null).flow;
+  S.setFlowDirection(g.id, 'td');
+  const n = S.addLogicNode(g.id).node;
+  assert.deepEqual([n.x, n.y], [40, 40]);
+});

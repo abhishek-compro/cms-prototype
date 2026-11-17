@@ -176,6 +176,29 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
   ok('the timing survives a reload', await val('.flow-card [data-t=days]') === '0' && await val('.flow-card [data-t=ref]') === 'date_of_birth');
 
+  // ================= direction: left to right or top down =================
+  const portBox = (sel, which) => b.ev(`(function(){var n=document.querySelector(${JSON.stringify(sel)}), p=n.querySelector('.port.${which}').getBoundingClientRect(), r=n.getBoundingClientRect(); return [Math.round(p.left+p.width/2-r.left), Math.round(p.top+p.height/2-r.top), Math.round(r.width), Math.round(r.height)]})()`);
+  const allPos = () => b.ev(`JSON.stringify(${cur}.nodes.map(function(n){return [n.x,n.y]}))`);
+  ok('the toolbar has a two-way toggle, "Left to right" pressed by default', await b.ev(`[].map.call(document.querySelectorAll('.dir-toggle button'), function(x){return x.textContent.trim().replace(/^\\S+ /,'')+(x.getAttribute('aria-pressed')==='true'?'*':'')}).join('|')`) === 'Left to right*|Top down' && !await q('.canvas.td'));
+  const [ix, iy, w] = await portBox(await node('Welcome message'), 'in'), [ox, oy] = await portBox(await node('Welcome message'), 'out');
+  ok('left to right: the input dot is on the left edge, the output dot on the right', ix < 5 && ox > w - 5 && iy < 30 && oy < 30, [ix, iy, ox, oy, w].join());
+  const lrPos = await allPos();
+  const arrowBefore = await b.ev(`document.getElementById('arrow').getAttribute('markerWidth')+','+document.getElementById('arrow').getAttribute('markerUnits')`);
+  await b.click('[data-action=flow-direction][data-dir=td]');
+  ok('Top down: pressed, canvas marked', await q('.canvas.td') && await b.ev(`document.querySelector('.dir-toggle [aria-pressed=true]').textContent.indexOf('Top down')!==-1`));
+  const [tx, ty, tw, th] = await portBox(await node('Welcome message'), 'in'), [ox2, oy2] = await portBox(await node('Welcome message'), 'out');
+  ok('top down: the input dot is at the top centre of a node, the output dot at the bottom centre', Math.abs(tx - tw / 2) < 4 && ty < 4 && Math.abs(ox2 - tw / 2) < 4 && oy2 > th - 4, [tx, ty, ox2, oy2, tw, th].join());
+  ok('the nodes were laid out in layers following the edges: each node is below the one that leads to it', await b.ev(`(function(){var f=${cur}, S=Store, ok=true; f.nodes.forEach(function(n){ var t=n.type==='logic'?n.outs.map(function(o){return o.to}).filter(Boolean):(n.next?[n.next]:[]); t.forEach(function(id){ if (S.getNode(f,id).y <= n.y) ok=false; }); }); return ok})()`));
+  ok('edges now leave downwards and arrive from above (each curve ends at its target\'s top dot)', await b.ev(`(function(){var cv=document.getElementById('canvas'), cr=cv.getBoundingClientRect(); return [].every.call(document.querySelectorAll('#edge-paths .edge-line'), function(p){var d=p.getAttribute('d').match(/-?[\\d.]+/g).map(Number); var ex=d[d.length-2], ey=d[d.length-1], c2x=d[d.length-4]; return c2x===ex && [].some.call(document.querySelectorAll('.port.in'), function(port){var r=port.getBoundingClientRect(); return Math.abs(r.left+r.width/2-cr.left-ex)<2 && Math.abs(r.top+r.height/2-cr.top-ey)<2})})})()`));
+  ok('a logic node shows its conditions side by side, each with its dot underneath', await b.ev(`(function(){var rows=document.querySelectorAll('.fnode-logic .out-row.view'); if(rows.length<2) return false; var a=rows[0].getBoundingClientRect(), c=rows[1].getBoundingClientRect(); var p=rows[0].querySelector('.port.out').getBoundingClientRect(); return Math.abs(a.top-c.top)<3 && c.left>a.left && p.top>a.bottom-12})()`));
+  await b.hover('.edge-pill');
+  ok('hovering an edge does not change the arrowhead (fixed size, not scaled by the line width)', await b.ev(`document.getElementById('arrow').getAttribute('markerWidth')+','+document.getElementById('arrow').getAttribute('markerUnits')`) === arrowBefore && /userSpaceOnUse/.test(arrowBefore));
+  await b.reload(); await tab('flows'); await b.click(await flowItem('Newborn first weeks'));
+  ok('the direction survives a reload', await q('.canvas.td'));
+  await b.click('[data-action=flow-direction][data-dir=lr]');
+  ok('back to left to right: the original layout is restored exactly', !await q('.canvas.td') && await allPos() === lrPos, await allPos());
+  ok('switching direction is layout only: not in the history', !/direction|Top down/i.test(await b.ev(`Store.historyForFlow(document.getElementById('canvas').dataset.flow).map(function(e){return e.action}).join()`)));
+
   // ================= create a flow and add nodes =================
   await camp('k2');
   await b.click('[data-action=open-add]'); await b.type('Appointment reminder'); await b.key('Enter', 'Enter', 13);
@@ -268,6 +291,36 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await b.click('[data-action=add-node][data-type=logic]');
   ok('(a node can be added once the edit is over)', await titles() === 'Appointment reminder | Welcome message | Logic 1');
   await removeNode('Logic 1');
+
+  // ================= placeholder values of a template node (per flow) =================
+  const valField = n => '.fnode.editing [data-edit=value][data-name="' + n + '"]';
+  ok('in view mode a template node shows no placeholder values until some are set', !await q('.fnode-template .view-vals'));
+  await editNode('Appointment reminder');
+  ok('edit mode lists one field per placeholder name of the template (all languages together), with the template\'s default as the hint', await cnt('.fnode.editing [data-edit=value]') === 2 && await b.ev(`document.querySelector('${valField('date')}').placeholder`) === 'Monday 12 December' && await b.ev(`document.querySelector('${valField('time')}').placeholder`) === '10:30 AM' && await val(valField('date')) === '' && /\{\{date\}\}/.test(await txt('.fnode.editing .vals')));
+  await b.fill(valField('date'), 'Friday 3 March');
+  ok('typing changes only the draft (the store has no values yet) and keeps focus', await b.ev(`document.activeElement.getAttribute('data-name')`) === 'date' && await b.ev(`${cur}.nodes.filter(function(n){return n.type==='template'})[0].values && Object.keys(${cur}.nodes.filter(function(n){return n.type==='template'})[0].values).length`) === 0);
+  await b.key('Enter', 'Enter', 13);
+  ok('Enter saves: back to view mode, which now shows the value set in this flow (and not the unset one)', await editing() === 0 && /Friday 3 March/.test(await txt((await node('Appointment reminder')) + ' .view-vals')) && !/10:30/.test(await txt((await node('Appointment reminder')) + ' .view-vals')) && await b.ev(`Store.list().filter(function(c){return c.name==='Appointment reminder'})[0].translations[0].defaults.date`) === 'Monday 12 December');
+  await editNode('Appointment reminder');
+  ok('re-opening shows the saved value in its field', await val(valField('date')) === 'Friday 3 March');
+  await b.fill(valField('date'), 'x'.repeat(5)); await cancelEdit();
+  ok('✕ discards typed values', !/xxxxx/.test(await txt(await node('Appointment reminder'))) && /Friday 3 March/.test(await txt(await node('Appointment reminder'))));
+  await editNode('Appointment reminder');
+  await choose('.fnode.editing .combo', await idOfTpl('Daily health tip'));
+  ok('picking another template swaps the fields: a template without placeholders says so', await cnt('.fnode.editing [data-edit=value]') === 0 && /no placeholders/.test(await txt('.fnode.editing')));
+  await choose('.fnode.editing .combo', await idOfTpl('Appointment reminder'));
+  ok('picking the original back brings its values back', await val(valField('date')) === 'Friday 3 March');
+  await cancelEdit();
+  await editNode('Welcome message');
+  ok('another template has its own fields: Welcome message has one, name', await cnt('.fnode.editing [data-edit=value]') === 1 && await q(valField('name')));
+  await b.fill(valField('name'), 'Asha'); await saveEdit();
+  ok('each node keeps its own values', /Asha/.test(await txt((await node('Welcome message')) + ' .view-vals')) && /Friday 3 March/.test(await txt((await node('Appointment reminder')) + ' .view-vals')));
+  await editNode('Appointment reminder');
+  await b.fill(valField('date'), ''); await saveEdit();
+  ok('blank goes back to the template default: the values area disappears', !await q((await node('Appointment reminder')) + ' .view-vals'));
+  await b.click('[data-action=toggle-history-pane]');
+  ok('the flow\'s history records value changes with the template name', /Changed placeholder values/.test(await historyText()) && /Appointment reminder/.test(await historyText()) && /Friday 3 March/.test(await historyText()), (await historyText()).slice(0, 200));
+  await b.click('[data-action=toggle-history-pane]');
 
   // ================= moving nodes =================
   const before = await pos('Welcome message');

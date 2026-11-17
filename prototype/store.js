@@ -45,6 +45,7 @@
     flow_node_removed: 'Removed a node',
     flow_node_changed: 'Changed a node\'s template',
     flow_call_changed: 'Changed the flow a node calls',
+    flow_values_edited: 'Changed placeholder values',
     flow_edge_connected: 'Connected',
     flow_edge_disconnected: 'Disconnected',
     flow_out_added: 'Added an outgoing edge',
@@ -770,7 +771,7 @@
     if (!c) return fail('Template not found');
     if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
     var p = nextPosition(f);
-    var node = { id: 'n' + state.nextId++, type: 'template', templateId: templateId, next: null, x: p.x, y: p.y };
+    var node = { id: 'n' + state.nextId++, type: 'template', templateId: templateId, values: {}, next: null, x: p.x, y: p.y };
     f.nodes.push(node);
     logFlow(f, 'flow_node_added', { after: c.name, detail: 'Template' });
     save();
@@ -787,10 +788,74 @@
     if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
     var before = tplName(node.templateId);
     node.templateId = templateId;
+    node.values = {};                    // values were for the old template's placeholders
     logFlow(f, 'flow_node_changed', { before: before, after: c.name });
     save();
     return { ok: true };
   }
+
+  // ---- placeholder values of a template node: per flow, over the template's own defaults ----------------------------
+  // A template can be used in several flows with different values. The names are the union of the placeholder names of
+  // all its languages (a name used in several languages is one value). A blank value means "use the template's default".
+  function placeholderNames(contentId) {
+    var c = get(contentId), names = [];
+    if (!c) return names;
+    c.translations.forEach(function (t) { occurrences(t.text).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); }); });
+    return names;
+  }
+  function templateDefault(contentId, name) {        // the template's own default for a name: the first language that has one
+    var c = get(contentId), v = '';
+    if (c) c.translations.some(function (t) { var d = t.defaults && t.defaults[name]; if (d) { v = d; return true; } return false; });
+    return v;
+  }
+  // [{name, value (this flow's, '' = none), def (the template's), overridden}] for the node's template; stale names are ignored
+  function nodeValues(node) {
+    var own = node.values || {};
+    return placeholderNames(node.templateId).map(function (n) {
+      return { name: n, value: own[n] || '', def: templateDefault(node.templateId, n), overridden: !!own[n] };
+    });
+  }
+  function cleanValues(templateId, values) {         // -> {ok, values} with only this template's names and non-blank values, or an error
+    var names = placeholderNames(templateId), out = {};
+    for (var i = 0; i < names.length; i++) {
+      var v = values && values[names[i]] != null ? String(values[names[i]]).trim() : '';
+      if (!v) continue;
+      if (v.length > LIMITS.value) return { error: 'Keep the value of {{' + names[i] + '}} to ' + LIMITS.value + ' characters' };
+      out[names[i]] = v;
+    }
+    return { ok: true, values: out };
+  }
+  function valuesText(node, values) {                // "name = value, ..." for history
+    var parts = Object.keys(values || {}).map(function (k) { return k + ' = ' + values[k]; });
+    return parts.length ? parts.join(', ') : '(template defaults)';
+  }
+  // Save a template node in one go: its template and its placeholder values (both optional). Atomic: nothing changes
+  // unless everything is valid.
+  function updateTemplateNode(flowId, nodeId, change) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node || node.type !== 'template') return fail('Template node not found');
+    var templateId = change.templateId || node.templateId, c = get(templateId);
+    if (!c) return fail('Template not found');
+    var tplChanged = templateId !== node.templateId;
+    if (tplChanged && flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
+    var cleaned = cleanValues(templateId, change.values === undefined ? (tplChanged ? {} : node.values) : change.values);
+    if (!cleaned.ok) return fail(cleaned.error);
+    var oldValues = {}; nodeValues(node).forEach(function (v) { if (v.overridden) oldValues[v.name] = v.value; });
+    var valuesChanged = JSON.stringify(sortedObj(oldValues)) !== JSON.stringify(sortedObj(cleaned.values));
+    if (!tplChanged && !valuesChanged) return fail('No change');
+    if (tplChanged) {
+      var before = tplName(node.templateId);
+      node.templateId = templateId;
+      logFlow(f, 'flow_node_changed', { before: before, after: c.name });
+    }
+    node.values = cleaned.values;
+    if (valuesChanged && !(tplChanged && !Object.keys(cleaned.values).length)) {     // (a template switch alone already says so)
+      logFlow(f, 'flow_values_edited', { before: tplChanged ? '(new template)' : valuesText(node, oldValues), after: valuesText(node, cleaned.values), detail: c.name });
+    }
+    save();
+    return { ok: true };
+  }
+  function sortedObj(o) { var r = {}; Object.keys(o).sort().forEach(function (k) { r[k] = o[k]; }); return r; }
 
   // ---- flow nodes: enter / call another flow -------------------------------------------------
   function callsFlow(from, targetId, seen) {     // does `from` call the flow `targetId`, directly or through other flows?
@@ -892,6 +957,46 @@
     var before = timingText(c.timing);
     c.timing = cloneTiming(timing);
     log(c, null, 'timing_edited', { before: before, after: timingText(c.timing) });
+    save();
+    return { ok: true };
+  }
+
+  // Layered layout: a node's rank is its longest path from a node nothing points at; nodes of one rank sit side by side.
+  function autoLayout(f, dir) {
+    var rank = {}, incoming = {};
+    f.nodes.forEach(function (n) { incoming[n.id] = incoming[n.id] || 0; });
+    function targets(n) { return n.type === 'logic' ? n.outs.map(function (o) { return o.to; }).filter(Boolean) : (n.next ? [n.next] : []); }
+    f.nodes.forEach(function (n) { targets(n).forEach(function (t) { incoming[t] = (incoming[t] || 0) + 1; }); });
+    function walk(n, r) {                      // edges never loop, so this ends
+      if ((rank[n.id] || 0) >= r && n.id in rank) return;
+      rank[n.id] = r;
+      targets(n).forEach(function (t) { var m = getNode(f, t); if (m) walk(m, r + 1); });
+    }
+    f.nodes.forEach(function (n) { if (!incoming[n.id]) walk(n, 0); });
+    f.nodes.forEach(function (n) { if (!(n.id in rank)) rank[n.id] = 0; });
+    var seen = {}, out = {};
+    f.nodes.forEach(function (n) {
+      var r = rank[n.id], k = seen[r] || 0; seen[r] = k + 1;
+      out[n.id] = dir === 'td' ? { x: 40 + k * 340, y: 40 + r * 220 } : { x: 40 + r * 340, y: 40 + k * 260 };
+    });
+    return out;
+  }
+
+  // How a flow's graph is drawn: edges run left to right ('lr', the default) or top to bottom ('td'). Layout only: not a history event.
+  function flowDirection(f) { return f && f.direction === 'td' ? 'td' : 'lr'; }
+  function setFlowDirection(flowId, dir) {
+    var f = getFlow(flowId);
+    if (!f) return fail('Flow not found');
+    if (dir !== 'lr' && dir !== 'td') return fail('Direction is left to right or top down');
+    if (flowDirection(f) === dir) return fail('No change');
+    // each direction remembers its own layout: n.x / n.y are the positions in the current direction, n.alt the other's.
+    // A direction used for the first time gets an automatic layered layout (steps follow the edges), never the old layout rotated.
+    var auto = autoLayout(f, dir);
+    f.nodes.forEach(function (n) {
+      var cur = { x: n.x, y: n.y }, to = n.alt || auto[n.id];
+      n.x = to.x; n.y = to.y; n.alt = cur;
+    });
+    f.direction = dir;
     save();
     return { ok: true };
   }
@@ -1142,16 +1247,17 @@
     var f = getFlow(flowId), ids = {};
     f.nodes.forEach(function (n) { ids[n.id] = 'n' + state.nextId++; });
     var copy = {
-      id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(), timing: cloneTiming(f.timing || DEFAULT_TIMING),
+      id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(), timing: cloneTiming(f.timing || DEFAULT_TIMING), direction: flowDirection(f),
       nodes: f.nodes.map(function (n) {
-        if (n.type === 'template') return { id: ids[n.id], type: 'template', templateId: n.templateId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
-        if (n.type === 'action') return { id: ids[n.id], type: 'action', name: n.name, definition: n.definition, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
-        if (n.type === 'flow') return { id: ids[n.id], type: 'flow', flowId: n.flowId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
-        if (n.type === 'input') return { id: ids[n.id], type: 'input', title: n.title, next: n.next ? ids[n.next] : null, x: n.x, y: n.y };
-        return { id: ids[n.id], type: 'logic', title: n.title, x: n.x, y: n.y,
+        if (n.type === 'template') return { id: ids[n.id], type: 'template', templateId: n.templateId, values: Object.assign({}, n.values || {}), next: n.next ? ids[n.next] : null, x: n.x, y: n.y, alt: n.alt };
+        if (n.type === 'action') return { id: ids[n.id], type: 'action', name: n.name, definition: n.definition, next: n.next ? ids[n.next] : null, x: n.x, y: n.y, alt: n.alt };
+        if (n.type === 'flow') return { id: ids[n.id], type: 'flow', flowId: n.flowId, next: n.next ? ids[n.next] : null, x: n.x, y: n.y, alt: n.alt };
+        if (n.type === 'input') return { id: ids[n.id], type: 'input', title: n.title, next: n.next ? ids[n.next] : null, x: n.x, y: n.y, alt: n.alt };
+        return { id: ids[n.id], type: 'logic', title: n.title, x: n.x, y: n.y, alt: n.alt,
           outs: n.outs.map(function (o) { return { id: 'o' + state.nextId++, label: o.label, to: o.to ? ids[o.to] : null }; }) };
       })
     };
+    copy.nodes.forEach(function (n) { if (!n.alt) delete n.alt; });
     state.flows.splice(state.flows.indexOf(f) + 1, 0, copy);
     logFlow(copy, 'flow_created', { after: copy.name, detail: 'Duplicate of ' + f.name });
     logFlow(f, 'flow_duplicated', { after: copy.name, detail: campaignName(targetId) });
@@ -1328,6 +1434,9 @@
     renameFlow: renameFlow,
     addTemplateNode: addTemplateNode,
     changeNodeTemplate: changeNodeTemplate,
+    updateTemplateNode: updateTemplateNode,
+    placeholderNames: placeholderNames,
+    nodeValues: nodeValues,
     addFlowNode: addFlowNode,
     changeNodeFlow: changeNodeFlow,
     callProblem: callProblem,
@@ -1341,6 +1450,8 @@
     moveNode: moveNode,
     setTemplateTiming: setTemplateTiming,
     setFlowTiming: setFlowTiming,
+    flowDirection: flowDirection,
+    setFlowDirection: setFlowDirection,
     connect: connect,
     disconnect: disconnect,
     updateLogic: updateLogic,
