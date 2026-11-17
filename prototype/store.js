@@ -772,7 +772,6 @@
     var node = { id: 'n' + state.nextId++, type: 'template', templateId: templateId, next: null, x: p.x, y: p.y };
     f.nodes.push(node);
     logFlow(f, 'flow_node_added', { after: c.name, detail: 'Template' });
-    joinFlowCampaigns(f, c);
     save();
     return { ok: true, node: node };
   }
@@ -788,7 +787,6 @@
     var before = tplName(node.templateId);
     node.templateId = templateId;
     logFlow(f, 'flow_node_changed', { before: before, after: c.name });
-    joinFlowCampaigns(f, c);
     save();
     return { ok: true };
   }

@@ -102,14 +102,15 @@ test('flow names: required, unique, and never the name of a template (templates 
 });
 
 // ---------------------------------------------------------------- adding nodes
-test('addTemplateNode: a plain node for the template (no timing), once per flow, adds the template to the flow\'s campaigns, logged', () => {
+test('addTemplateNode: a plain node for the template (no timing), once per flow, leaves the template\'s campaigns as they are, logged', () => {
   const S = fresh();
   const f = S.createFlow('Reminders', 'k3').flow, a = tpl(S, 'Appointment reminder');
   const n = S.addTemplateNode(f.id, a.id).node;
   assert.deepEqual([n.type, n.templateId, n.next], ['template', a.id, null]);
   assert.equal('timing' in n, false, 'template nodes carry no timing');
-  assert.deepEqual(a.campaignIds, ['k2', 'k3'], 'Immunisation now holds what its flow uses');
-  assert.equal(S.historyFor(a.id, 'content')[0].action, 'campaign_copied');
+  assert.deepEqual(a.campaignIds, ['k2'], 'using a template in a flow does not put it in the flow\'s campaign');
+  assert.ok(!S.historyFor(a.id, 'content').some(e => e.action === 'campaign_copied'));
+  assert.equal(last(S, f).action, 'flow_node_added');
   assert.match(S.addTemplateNode(f.id, a.id).error, /already in this flow/);
   assert.match(S.addTemplateNode(f.id, 'nope').error, /not found/);
   assert.match(S.addTemplateNode('nope', a.id).error, /not found/);
@@ -327,15 +328,15 @@ test('updateAction: name and definition; names are unique among all nodes of the
   assert.match(S.updateAction(f.id, node(S, f, 'Logic 1').id, { name: 'x' }).error, /Action node not found/);
 });
 
-test('changeNodeTemplate: a template node can point at another template; edges stay; it joins the flow\'s campaigns; logged', () => {
+test('changeNodeTemplate: a template node can point at another template; edges stay; campaigns are left as they are; logged', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks'), w = tpl(S, 'Welcome message'), a = tpl(S, 'Appointment reminder');
   const n = node(S, f, 'Welcome message');
   assert.equal(S.changeNodeTemplate(f.id, n.id, a.id).ok, true);
   assert.equal(n.templateId, a.id);
   assert.deepEqual(edges(S, f).sort(), ['Appointment reminder -> Logic 1', 'Input 1 -> Appointment reminder', 'Logic 1 [No reply] -> Alert health worker', 'Logic 1 [Replied] -> Daily health tip'], 'the node keeps its edges under its new name');
-  assert.deepEqual(a.campaignIds, ['k2', 'k1'], 'the flow\'s campaign now holds the new template');
-  assert.equal(S.historyFor(a.id, 'content')[0].action, 'campaign_copied');
+  assert.deepEqual(a.campaignIds, ['k2'], 'the new template keeps its own campaigns');
+  assert.ok(!S.historyFor(a.id, 'content').some(e => e.action === 'campaign_copied'));
   assert.deepEqual([last(S, f).action, last(S, f).before, last(S, f).after], ['flow_node_changed', 'Welcome message', 'Appointment reminder']);
   assert.deepEqual(listing(S, 'k1'), ['F:Newborn first weeks', 'T:Welcome message'], 'Welcome message is still in Newborn care, now in no flow there: it is a flow by itself');
   assert.ok(w.campaignIds.includes('k1'));

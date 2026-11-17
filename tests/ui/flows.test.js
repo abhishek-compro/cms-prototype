@@ -181,7 +181,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('it is in a flow now, so no longer listed by itself', await flowNames() === 'Postnatal reminders', await flowNames());
   ok('the picker still lists a template that is already in the flow, but disabled with the reason', await comboOpts(addCombo) === 'Welcome message|Appointment reminder(off)|Daily health tip', await comboOpts(addCombo));
   await addTemplateNode('Welcome message');
-  ok('a second template is a second node; it also joined this flow\'s campaign', await titles() === 'Appointment reminder | Welcome message' && await b.ev(`Store.list()[0].campaignIds.join()`) === 'k1,k2');
+  ok('a second template is a second node; its campaigns are unchanged (Welcome message stays only in Newborn care)', await titles() === 'Appointment reminder | Welcome message' && await b.ev(`Store.list()[0].campaignIds.join()`) === 'k1');
   ok('the list entry counts the flow\'s templates', await meta('Postnatal reminders') === '2 templates', await meta('Postnatal reminders'));
   await b.click((await node('Welcome message')) + ' [data-action=open-template]');
   ok('the Open link of a template node opens that template in the Templates tab', await b.ev(`document.querySelector('.list-tab.active').textContent.trim()`) === 'Templates' && await txt('.content-head h2') === 'Welcome message');
@@ -201,7 +201,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await choose('.fnode.editing .combo', await idOfTpl('Daily health tip'));
   await saveEdit();
   ok('✓ saves: the node re-points (same node, new name), edit mode ends, and a toast says so', await editing() === 0 && await titles() === 'Daily health tip | Welcome message' && /Saved/.test(await toast()), await titles());
-  ok('the new template joined the flow\'s campaign; the old one is a flow by itself there again', await b.ev(`Store.list()[2].campaignIds.indexOf('k2')!==-1`) && /Appointment reminder/.test(await flowNames()) && await hasIndicator('Appointment reminder'), await flowNames());
+  ok('campaign membership is untouched: the new template did not join this campaign; the old one, in no flow of it any more, is a flow by itself there again', await b.ev(`Store.list()[2].campaignIds.indexOf('k2')===-1`) && /Appointment reminder/.test(await flowNames()) && await hasIndicator('Appointment reminder'), await flowNames());
   ok('the node\'s Open link follows the new template', await b.ev(`document.querySelector('${await node('Daily health tip')} [data-action=open-template]').getAttribute('data-id')`) === await idOfTpl('Daily health tip'));
   await editNode('Daily health tip');
   await b.click('.fnode.editing .combo-btn');
