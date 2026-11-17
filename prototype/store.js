@@ -43,7 +43,9 @@
     flow_steps_reordered: 'Reordered the templates',
     flow_timing_edited: 'Changed timing',
     flow_reordered: 'Moved in the flow list',
-    flow_copied: 'Copied to campaign',
+    flow_copied: 'Copied to campaign',          // older events; now flow_referred
+    flow_referred: 'Shared with campaign',
+    flow_duplicated: 'Duplicated to campaign',
     flow_moved: 'Moved to campaign'
   };
 
@@ -771,21 +773,31 @@
     return { ok: true };
   }
 
-  // ---- copy / move a flow to another campaign (like content) ---------------------------
-  // Its templates come along so the target campaign holds what the flow uses:
-  //  copy: the templates are added to the target too.
+  // ---- refer / duplicate / move a flow to another campaign ---------------------------
+  //  refer: the SAME flow is also in the target (one flow, edits apply everywhere).
+  //  duplicate: a new, independent flow in the target with the same steps and timing.
+  //  move: the flow leaves its campaign for the target.
+  // Templates are shared, never duplicated. They come along so the target campaign holds what the flow uses:
+  //  refer / duplicate: the templates are added to the target too.
   //  move: templates only this flow uses in the source campaign move with it; templates another flow of the
   //        source still uses stay there (and are also added to the target).
+  function uniqueCopyName(name) {              // "X (copy)", then "X (copy 2)", ...
+    var n = 1, candidate;
+    do { candidate = name + ' (copy' + (n > 1 ? ' ' + n : '') + ')'; n++; } while (validateFlowName(candidate) && n < 200);
+    return candidate;
+  }
+
   function planFlowDrop(flowId, targetId) {
     var f = getFlow(flowId), target = getCampaign(targetId);
     if (!f || !target) return null;
     var M = f.campaignIds.slice(), inTarget = M.indexOf(targetId) !== -1;
     var tpls = f.steps.map(function (s) { return get(s.templateId); }).filter(Boolean);
     var addToTarget = tpls.filter(function (t) { return t.campaignIds.indexOf(targetId) === -1; }).map(function (t) { return t.id; });
-    var plan = { existsIn: M.slice(), inTarget: inTarget, templates: tpls.length, copy: { ok: true }, move: { ok: true, from: M.slice() } };
+    var plan = { existsIn: M.slice(), inTarget: inTarget, templates: tpls.length, refer: { ok: true }, duplicate: { ok: true }, move: { ok: true, from: M.slice() } };
 
-    if (inTarget) plan.copy = { ok: false, reason: 'Already in ' + target.name };
-    else { plan.copy.result = M.concat(targetId); plan.copy.addTemplates = addToTarget; }
+    if (inTarget) plan.refer = { ok: false, reason: 'Already in ' + target.name };
+    else { plan.refer.result = M.concat(targetId); plan.refer.addTemplates = addToTarget; }
+    plan.duplicate = { ok: true, name: uniqueCopyName(f.name), addTemplates: addToTarget };   // always possible, even inside the same campaign
 
     if (M.length > 1) {
       plan.move = { ok: false, from: [], label: "Can't move",
@@ -821,16 +833,33 @@
     });
   }
 
-  function copyFlow(flowId, targetId) {
+  function referFlow(flowId, targetId) {
     var plan = planFlowDrop(flowId, targetId);
     if (!plan) return fail('Flow or campaign not found');
-    if (!plan.copy.ok) return fail(plan.copy.reason);
+    if (!plan.refer.ok) return fail(plan.refer.reason);
     var f = getFlow(flowId);
-    f.campaignIds = plan.copy.result;
-    logFlow(f, 'flow_copied', { after: campaignName(targetId), detail: targetId });
+    f.campaignIds = plan.refer.result;
+    logFlow(f, 'flow_referred', { after: campaignName(targetId), detail: targetId });
     carryTemplates(f, targetId, [], null);
     save();
     return { ok: true };
+  }
+
+  // A new flow in the target, placed right after the original in the list, with its own steps and timing
+  function duplicateFlow(flowId, targetId) {
+    var plan = planFlowDrop(flowId, targetId);
+    if (!plan) return fail('Flow or campaign not found');
+    var f = getFlow(flowId);
+    var copy = {
+      id: 'f' + state.nextId++, name: plan.duplicate.name, campaignIds: [targetId], createdAt: clock().toISOString(),
+      steps: f.steps.map(function (st) { return { templateId: st.templateId, timing: cloneTiming(st.timing) }; })
+    };
+    state.flows.splice(state.flows.indexOf(f) + 1, 0, copy);
+    logFlow(copy, 'flow_created', { after: copy.name, detail: 'Duplicate of ' + f.name });
+    logFlow(f, 'flow_duplicated', { after: copy.name, detail: campaignName(targetId) });
+    carryTemplates(copy, targetId, [], null);
+    save();
+    return { ok: true, flow: copy };
   }
 
   function moveFlow(flowId, targetId) {
@@ -994,7 +1023,8 @@
     setTemplateTiming: setTemplateTiming,
     reorderFlow: reorderFlow,
     planFlowDrop: planFlowDrop,
-    copyFlow: copyFlow,
+    referFlow: referFlow,
+    duplicateFlow: duplicateFlow,
     moveFlow: moveFlow,
     campaignName: campaignName,
     planDrop: planDrop,

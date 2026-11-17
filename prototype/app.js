@@ -526,14 +526,15 @@
     else if (e.action === 'content_created') body = esc(e.after);
     else if (e.action === 'part_edited') body = diffHtml(e.before, e.after);
     else if (e.action === 'timing_edited') body = diffHtml(e.before, e.after);
-    else if (e.action === 'flow_created') body = esc(e.after);
+    else if (e.action === 'flow_created') body = esc(e.after) + (e.detail ? ' <span class="muted">· ' + esc(e.detail) + '</span>' : '');
     else if (e.action === 'flow_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_step_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_steps_reordered') body = diffHtml(e.before, e.after);
     else if (e.action === 'flow_timing_edited') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
     else if (e.action === 'flow_reordered') body = esc(e.detail);
-    else if (e.action === 'flow_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_copied' || e.action === 'flow_referred') body = 'Also in <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_duplicated') body = 'Duplicated as <strong>' + esc(e.after) + '</strong> <span class="muted">in ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'header_type_changed') body = esc(e.before || 'None') + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
@@ -922,17 +923,25 @@
         (id === d.targetId ? ' <span class="muted small">(this campaign)</span>' : '') + '</li>';
     }).join('');
     var names = plan.existsIn.map(S.campaignName);
-    function count(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
-
-    var copyDesc = plan.copy.ok
-      ? (names.length ? 'Keep it in ' + names.join(', ') + ' and add it to ' + target : 'Add it to ' + target)
-      : plan.copy.reason;
     var fromNames = plan.move.from.map(S.campaignName);
+    function count(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+    function opt(action, label, desc, ok) {
+      return '<button class="dlg-opt' + (ok ? '' : ' off') + '" data-action="' + action + '"' + (ok ? '' : ' disabled') + '><strong>' + label + '</strong><span>' + esc(desc) + '</span></button>';
+    }
     var moveDesc = plan.move.ok
       ? (fromNames.length ? 'Remove it from ' + fromNames.join(', ') + (plan.inTarget ? ' (it stays in ' + target + ')' : ' and add it to ' + target) : 'Add it to ' + target)
       : plan.move.reason;
-    if (isFlow) {      // a flow brings its templates along
-      if (plan.copy.ok && plan.copy.addTemplates.length) copyDesc += '. ' + count(plan.copy.addTemplates.length, 'template') + ' will be added to ' + target + ' too';
+    var options;
+
+    if (isFlow) {
+      // refer = the same flow in more than one campaign; duplicate = a new independent flow; move; cancel
+      var referDesc = plan.refer.ok
+        ? 'The same flow also appears in ' + target + (names.length ? ' (and stays in ' + names.join(', ') + '), so editing it changes it everywhere' : '')
+        : plan.refer.reason;
+      var addN = plan.duplicate.addTemplates.length;
+      var tplNote = addN ? '. ' + count(addN, 'template') + ' will be added to ' + target + ' too' : '';
+      if (plan.refer.ok) referDesc += tplNote;
+      var dupDesc = 'Make an independent copy called “' + plan.duplicate.name + '” in ' + target + '; editing either one leaves the other alone. The templates are shared, not duplicated' + tplNote;
       if (plan.move.ok) {
         var bits = [];
         if (plan.move.leave.length) bits.push(count(plan.move.leave.length, 'template') + ' move' + (plan.move.leave.length === 1 ? 's' : '') + ' with it');
@@ -941,21 +950,21 @@
         if (staying.length) bits.push(count(staying.length, 'template') + ' will be added to ' + target);
         if (bits.length) moveDesc += '. ' + bits.join('; ');
       }
-    }
-
-    function opt(action, label, desc, ok) {
-      return '<button class="dlg-opt' + (ok ? '' : ' off') + '" data-action="' + action + '"' + (ok ? '' : ' disabled') + '><strong>' + label + '</strong><span>' + esc(desc) + '</span></button>';
+      options = opt('dialog-refer', 'Refer same flow', referDesc, plan.refer.ok) +
+        opt('dialog-duplicate', 'Duplicate flow', dupDesc, true) +
+        opt('dialog-move', plan.move.label || 'Move flow', moveDesc, plan.move.ok);
+    } else {
+      var copyDesc = plan.copy.ok
+        ? (names.length ? 'Keep it in ' + names.join(', ') + ' and add it to ' + target : 'Add it to ' + target)
+        : plan.copy.reason;
+      options = opt('dialog-copy', 'Copy', copyDesc, plan.copy.ok) + opt('dialog-move', plan.move.label || 'Move', moveDesc, plan.move.ok);
     }
     return '<div class="modal-backdrop" data-action="dialog-backdrop">' +
       '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
       '<h2 id="dlg-title">“' + esc(item.name) + '” <span class="muted">→</span> ' + esc(target) + '</h2>' +
       '<div class="dlg-label">Already in</div>' +
       '<ul class="exists-list" aria-label="Campaigns this ' + (isFlow ? 'flow' : 'template') + ' is already in">' + (existing || '<li class="muted">Not in any campaign yet</li>') + '</ul>' +
-      '<div class="dlg-options">' +
-      opt('dialog-copy', 'Copy', copyDesc, plan.copy.ok) +
-      opt('dialog-move', plan.move.label || 'Move', moveDesc, plan.move.ok) +
-      opt('dialog-cancel', 'Cancel', 'Close without changing anything', true) +
-      '</div></div></div>';
+      '<div class="dlg-options">' + options + opt('dialog-cancel', 'Cancel', 'Close without changing anything', true) + '</div></div></div>';
   }
 
   function showDialog(dialog) {
@@ -980,16 +989,20 @@
     dialogReturnFocus = null;
   }
   function applyDialog(kind) {
-    var d = ui.dialog, target = S.campaignName(d.targetId), r, name;
+    var d = ui.dialog, target = S.campaignName(d.targetId), r, name, msg;
     if (d.kind === 'flow') {
       name = (S.getFlow(d.flowId) || {}).name || '';
-      r = kind === 'copy' ? S.copyFlow(d.flowId, d.targetId) : S.moveFlow(d.flowId, d.targetId);
+      r = kind === 'refer' ? S.referFlow(d.flowId, d.targetId) : kind === 'duplicate' ? S.duplicateFlow(d.flowId, d.targetId) : S.moveFlow(d.flowId, d.targetId);
+      msg = kind === 'refer' ? 'Flow “' + name + '” is now also in ' + target
+        : kind === 'duplicate' ? 'Duplicated flow “' + name + '” to ' + target + (r.flow ? ' as “' + r.flow.name + '”' : '')
+        : 'Moved flow “' + name + '” to ' + target;
     } else {
       name = (S.get(d.contentId) || {}).name || '';
       r = kind === 'copy' ? S.copyToCampaign(d.contentId, d.targetId) : S.moveToCampaign(d.contentId, d.targetId);
+      msg = (kind === 'copy' ? 'Copied “' : 'Moved “') + name + '” to ' + target;
     }
     closeDialog();
-    if (r.ok) { render(); toast((kind === 'copy' ? 'Copied ' : 'Moved ') + (d.kind === 'flow' ? 'flow ' : '') + '“' + name + '” to ' + target); }
+    if (r.ok) { render(); toast(msg); }
     else toast(r.error, true);
   }
 
@@ -1117,6 +1130,8 @@
         ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null; ui.nameOpen = false;
         break;
       case 'dialog-copy': applyDialog('copy'); return;
+      case 'dialog-refer': applyDialog('refer'); return;
+      case 'dialog-duplicate': applyDialog('duplicate'); return;
       case 'dialog-move': applyDialog('move'); return;
       case 'dialog-cancel': closeDialog(); return;
       case 'dialog-backdrop': if (ev.target === el) closeDialog(); return;

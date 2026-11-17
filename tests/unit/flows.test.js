@@ -177,40 +177,84 @@ test('the flows you created stay in your order; single-template flows always fol
 });
 
 // ---------------------------------------------------------------- copy / move a flow to a campaign
-test('planFlowDrop: copy adds the target and brings the templates; move takes the flow out of its one campaign', () => {
+test('planFlowDrop: refer adds the target (same flow), duplicate makes a new one, both bring the templates; move takes the flow out of its one campaign', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks'), w = tpl(S, 'Welcome message'), d = tpl(S, 'Daily health tip');
   const p = S.planFlowDrop(f.id, 'k3');
   assert.deepEqual(p.existsIn, ['k1']);
   assert.equal(p.templates, 2);
-  assert.deepEqual([p.copy.ok, p.copy.result, p.copy.addTemplates], [true, ['k1', 'k3'], [w.id, d.id]]);
+  assert.deepEqual([p.refer.ok, p.refer.result, p.refer.addTemplates], [true, ['k1', 'k3'], [w.id, d.id]]);
+  assert.deepEqual([p.duplicate.ok, p.duplicate.name, p.duplicate.addTemplates], [true, 'Newborn first weeks (copy)', [w.id, d.id]]);
   assert.deepEqual([p.move.ok, p.move.from, p.move.result, p.move.leave, p.move.stay], [true, ['k1'], ['k3'], [w.id, d.id], []]);
 });
 
-test('planFlowDrop: dropped on a campaign that has it -> both disabled; several owners -> "Can\'t move"', () => {
+test('planFlowDrop: dropped on a campaign that has it -> refer and move are disabled, duplicate still works; several owners -> "Can\'t move"', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks');
   const same = S.planFlowDrop(f.id, 'k1');
-  assert.deepEqual([same.copy.ok, same.move.ok, same.copy.reason, same.move.reason], [false, false, 'Already in Newborn care', 'Already in Newborn care']);
-  S.copyFlow(f.id, 'k3');
+  assert.deepEqual([same.refer.ok, same.move.ok, same.refer.reason, same.move.reason], [false, false, 'Already in Newborn care', 'Already in Newborn care']);
+  assert.equal(same.duplicate.ok, true, 'a duplicate inside the same campaign is allowed');
+  S.referFlow(f.id, 'k3');
   const p = S.planFlowDrop(f.id, 'k2');
   assert.equal(p.move.ok, false);
   assert.equal(p.move.label, "Can't move");
   assert.match(p.move.reason, /2 campaigns \(Newborn care, Immunisation\)/);
-  assert.equal(p.copy.ok, true);
+  assert.equal(p.refer.ok, true);
+  assert.equal(p.duplicate.ok, true);
   assert.equal(S.moveFlow(f.id, 'k2').ok, false, 'and applying it is refused too');
 });
 
-test('copyFlow: the flow is in both campaigns, its templates are added to the target and stay in the source', () => {
+test('referFlow: the SAME flow is in both campaigns; its templates are added to the target and stay in the source', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks'), w = tpl(S, 'Welcome message'), d = tpl(S, 'Daily health tip');
-  assert.equal(S.copyFlow(f.id, 'k3').ok, true);
+  assert.equal(S.referFlow(f.id, 'k3').ok, true);
   assert.deepEqual(f.campaignIds, ['k1', 'k3']);
+  assert.equal(S.listFlows().length, 1, 'still one flow');
   assert.deepEqual([w.campaignIds, d.campaignIds], [['k1', 'k3'], ['k1', 'k3']]);
   assert.deepEqual(listing(S, 'k3'), ['F:Newborn first weeks'], 'in the target the templates belong to the flow, so none is listed alone');
-  assert.equal(S.historyForFlow(f.id)[0].action, 'flow_copied');
+  assert.equal(S.historyForFlow(f.id)[0].action, 'flow_referred');
   assert.equal(S.historyFor(w.id, 'content')[0].action, 'campaign_copied', 'each template records that it was added');
-  assert.equal(S.copyFlow(f.id, 'k3').error, 'Already in Immunisation');
+  assert.equal(S.referFlow(f.id, 'k3').error, 'Already in Immunisation');
+  S.setStepTiming(f.id, 0, { days: 2, when: 'after', ref: 'date_of_birth' });
+  assert.equal(S.flowsIn('k3')[0].steps[0].timing.days, 2, 'an edit is seen from both campaigns (it is one flow)');
+});
+
+test('duplicateFlow: a new independent flow in the target with the same steps and timing, placed after the original', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks'), w = tpl(S, 'Welcome message'), d = tpl(S, 'Daily health tip');
+  const other = S.createFlow('Zzz', 'k1').flow;
+  const r = S.duplicateFlow(f.id, 'k3');
+  assert.equal(r.ok, true);
+  const copy = r.flow;
+  assert.deepEqual([copy.name, copy.campaignIds], ['Newborn first weeks (copy)', ['k3']]);
+  assert.notEqual(copy.id, f.id);
+  assert.deepEqual(S.listFlows().map(x => x.name), ['Newborn first weeks', 'Newborn first weeks (copy)', 'Zzz'], 'right after the original');
+  assert.deepEqual(f.campaignIds, ['k1'], 'the original stays where it was');
+  assert.deepEqual(stepNames(S, copy), ['Welcome message', 'Daily health tip']);
+  assert.deepEqual(copy.steps.map(s => s.timing), f.steps.map(s => s.timing));
+  assert.deepEqual([w.campaignIds, d.campaignIds], [['k1', 'k3'], ['k1', 'k3']], 'the templates are shared (not duplicated) and added to the target');
+  assert.equal(S.list().length, 3, 'no template was duplicated');
+  S.setStepTiming(copy.id, 0, { days: 99, when: 'after', ref: 'date_of_birth' });
+  S.removeStep(copy.id, 1);
+  assert.deepEqual(f.steps.map(s => s.timing.days), [14, 7], 'editing the duplicate does not touch the original');
+  assert.equal(f.steps.length, 2);
+  assert.ok(other);
+});
+
+test('duplicateFlow: unique names, works inside the same campaign, empty flows, and is logged on both flows', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks');
+  const a = S.duplicateFlow(f.id, 'k1').flow, b = S.duplicateFlow(f.id, 'k1').flow;
+  assert.deepEqual([a.name, b.name], ['Newborn first weeks (copy)', 'Newborn first weeks (copy 2)']);
+  assert.deepEqual(S.flowsIn('k1').map(x => x.name), ['Newborn first weeks', 'Newborn first weeks (copy 2)', 'Newborn first weeks (copy)'], 'each is placed right after the original');
+  const e = S.createFlow('Empty', 'k2').flow;
+  assert.deepEqual(S.duplicateFlow(e.id, 'k3').flow.steps, []);
+  const created = S.historyForFlow(a.id)[0];
+  assert.deepEqual([created.action, created.after, created.detail], ['flow_created', 'Newborn first weeks (copy)', 'Duplicate of Newborn first weeks']);
+  const logged = S.historyForFlow(f.id).find(x => x.action === 'flow_duplicated');
+  assert.deepEqual([logged.after, logged.detail], ['Newborn first weeks (copy 2)', 'Newborn care']);
+  assert.match(S.duplicateFlow('nope', 'k1').error, /not found/);
+  assert.match(S.duplicateFlow(f.id, 'nope').error, /not found/);
 });
 
 test('moveFlow: templates only this flow uses move with it; templates another flow of the source still uses stay', () => {

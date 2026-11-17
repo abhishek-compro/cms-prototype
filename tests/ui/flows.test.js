@@ -142,28 +142,55 @@ uiSuite('flows: list, single-template flows, steps and timing, reordering, copy/
   ok('the order survives a reload', await flowNames() === 'Newborn first weeks | Flow A | Flow B | Appointment reminder', await flowNames());
   ok('and so do a flow\'s steps and their timing', await b.ev(`Store.listFlows()[0].steps.map(function(s){return s.timing.days+' '+s.timing.when}).join(' | ')`) === '14 before | 7 after');
 
-  // ================= copy / move a flow to a campaign =================
+  // ================= refer / duplicate / move a flow to a campaign =================
   await b.fresh();
   await tab('flows');
   await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k3]');
-  ok('dropping a flow on a campaign opens the same dialog as for a template', await q('.modal[role=dialog]') && /Newborn first weeks.*→.*Immunisation/.test(await txt('#dlg-title')) && await opts() === 'Copy | Move | Cancel', await opts());
+  ok('dropping a flow on a campaign opens a dialog with four options: Refer same flow, Duplicate flow, Move flow, Cancel', await q('.modal[role=dialog]') && /Newborn first weeks.*→.*Immunisation/.test(await txt('#dlg-title')) && await opts() === 'Refer same flow | Duplicate flow | Move flow | Cancel', await opts());
   ok('it lists where the flow already is (read-only), above the options', await existing() === 'Newborn care' && await b.ev(`document.querySelector('.exists-list').getBoundingClientRect().bottom <= document.querySelector('.dlg-options').getBoundingClientRect().top`));
-  ok('the descriptions say what happens to the templates inside', /Keep it in Newborn care and add it to Immunisation\. 2 templates will be added to Immunisation too/.test(await optDesc('copy')) && /Remove it from Newborn care and add it to Immunisation\. 2 templates move with it/.test(await optDesc('move')), await optDesc('copy') + ' // ' + await optDesc('move'));
+  ok('each option says what it does, including what happens to the templates inside',
+    /The same flow also appears in Immunisation \(and stays in Newborn care\), so editing it changes it everywhere\. 2 templates will be added to Immunisation too/.test(await optDesc('refer')) &&
+    /independent copy called “Newborn first weeks \(copy\)” in Immunisation; editing either one leaves the other alone\. The templates are shared, not duplicated\. 2 templates will be added to Immunisation too/.test(await optDesc('duplicate')) &&
+    /Remove it from Newborn care and add it to Immunisation\. 2 templates move with it/.test(await optDesc('move')), await optDesc('refer') + ' // ' + await optDesc('duplicate') + ' // ' + await optDesc('move'));
   await b.click('[data-action=dialog-cancel]');
   ok('Cancel changes nothing', !await q('.modal') && await b.ev(`Store.listFlows()[0].campaignIds.join()`) === 'k1');
   await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k3]');
-  await b.click('[data-action=dialog-copy]');
-  ok('Copy: the flow is in both campaigns, its templates were added to Immunisation too', await b.ev(`Store.listFlows()[0].campaignIds.join()`) === 'k1,k3' && await b.ev(`Store.list().slice(0,3).filter(function(c){return c.campaignIds.indexOf('k3')!==-1}).map(function(c){return c.name}).join(' | ')`) === 'Welcome message | Daily health tip', await b.ev(`Store.listFlows()[0].campaignIds.join()`));
-  ok('the toast names the flow', /Copied flow “Newborn first weeks” to Immunisation/.test(await txt('#toast')), await txt('#toast'));
+  await b.click('[data-action=dialog-refer]');
+  ok('Refer same flow: the one flow is in both campaigns, its templates were added to Immunisation too', await b.ev(`Store.listFlows()[0].campaignIds.join()`) === 'k1,k3' && await b.ev(`Store.list().slice(0,3).filter(function(c){return c.campaignIds.indexOf('k3')!==-1}).map(function(c){return c.name}).join(' | ')`) === 'Welcome message | Daily health tip', await b.ev(`Store.listFlows()[0].campaignIds.join()`));
+  ok('it is still one flow (no second flow appeared), and the toast says so', await b.ev(`Store.listFlows().length`) === 1 && /Flow “Newborn first weeks” is now also in Immunisation/.test(await txt('#toast')), await txt('#toast'));
   await camp('k3');
   ok('Immunisation now lists the flow (its templates are inside it, so none alone)', await flowNames() === 'Newborn first weeks', await flowNames());
   await camp('');
   await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k2]');
-  ok('a flow in two campaigns cannot be moved: "Can\'t move" with the reason; Copy still works', await opts() === "Copy | Can't move(off) | Cancel" && /2 campaigns \(Newborn care, Immunisation\)/.test(await optDesc('move')), await opts());
+  ok('a flow in two campaigns cannot be moved: "Can\'t move" with the reason; Refer and Duplicate still work', await opts() === "Refer same flow | Duplicate flow | Can't move(off) | Cancel" && /2 campaigns \(Newborn care, Immunisation\)/.test(await optDesc('move')), await opts());
   await b.key('Escape', 'Escape', 27);
   await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k3]');
-  ok('dropping it on a campaign that already has it disables both, with the reason', /^Copy\(off\) \| Can't move\(off\)/.test(await opts()) && /Already in Immunisation/.test(await optDesc('copy')), await opts());
+  ok('dropping it on a campaign that already has it disables Refer (with the reason) but Duplicate stays available', /^Refer same flow\(off\) \| Duplicate flow \| Can't move\(off\)/.test(await opts()) && /Already in Immunisation/.test(await optDesc('refer')), await opts());
   await b.key('Escape', 'Escape', 27);
+
+  // duplicate: an independent new flow
+  await b.fresh();
+  await tab('flows');
+  await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k3]');
+  await b.click('[data-action=dialog-duplicate]');
+  ok('Duplicate flow: a second flow appears, named "(copy)", right after the original', await flowOrder() === 'Newborn first weeks | Newborn first weeks (copy)' && /Duplicated flow “Newborn first weeks” to Immunisation as “Newborn first weeks \(copy\)”/.test(await txt('#toast')), await flowOrder() + ' / ' + await txt('#toast'));
+  ok('the copy is only in the target campaign; the original stays where it was', await b.ev(`Store.listFlows().map(function(f){return f.campaignIds.join()}).join(' | ')`) === 'k1 | k3');
+  await camp('k3');
+  ok('Immunisation lists just the copy', await flowNames() === 'Newborn first weeks (copy)', await flowNames());
+  await b.click('#content-list .flow-item');
+  ok('the copy has the same steps and timing', await steps() === 'Welcome message | Daily health tip' && await stepTiming(0) === '14 before expected_date_of_delivery' && await stepTiming(1) === '7 after expected_date_of_delivery', await steps());
+  await setTiming('.step-row[data-idx="0"] .timing', 30);
+  ok('editing the copy leaves the original alone (they are independent)', await b.ev(`Store.listFlows().map(function(f){return f.steps[0].timing.days}).join(' | ')`) === '14 | 30');
+  await b.click('.step-row[data-idx="1"] [data-action=step-remove]');
+  ok('so does removing a template from it', await b.ev(`Store.listFlows().map(function(f){return f.steps.length}).join(' | ')`) === '2 | 1');
+  await b.click('[data-action=toggle-history-pane]');
+  ok('the copy\'s history starts with "Created flow ... Duplicate of Newborn first weeks"', /Created flow/.test(await txt('#history-pane')) && /Duplicate of Newborn first weeks/.test(await txt('#history-pane')), await txt('#history-pane'));
+  await b.click('[data-action=toggle-history-pane]');
+  await camp('');
+  await b.drag(grip(await flowItem('Newborn first weeks')), '.camp-item[data-id=k1]');
+  ok('dropping a flow on its own campaign still offers Duplicate (Refer and Move are disabled: already there)', /^Refer same flow\(off\) \| Duplicate flow \| Move flow\(off\) \| Cancel$/.test(await opts()), await opts());
+  await b.click('[data-action=dialog-duplicate]');
+  ok('and names the next copy "(copy 2)"', await flowOrder() === 'Newborn first weeks | Newborn first weeks (copy 2) | Newborn first weeks (copy)', await flowOrder());
 
   // move: templates only this flow uses go with it; one that another flow in the source uses stays
   await b.fresh();
