@@ -131,9 +131,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('by default nodes are read-only: names, definition and conditions are text, with no input, select, textarea or save/cancel button',
     !await q('.fnode input, .fnode select, .fnode textarea, .fnode .node-save, .fnode .node-cancel, .fnode .combo') && await q('.fnode-template [data-action=open-template]') && await cnt('.fnode.editing') === 0 &&
     /Alert health worker/.test(await txt('.fnode-action')) && /notify/.test(await txt('.fnode-action')) && /Replied/.test(await txt('.fnode-logic')) && /No reply/.test(await txt('.fnode-logic')));
-  ok('the template, action and logic nodes say "Click to edit"; the input node, which has nothing to edit, does not', await b.ev(`[].every.call(document.querySelectorAll('.fnode-template, .fnode-action, .fnode-logic'), function(n){return n.title==='Click to edit'})`) && await b.ev(`document.querySelector('.fnode-input').title`) === '');
-  await b.click('.fnode-input .fnode-head');
-  ok('clicking the input node does not start an edit', await editing() === 0);
+  ok('every node says "Click to edit" (template, flow, action, logic and input nodes are all editable)', await b.ev(`[].every.call(document.querySelectorAll('.fnode'), function(n){return n.title==='Click to edit'})`));
   await b.hover(await node('Daily health tip'));
   ok('hovering a node outlines it (an outline, not a different box)', await b.ev(`(function(){var s=getComputedStyle(document.querySelector('${await node('Daily health tip')}')); return s.outlineStyle==='solid' && parseFloat(s.outlineWidth)>=2})()`));
   await b.hover('.canvas-wrap', 0.5, 0.97);
@@ -294,19 +292,32 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
 
   // ================= placeholder values of a template node (per flow) =================
   const valField = n => '.fnode.editing [data-edit=value][data-name="' + n + '"]';
-  ok('in view mode a template node shows no placeholder values until some are set', !await q('.fnode-template .view-vals'));
+  ok('in view mode a template node shows no placeholder values until some are set, and no phone', !await q('.fnode-template .view-vals') && !await q('.node-preview'));
   await editNode('Appointment reminder');
   ok('edit mode lists one field per placeholder name of the template (all languages together), with the template\'s default as the hint', await cnt('.fnode.editing [data-edit=value]') === 2 && await b.ev(`document.querySelector('${valField('date')}').placeholder`) === 'Monday 12 December' && await b.ev(`document.querySelector('${valField('time')}').placeholder`) === '10:30 AM' && await val(valField('date')) === '' && /\{\{date\}\}/.test(await txt('.fnode.editing .vals')));
+  const npText = () => txt('.fnode.editing .node-preview .wa-text');
+  ok('while a template node is edited a read-only phone appears beside it (to its right), showing the message with the template\'s defaults', await q('.fnode.editing .node-preview .phone') && await b.ev(`(function(){var n=document.querySelector('.fnode.editing').getBoundingClientRect(), p=document.querySelector('.node-preview').getBoundingClientRect(); return p.left>=n.right && Math.abs(p.top-n.top)<4})()`) && /Monday 12 December/.test(await npText()) && /10:30 AM/.test(await npText()));
+  ok('the preview is read-only: no fields inside, only the language buttons', await cnt('.fnode.editing .node-preview input, .fnode.editing .node-preview textarea, .fnode.editing .node-preview select') === 0 && await b.ev(`[].map.call(document.querySelectorAll('.node-preview .np-lang'), function(x){return x.textContent+(x.getAttribute('aria-pressed')==='true'?'*':'')}).join('|')`) === 'en*|hi|kn');
+  await b.click('.fnode.editing .np-lang[data-lang=hi]');
+  ok('the language buttons switch the previewed language (the node stays in edit mode, draft kept)', await editing() === 1 && /सोमवार 12 दिसंबर/.test(await npText()), await npText());
+  await b.click('.fnode.editing .np-lang[data-lang=en]');
+  await b.fill(valField('date'), 'Friday 3 March');
+  ok('typing a value updates the preview live, in the field being typed in (focus kept), and a value left blank falls back to the default', /Friday 3 March/.test(await npText()) && /10:30 AM/.test(await npText()) && await b.ev(`document.activeElement.getAttribute('data-name')`) === 'date' && await b.ev(`${cur}.nodes.filter(function(n){return n.type==='template'})[0].values.date`) !== 'Friday 3 March');
   await b.fill(valField('date'), 'Friday 3 March');
   ok('typing changes only the draft (the store has no values yet) and keeps focus', await b.ev(`document.activeElement.getAttribute('data-name')`) === 'date' && await b.ev(`${cur}.nodes.filter(function(n){return n.type==='template'})[0].values && Object.keys(${cur}.nodes.filter(function(n){return n.type==='template'})[0].values).length`) === 0);
   await b.key('Enter', 'Enter', 13);
   ok('Enter saves: back to view mode, which now shows the value set in this flow (and not the unset one)', await editing() === 0 && /Friday 3 March/.test(await txt((await node('Appointment reminder')) + ' .view-vals')) && !/10:30/.test(await txt((await node('Appointment reminder')) + ' .view-vals')) && await b.ev(`Store.list().filter(function(c){return c.name==='Appointment reminder'})[0].translations[0].defaults.date`) === 'Monday 12 December');
+  ok('saving closes the preview', await editing() === 0 && !await q('.node-preview'));
   await editNode('Appointment reminder');
   ok('re-opening shows the saved value in its field', await val(valField('date')) === 'Friday 3 March');
-  await b.fill(valField('date'), 'x'.repeat(5)); await cancelEdit();
+  await b.fill(valField('date'), 'x'.repeat(5));
+  ok('(the preview shows what is typed)', /xxxxx/.test(await npText()));
+  await cancelEdit();
+  ok('cancelling closes the preview', !await q('.node-preview'));
   ok('✕ discards typed values', !/xxxxx/.test(await txt(await node('Appointment reminder'))) && /Friday 3 March/.test(await txt(await node('Appointment reminder'))));
   await editNode('Appointment reminder');
   await choose('.fnode.editing .combo', await idOfTpl('Daily health tip'));
+  ok('picking another template swaps the preview too', /Tip of the day/.test(await npText()), await npText());
   ok('picking another template swaps the fields: a template without placeholders says so', await cnt('.fnode.editing [data-edit=value]') === 0 && /no placeholders/.test(await txt('.fnode.editing')));
   await choose('.fnode.editing .combo', await idOfTpl('Appointment reminder'));
   ok('picking the original back brings its values back', await val(valField('date')) === 'Friday 3 March');
@@ -436,7 +447,18 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('Escape discards the refused name', await editing() === 0 && (await titles()).indexOf(act2) !== -1);
   await removeNode(act2);
   await addNode('input');
-  ok('+ Input adds a plain node (Input 2): no input boxes, an input port and an output port', await titles() === (await titles()).split(' | ').filter(t => !/^Input 2$/.test(t)).concat(['Input 2']).join(' | ') && !await q((await node('Input 2')) + ' input, ' + (await node('Input 2')) + ' select, ' + (await node('Input 2')) + ' textarea') && await cnt((await node('Input 2')) + ' .port.in') === 1 && await cnt((await node('Input 2')) + ' .port.out') === 1);
+  ok('+ Input adds a node (Input 2): read-only (no input boxes until clicked), an input port and an output port', await titles() === (await titles()).split(' | ').filter(t => !/^Input 2$/.test(t)).concat(['Input 2']).join(' | ') && !await q((await node('Input 2')) + ' input, ' + (await node('Input 2')) + ' select, ' + (await node('Input 2')) + ' textarea') && await cnt((await node('Input 2')) + ' .port.in') === 1 && await cnt((await node('Input 2')) + ' .port.out') === 1);
+  await editNode('Input 2');
+  ok('clicking an input node opens its name (focused), with ✓ and ✕', await editing() === 1 && await val('.fnode.editing [data-edit=title]') === 'Input 2' && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'title' && await q('.fnode.editing .node-save'));
+  await b.fill('.fnode.editing [data-edit=title]', 'welcome MESSAGE'); await b.key('Enter', 'Enter', 13);
+  ok('an input name must be unique among the flow\'s node names (any capitalisation): refused, stays in edit mode', /already called/.test(await toast()) && await editing() === 1);
+  await b.fill('.fnode.editing [data-edit=title]', '   '); await b.key('Enter', 'Enter', 13);
+  ok('an empty name is refused ("Name the input")', /Name the input/.test(await toast()) && await editing() === 1);
+  await b.key('Escape', 'Escape', 27);
+  ok('Escape discards it: still Input 2', await editing() === 0 && (await titles()).split(' | ').indexOf('Input 2') !== -1);
+  await editNode('Input 2');
+  await b.fill('.fnode.editing [data-edit=title]', 'Family phone number'); await saveEdit();
+  ok('✓ renames the node (same node: it keeps its edges and position); the header shows the new name', await editing() === 0 && (await titles()).split(' | ').indexOf('Family phone number') !== -1 && /Family phone number/.test(await txt(await node('Family phone number'))));
 
   // ================= flow nodes: calling another flow =================
   await addFlowNode('Newborn first weeks');
@@ -476,15 +498,25 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('dragging Flow B onto the top half of the first flow puts it first', await flowNames() === 'Flow B | Newborn first weeks | Flow A | Appointment reminder' && await flowOrder() === 'Flow B | Newborn first weeks | Flow A', await flowNames());
   await b.drag(grip(await flowItem('Flow B')), await flowItem('Flow A'), { fy: 0.85 });
   ok('onto the bottom half puts it after', await flowOrder() === 'Newborn first weeks | Flow A | Flow B', await flowOrder());
-  await b.drag(grip(await flowItem('Flow A')), await tplItem('Appointment reminder'));
-  ok('a template that is a flow by itself is not a place to drop: nothing moves', await flowOrder() === 'Newborn first weeks | Flow A | Flow B');
-  await b.drag(grip(await tplItem('Appointment reminder')), await flowItem('Flow A'), { fy: 0.2 });
-  ok('and a template that is a flow by itself cannot be reordered (it always follows the flows you made)', await flowNames() === 'Newborn first weeks | Flow A | Flow B | Appointment reminder' && !await q('.modal'));
+  await b.drag(grip(await flowItem('Flow A')), await tplItem('Appointment reminder'), { fy: 0.85 });
+  ok('a template that is a flow by itself is a place to drop too: Flow A goes below it', await flowNames() === 'Newborn first weeks | Flow B | Appointment reminder | Flow A', await flowNames());
+  await b.drag(grip(await tplItem('Appointment reminder')), await flowItem('Newborn first weeks'), { fy: 0.2 });
+  ok('and it can be dragged among the flows: Appointment reminder goes above the first flow, with no campaign dialog', await flowNames() === 'Appointment reminder | Newborn first weeks | Flow B | Flow A' && !await q('.modal'), await flowNames());
+  ok('the flows you created keep their relative order in the store', await flowOrder() === 'Newborn first weeks | Flow B | Flow A', await flowOrder());
+  await b.drag(grip(await tplItem('Appointment reminder')), await flowItem('Flow B'), { fy: 0.85 });
+  ok('it can be moved back down between flows', await flowNames() === 'Newborn first weeks | Flow B | Appointment reminder | Flow A', await flowNames());
+  await camp('k2');
+  ok('each campaign shows its entries in the shared order (Postnatal check-ups: just the template here)', await flowNames() === 'Appointment reminder', await flowNames());
+  await camp('');
+  await b.click('[data-action=toggle-history-pane]'); await b.click(await tplItem('Appointment reminder'));
+  await b.click('#history-pane .hp-tab[data-tab=other]');
+  ok('moving a template that is a flow by itself is in its history (Other)', /Moved in the flow list/.test(await b.ev(`document.getElementById('history-pane').innerText`)));
+  await b.click('[data-action=toggle-history-pane]');
   await b.click('[data-action=toggle-history-pane]'); await b.click(await flowItem('Flow B'));
   ok('the reorder is in that flow\'s history', /Moved in the flow list/.test(await b.ev(`document.getElementById('history-pane').innerText`)));
   await b.click('[data-action=toggle-history-pane]');
   await b.reload(); await tab('flows');
-  ok('the order survives a reload', await flowNames() === 'Newborn first weeks | Flow A | Flow B | Appointment reminder', await flowNames());
+  ok('the order survives a reload', await flowNames() === 'Newborn first weeks | Flow B | Appointment reminder | Flow A', await flowNames());
 
   // ================= refer / duplicate / move a flow to a campaign =================
   await b.fresh();

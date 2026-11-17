@@ -52,9 +52,11 @@
     flow_out_removed: 'Removed an outgoing edge',
     flow_out_renamed: 'Renamed an edge',
     flow_action_renamed: 'Renamed an action',
+    flow_input_renamed: 'Renamed an input',
     flow_action_defined: 'Changed an action\'s definition',
     flow_timing_edited: 'Changed timing',
     flow_reordered: 'Moved in the flow list',
+    flow_list_moved: 'Moved in the flow list',
     flow_copied: 'Copied to campaign',          // older events; now flow_referred
     flow_referred: 'Shared with campaign',
     flow_duplicated: 'Duplicated to campaign',
@@ -696,8 +698,15 @@
   function flowItems(campaignId) {
     var items = flowsIn(campaignId).map(function (f) { return { kind: 'flow', flow: f }; });
     state.contents.forEach(function (c) { if (isImplicit(c, campaignId)) items.push({ kind: 'template', content: c }); });
-    return items;
+    var order = state.flowOrder || [];
+    items.forEach(function (it, i) {      // the shared order wins; anything not in it yet keeps its default place (flows, then templates) after
+      var k = itemKey(it.kind, it.kind === 'flow' ? it.flow.id : it.content.id), at = order.indexOf(k);
+      it.rank = at === -1 ? 1e6 + i : at;
+    });
+    items.sort(function (a, b) { return a.rank - b.rank; });
+    return items.map(function (it) { delete it.rank; return it; });
   }
+  function itemKey(kind, id) { return (kind === 'flow' ? 'f:' : 't:') + id; }
 
   function logFlow(f, action, extra) {
     var e = { id: state.nextId++, ts: clock().toISOString(), actor: CURRENT_USER, flowId: f.id, contentId: null, contentName: f.name, lang: null, action: action, before: null, after: null, detail: null };
@@ -1018,8 +1027,8 @@
   // ---- action nodes: a name and a definition in words ("Label the contact high-risk", ...) -------
   var ACTION_NAME_MAX = 60, ACTION_DEFINITION_MAX = 500;
 
-  function checkNodeName(f, name, exceptNodeId) {          // node names are shown in edges and history, so keep them distinct
-    if (!name) return 'Name the action';
+  function checkNodeName(f, name, exceptNodeId, what) {    // node names are shown in edges and history, so keep them distinct
+    if (!name) return 'Name the ' + (what || 'action');
     if (name.length > ACTION_NAME_MAX) return 'Keep the name to ' + ACTION_NAME_MAX + ' characters';
     var lower = name.toLowerCase();
     if (f.nodes.some(function (n) { return n.id !== exceptNodeId && nodeTitle(n).toLowerCase() === lower; })) return 'Another node in this flow is already called "' + name + '"';
@@ -1057,6 +1066,19 @@
   }
 
   // ---- input nodes: a plain node (nothing to fill in), numbered Input 1, Input 2, ... ----------
+  function renameInput(flowId, nodeId, name) {
+    var f = getFlow(flowId), node = f && getNode(f, nodeId);
+    if (!node || node.type !== 'input') return fail('Input node not found');
+    name = String(name == null ? '' : name).trim();
+    var err = checkNodeName(f, name, nodeId, 'input');
+    if (err) return fail(err);
+    if (name === node.title) return fail('No change');
+    var before = node.title;
+    node.title = name;
+    logFlow(f, 'flow_input_renamed', { before: before, after: name });
+    save();
+    return { ok: true };
+  }
   function addInputNode(flowId) {
     var f = getFlow(flowId);
     if (!f) return fail('Flow not found');
@@ -1155,15 +1177,27 @@
   function tplOrNode(f, id) { var n = getNode(f, id); return n ? nodeTitle(n) : id; }
 
   // The flow list is one global order; each campaign shows its flows in that order
-  function reorderFlow(flowId, targetId, place) {
-    var f = getFlow(flowId), t = getFlow(targetId);
-    if (!f || !t) return fail('Flow not found');
-    if (f === t) return fail('No change');
-    var before = state.flows.map(function (x) { return x.id; }).join();
-    state.flows.splice(state.flows.indexOf(f), 1);
-    state.flows.splice(state.flows.indexOf(t) + (place === 'after' ? 1 : 0), 0, f);
-    if (state.flows.map(function (x) { return x.id; }).join() === before) return fail('No change');
-    logFlow(f, 'flow_reordered', { detail: (place === 'after' ? 'after ' : 'before ') + t.name });
+  function reorderFlow(flowId, targetId, place) { return reorderFlowItem('flow', flowId, 'flow', targetId, place); }
+
+  // Every entry of the Flows list can be dragged among the others: the flows you created AND the templates that are
+  // flows by themselves. One shared order (state.flowOrder, keys 'f:<id>' / 't:<id>') covers all of them; each campaign
+  // shows its entries in that order.
+  function reorderFlowItem(kind, id, targetKind, targetId, place) {
+    var item = kind === 'flow' ? getFlow(id) : get(id), target = targetKind === 'flow' ? getFlow(targetId) : get(targetId);
+    if (!item || !target) return fail(kind === 'flow' ? 'Flow not found' : 'Template not found');
+    var key = itemKey(kind, id), tkey = itemKey(targetKind, targetId);
+    if (key === tkey) return fail('No change');
+    var all = flowItems(null).map(function (it) { return itemKey(it.kind, it.kind === 'flow' ? it.flow.id : it.content.id); });
+    state.contents.forEach(function (c) { var k = itemKey('template', c.id); if (all.indexOf(k) === -1) all.push(k); });   // templates that are in a flow now may be alone later
+    var before = all.join();
+    all.splice(all.indexOf(key), 1);
+    all.splice(all.indexOf(tkey) + (place === 'after' ? 1 : 0), 0, key);
+    if (all.join() === before) return fail('No change');
+    state.flowOrder = all;
+    state.flows.sort(function (a, b) { return all.indexOf(itemKey('flow', a.id)) - all.indexOf(itemKey('flow', b.id)); });   // keeps the stored flow order consistent
+    var tname = targetKind === 'flow' ? target.name : target.name, detail = (place === 'after' ? 'after ' : 'before ') + tname;
+    if (kind === 'flow') logFlow(item, 'flow_reordered', { detail: detail });
+    else log(item, null, 'flow_list_moved', { detail: detail });
     save();
     return { ok: true };
   }
@@ -1435,6 +1469,7 @@
     addTemplateNode: addTemplateNode,
     changeNodeTemplate: changeNodeTemplate,
     updateTemplateNode: updateTemplateNode,
+    renameInput: renameInput,
     placeholderNames: placeholderNames,
     nodeValues: nodeValues,
     addFlowNode: addFlowNode,
@@ -1456,6 +1491,7 @@
     disconnect: disconnect,
     updateLogic: updateLogic,
     reorderFlow: reorderFlow,
+    reorderFlowItem: reorderFlowItem,
     planFlowDrop: planFlowDrop,
     referFlow: referFlow,
     duplicateFlow: duplicateFlow,

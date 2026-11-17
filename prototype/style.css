@@ -581,3 +581,11 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .wa-btns { display: flex; flex-direction: column; gap: 2px; max-width: 88%; margin-top: 2px; }
 .wa-btn { padding: 8px; text-align: center; background: var(--wa-bubble); color: var(--wa-btn-text); border-radius: 6px; font-size: 13px; font-weight: 500; box-shadow: 0 1px 1px var(--shadow); overflow-wrap: anywhere; }
 .phone-note { margin-top: 12px; text-align: center; }
+
+/* template node in edit mode: a read-only phone beside it, gone when the edit ends */
+.node-preview { position: absolute; left: calc(100% + 20px); top: 0; width: 316px; z-index: 26; cursor: default; }
+.np-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.np-langs { display: inline-flex; gap: 2px; margin-left: auto; }
+.np-lang { padding: 0 6px; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+.np-lang.on { background: var(--accent-soft); border-radius: 4px; }
+.node-preview .wa-chat { min-height: 220px; }

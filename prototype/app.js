@@ -168,7 +168,7 @@
       var isFlow = it.kind === 'flow', id = isFlow ? it.flow.id : it.content.id;
       var on = ui.flowSel && ui.flowSel.kind === it.kind && ui.flowSel.id === id;
       return '<li class="content-item flow-item' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '">' +
-        '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + (isFlow ? 'Drag to reorder, or onto a campaign to copy or move it' : 'Drag onto a campaign to copy or move it') + '">' + ICON_GRIP + '</span>' +
+        '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + 'Drag to reorder, or onto a campaign to copy or move it' + '">' + ICON_GRIP + '</span>' +
         '<div class="ci-body"><div class="name">' + esc(isFlow ? it.flow.name : it.content.name) + (isFlow ? '' : ' ' + FLOW_IND) + '</div>' +
         '<div class="flow-meta">' + esc(isFlow ? S.timingText(it.flow.timing) + ' · ' + flowSummary(it.flow) : S.timingText(it.content.timing)) + '</div></div></li>';
     }).join('');
@@ -546,13 +546,14 @@
     else if (e.action === 'flow_out_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_out_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_out_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
+    else if (e.action === 'flow_input_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_action_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_action_defined') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
     else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_step_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">· was ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_steps_reordered') body = diffHtml(e.before, e.after);
     else if (e.action === 'flow_timing_edited') body = diffHtml(e.before, e.after);
-    else if (e.action === 'flow_reordered') body = esc(e.detail);
+    else if (e.action === 'flow_reordered' || e.action === 'flow_list_moved') body = esc(e.detail);
     else if (e.action === 'flow_copied' || e.action === 'flow_referred') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_duplicated') body = 'Duplicated as <strong>' + esc(e.after) + '</strong> <span class="muted">in ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
@@ -715,6 +716,7 @@
           var orig = S.getNode(S.getFlow(flow), node);
           ui.nodeEdit.draft.templateId = id;
           ui.nodeEdit.draft.values = orig && orig.templateId === id ? Object.assign({}, orig.values || {}) : {};
+          delete ui.nodeEdit.draft.previewLang;
         } else ui.nodeEdit.draft.flowId = id;
       }
       ui.focusNext = '.fnode.editing .node-save';
@@ -740,11 +742,12 @@
     });
   }
 
-  var EDITABLE = { template: true, flow: true, action: true, logic: true };   // input nodes have nothing to edit
+  var EDITABLE = { template: true, flow: true, action: true, logic: true, input: true };
 
   function draftOfNode(n) {
     if (n.type === 'template') return { templateId: n.templateId, values: Object.assign({}, n.values || {}) };
     if (n.type === 'flow') return { flowId: n.flowId };
+    if (n.type === 'input') return { title: n.title };
     if (n.type === 'action') return { name: n.name, definition: n.definition };
     return { outs: n.outs.map(function (o) { return { id: o.id, label: o.label }; }) };
   }
@@ -809,6 +812,10 @@
         body = '<div class="fnode-body view"><div class="view-row"><strong class="view-name">' + esc(title) + '</strong></div>' +
           (n.definition ? '<div class="view-def">' + esc(n.definition) + '</div>' : '') + '</div>';
       }
+    } else if (n.type === 'input') {
+      if (editing) {
+        body = '<div class="fnode-body"><label class="fld"><span>Name</span><input class="field" data-edit="title" data-first value="' + esc(d.title) + '" autocomplete="off"></label></div>';
+      }
     } else if (n.type === 'logic') {
       if (editing) {
         var single = d.outs.length <= 1;
@@ -829,7 +836,8 @@
       (editing ? '' : '<button class="node-x" data-action="node-remove" ' + attrs + ' aria-label="Remove ' + esc(title) + '" title="Remove this node">×</button>') +
       '<span class="port in" ' + attrs + ' data-port="in" title="Edges end here"></span>' +
       head + body +
-      (n.type === 'logic' ? '' : '<span class="port out" ' + attrs + ' data-port="out" title="Drag onto another node to connect"></span>') + '</div>';
+      (n.type === 'logic' ? '' : '<span class="port out" ' + attrs + ' data-port="out" title="Drag onto another node to connect"></span>') +
+      (editing && n.type === 'template' ? nodePreviewHtml(d) : '') + '</div>';
   }
 
   // ---- editing a node: edit, then ✓ save or ✕ cancel. Nothing else can be used meanwhile. ----------
@@ -848,6 +856,7 @@
     if (!e) return;
     var r = e.type === 'template' ? S.updateTemplateNode(e.flow, e.node, { templateId: e.draft.templateId, values: e.draft.values })
       : e.type === 'flow' ? S.changeNodeFlow(e.flow, e.node, e.draft.flowId)
+      : e.type === 'input' ? S.renameInput(e.flow, e.node, e.draft.title)
       : e.type === 'action' ? S.updateAction(e.flow, e.node, { name: e.draft.name, definition: e.draft.definition })
       : S.updateLogic(e.flow, e.node, e.draft.outs);
     if (r.ok || r.error === 'No change') {           // saved (or nothing changed): back to reading mode
@@ -1132,7 +1141,7 @@
     var edit = t.getAttribute && t.getAttribute('data-edit');
     if (edit && ui.nodeEdit) {
       if (edit === 'out') ui.nodeEdit.draft.outs[parseInt(t.getAttribute('data-i'), 10)].label = t.value;
-      else if (edit === 'value') ui.nodeEdit.draft.values[t.getAttribute('data-name')] = t.value;
+      else if (edit === 'value') { ui.nodeEdit.draft.values[t.getAttribute('data-name')] = t.value; refreshNodePreview(); }
       else ui.nodeEdit.draft[edit] = t.value;
       return;
     }
@@ -1355,9 +1364,8 @@
     return out + waFormat(esc(text.slice(last)));
   }
   var HEADER_ICON = { image: '🖼', video: '▶', document: '📄' };
-  function previewHtml(d) {
-    var c = S.get(d.contentId), p = d.parts, tr = c && S.getTr(c, d.lang);
-    if (!c || !tr) return '';
+  // The phone with the message in it: the template's header type + these parts (header, text, defaults, footer, buttons)
+  function phoneHtml(c, p) {
     var head = '';
     if (c.headerType !== 'none') {
       var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
@@ -1368,20 +1376,44 @@
       var url = b.type === 'URL';
       return '<div class="wa-btn">' + (url ? '<span aria-hidden="true">↗</span> ' : '<span aria-hidden="true">↩</span> ') + esc(b.text || (url ? 'URL button' : 'Quick reply')) + '</div>';
     }).join('');
+    return '<div class="phone" aria-label="Phone showing the WhatsApp message">' +
+      '<div class="phone-bar"><span>9:41</span><span class="phone-icons" aria-hidden="true">▂▄▆ ▮</span></div>' +
+      '<div class="wa-head"><span aria-hidden="true">‹</span><span class="wa-avatar" aria-hidden="true">N</span><div><div class="wa-contact">Noora Health</div><div class="wa-sub">Business account</div></div></div>' +
+      '<div class="wa-chat"><div class="wa-bubble" data-preview="bubble">' + head + body +
+        (p.footer ? '<div class="wa-foot">' + esc(p.footer) + '</div>' : '') +
+        '<div class="wa-time">9:41</div></div>' + (buttons ? '<div class="wa-btns">' + buttons + '</div>' : '') + '</div></div>';
+  }
+  function previewHtml(d) {
+    var c = S.get(d.contentId), p = d.parts, tr = c && S.getTr(c, d.lang);
+    if (!c || !tr) return '';
     return '<div class="modal-backdrop" data-action="dialog-backdrop">' +
       '<div class="modal modal-phone" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
       '<div class="dlg-head"><h2 id="dlg-title">Preview · ' + esc(S.langName(d.lang)) + ' <code>' + esc(d.lang) + '</code></h2>' +
       '<button class="btn dlg-close" data-action="dialog-cancel" aria-label="Close preview">Close</button></div>' +
-      '<div class="phone" aria-label="Phone showing the WhatsApp message">' +
-        '<div class="phone-bar"><span>9:41</span><span class="phone-icons" aria-hidden="true">▂▄▆ ▮</span></div>' +
-        '<div class="wa-head"><span aria-hidden="true">‹</span><span class="wa-avatar" aria-hidden="true">N</span><div><div class="wa-contact">Noora Health</div><div class="wa-sub">Business account</div></div></div>' +
-        '<div class="wa-chat"><div class="wa-bubble" data-preview="bubble">' + head + body +
-          (p.footer ? '<div class="wa-foot">' + esc(p.footer) + '</div>' : '') +
-          '<div class="wa-time">9:41</div></div>' + (buttons ? '<div class="wa-btns">' + buttons + '</div>' : '') + '</div>' +
-      '</div>' +
+      phoneHtml(c, p) +
       '<div class="muted small phone-note">Placeholders show their default values; one without a default is marked. ' + (d.role === 'ref' ? 'This is the saved reference text.' : 'Unsaved edits are included.') + '</div>' +
       '</div></div>';
   }
+  // While a template node is edited: a read-only phone beside the node showing the message with this node's values
+  // (draft values over the template's defaults), updated as you type or pick; it exists only while the node is edited.
+  function nodePreviewHtml(d) {
+    var c = S.get(d.templateId);
+    if (!c) return '';
+    var withText = c.translations.filter(function (t) { return t.text.trim(); })[0];
+    var lang = d.previewLang && S.getTr(c, d.previewLang) ? d.previewLang : (withText || c.translations[0]).lang;
+    var p = S.cloneParts(S.partsOf(S.getTr(c, lang)));
+    Object.keys(d.values || {}).forEach(function (k) { var v = String(d.values[k]).trim(); if (v) p.defaults[k] = v; });
+    return '<aside class="node-preview" aria-label="Preview of this node\'s message (read-only)">' +
+      '<div class="np-head"><span class="muted small">Preview · read-only</span><span class="np-langs">' +
+      c.translations.map(function (t) {
+        return '<button type="button" class="btn link np-lang' + (t.lang === lang ? ' on' : '') + '" data-action="node-preview-lang" data-lang="' + t.lang + '" aria-pressed="' + (t.lang === lang) + '" title="' + esc(S.langName(t.lang)) + '">' + esc(t.lang) + '</button>';
+      }).join('') + '</span></div>' + phoneHtml(c, p) + '</aside>';
+  }
+  function refreshNodePreview() {                 // after a value was typed: only the preview changes, never the field being typed in
+    var el = document.querySelector('.fnode.editing .node-preview');
+    if (el && ui.nodeEdit) el.outerHTML = nodePreviewHtml(ui.nodeEdit.draft);
+  }
+
   function openPreview(lang, role) {
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang);
     if (!tr) return;
@@ -1430,7 +1462,8 @@
   // ---- drag and drop ------------------------------------------------------------------
   // What can be dragged (always by its grip handle):
   //   a template, or a template that is a flow by itself -> onto a campaign: Copy / Move / Cancel dialog
-  //   a flow you created                                  -> onto a campaign (same dialog), or onto another flow to reorder
+  //   a flow you created                                  -> onto a campaign (same dialog)
+  //   either of them                                      -> above / below another entry of the Flows list to reorder
   function dropTarget(ev) {
     var b = ev.target.closest && ev.target.closest('.camp-item');
     return b && b.getAttribute('data-id') ? b : null;     // "All content" is not a target
@@ -1461,10 +1494,8 @@
     if (!d) return null;
     var camp = dropTarget(ev);
     if (camp && (d.kind === 'content' || d.kind === 'flow')) return { type: 'campaign', el: camp };
-    if (d.kind === 'flow') {
-      var fi = ev.target.closest && ev.target.closest('.flow-item[data-kind="flow"]');
-      if (fi && fi.getAttribute('data-id') !== d.id) return { type: 'flow', el: fi, place: placeOf(ev, fi) };
-    }
+    var fi = ev.target.closest && ev.target.closest('.flow-item');      // anything in the Flows list can be moved among the others
+    if (fi && (d.kind === 'flow' || d.kind === 'content') && !(fi.getAttribute('data-id') === d.id && fi.getAttribute('data-kind') === (d.kind === 'flow' ? 'flow' : 'template'))) return { type: 'flow', el: fi, place: placeOf(ev, fi) };
     return null;
   }
   function dragOverTarget(ev) {
@@ -1493,7 +1524,7 @@
       if (drag.kind === 'flow') openFlowDialog(drag.id, spot.el.getAttribute('data-id'));
       else openDropDialog(drag.id, spot.el.getAttribute('data-id'));
     } else {                                   // reorder: put the flow before/after the one it was dropped on
-      result(S.reorderFlow(drag.id, spot.el.getAttribute('data-id'), spot.place));
+      result(S.reorderFlowItem(drag.kind === 'flow' ? 'flow' : 'template', drag.id, spot.el.getAttribute('data-kind'), spot.el.getAttribute('data-id'), spot.place));
       render();
     }
   });
@@ -1663,6 +1694,7 @@
       }
       case 'node-remove': result(S.removeNode(el.getAttribute('data-flow'), el.getAttribute('data-node'))); break;
       case 'flow-direction': result(S.setFlowDirection(el.closest('.flow-toolbar') ? document.getElementById('canvas').getAttribute('data-flow') : '', el.getAttribute('data-dir'))); break;
+      case 'node-preview-lang': if (ui.nodeEdit) { ui.nodeEdit.draft.previewLang = el.getAttribute('data-lang'); render(); } return;
       case 'node-save': saveNodeEdit(); return;
       case 'node-cancel': cancelNodeEdit(); return;
       case 'edit-out-add': {                 // a new edge, named Condition N (the first number not used by this node's edges)

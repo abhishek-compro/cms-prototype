@@ -807,3 +807,58 @@ test('a duplicate keeps the direction and both layouts; new nodes in a top-down 
   const n = S.addLogicNode(g.id).node;
   assert.deepEqual([n.x, n.y], [40, 40]);
 });
+
+// ---------------------------------------------------------------- input nodes can be named
+test('renameInput: trimmed, required, unique among the flow\'s node names, up to 60 characters, "no change", logged; edges and position stay', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks'), n = node(S, f, 'Input 1'), pos = [n.x, n.y], nxt = n.next;
+  assert.equal(S.renameInput(f.id, n.id, '  Family phone  ').ok, true);
+  assert.equal(S.nodeTitle(n), 'Family phone');
+  assert.deepEqual([n.x, n.y, n.next], [pos[0], pos[1], nxt]);
+  assert.deepEqual([last(S, f).action, last(S, f).before, last(S, f).after], ['flow_input_renamed', 'Input 1', 'Family phone']);
+  assert.equal(S.renameInput(f.id, n.id, 'Family phone').error, 'No change');
+  assert.match(S.renameInput(f.id, n.id, '   ').error, /Name the input/);
+  assert.match(S.renameInput(f.id, n.id, 'welcome MESSAGE').error, /already called/, 'a template node\'s name counts');
+  assert.match(S.renameInput(f.id, n.id, 'alert health worker').error, /already called/, 'so does an action\'s');
+  assert.match(S.renameInput(f.id, n.id, 'x'.repeat(61)).error, /60 characters/);
+  assert.match(S.renameInput(f.id, node(S, f, 'Logic 1').id, 'x').error, /Input node not found/);
+  assert.equal(S.nodeTitle(n), 'Family phone', 'refused renames change nothing');
+  assert.ok(S.addInputNode(f.id).ok);
+  assert.equal(S.nodeTitle(f.nodes[f.nodes.length - 1]), 'Input 1', 'the freed number is used again');
+});
+
+// ---------------------------------------------------------------- one order for everything in the Flows list
+test('reorderFlowItem: flows and templates that are flows by themselves are moved among each other in one shared order, per campaign views follow it', () => {
+  const S = fresh();
+  const a = S.createFlow('Flow A', 'k2').flow, b2 = S.createFlow('Flow B', 'k2').flow;
+  const names = k => listing(S, k);
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow A', 'F:Flow B', 'T:Appointment reminder'], 'default: flows, then single-template flows');
+  const appt = tpl(S, 'Appointment reminder');
+  assert.equal(S.reorderFlowItem('template', appt.id, 'flow', a.id, 'before').ok, true);
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'T:Appointment reminder', 'F:Flow A', 'F:Flow B']);
+  assert.deepEqual(names('k2'), ['T:Appointment reminder', 'F:Flow A', 'F:Flow B'], 'a campaign shows its own entries in that order');
+  assert.equal(S.reorderFlowItem('flow', b2.id, 'template', appt.id, 'before').ok, true);
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow B', 'T:Appointment reminder', 'F:Flow A']);
+  assert.deepEqual(S.listFlows().map(f => f.name), ['Newborn first weeks', 'Flow B', 'Flow A'], 'the stored flow order agrees');
+  assert.equal(S.reorderFlowItem('flow', a.id, 'template', appt.id, 'after').error, 'No change', 'already there');
+  assert.equal(S.reorderFlowItem('flow', a.id, 'flow', a.id, 'before').error, 'No change');
+  assert.match(S.reorderFlowItem('flow', 'nope', 'flow', a.id, 'before').error, /not found/);
+  assert.match(S.reorderFlowItem('template', 'nope', 'flow', a.id, 'before').error, /not found/);
+  assert.equal(last(S, b2).action, 'flow_reordered');
+  assert.equal(S.historyFor(appt.id, 'content')[0].action, 'flow_list_moved', 'a template\'s move is in its Other history');
+  assert.equal(S.reorderFlow(a.id, b2.id, 'before').ok, true, 'reorderFlow is still there');
+  assert.deepEqual(names(null).filter(x => x.startsWith('F:')), ['F:Newborn first weeks', 'F:Flow A', 'F:Flow B']);
+});
+
+test('the shared order keeps a template that joins a flow and later is alone again where you put it', () => {
+  const S = fresh();
+  const w = tpl(S, 'Welcome message'), f = flow(S, 'Newborn first weeks'), appt = tpl(S, 'Appointment reminder');
+  S.reorderFlowItem('template', appt.id, 'flow', f.id, 'before');
+  S.removeNode(f.id, node(S, f, 'Welcome message').id);
+  assert.deepEqual(listing(S, 'k1'), ['F:Newborn first weeks', 'T:Welcome message']);
+  S.reorderFlowItem('template', w.id, 'flow', f.id, 'before');
+  assert.deepEqual(listing(S, 'k1'), ['T:Welcome message', 'F:Newborn first weeks']);
+  S.addTemplateNode(f.id, w.id);
+  S.removeNode(f.id, f.nodes.find(n => n.type === 'template' && n.templateId === w.id).id);
+  assert.deepEqual(listing(S, 'k1'), ['T:Welcome message', 'F:Newborn first weeks'], 'back alone: still where it was put');
+});
