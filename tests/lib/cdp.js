@@ -1,0 +1,151 @@
+// Minimal Chrome DevTools Protocol driver: real mouse, keyboard and drag input against the prototype.
+// No dependencies: needs Node 22+ (global WebSocket and fetch) and a Chromium/Chrome binary.
+//   CHROMIUM=/path/to/chrome   overrides the binary lookup
+'use strict';
+const { spawn, spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function findChrome() {
+  const candidates = [process.env.CHROMIUM, 'chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'].filter(Boolean);
+  for (const c of candidates) {
+    const r = spawnSync(c, ['--version'], { stdio: 'ignore' });
+    if (!r.error && r.status === 0) return c;
+  }
+  return null;
+}
+
+/** Why UI tests cannot run here, or null when they can. */
+function unavailableReason() {
+  if (typeof WebSocket === 'undefined') return 'needs Node 22+ (global WebSocket)';
+  if (!findChrome()) return 'no Chromium/Chrome found (install one, or set CHROMIUM=/path/to/chrome)';
+  return null;
+}
+
+async function launch(url, scheme = 'light', size = '1500,1300') {
+  const chrome = findChrome();
+  const userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cms-tests-chrome-'));
+  const proc = spawn(chrome, [
+    '--headless=new', '--no-sandbox', '--disable-gpu', '--allow-file-access-from-files',
+    '--remote-debugging-port=0', `--user-data-dir=${userDir}`, `--window-size=${size}`, 'about:blank'
+  ], { stdio: 'ignore' });
+
+  // port 0 = pick a free port; Chrome writes it to DevToolsActivePort (so parallel runs never collide)
+  let port = null;
+  for (let i = 0; i < 100 && !port; i++) {
+    try { port = parseInt(fs.readFileSync(path.join(userDir, 'DevToolsActivePort'), 'utf8').split('\n')[0], 10); } catch (e) { await sleep(100); }
+  }
+  if (!port) { proc.kill(); throw new Error('Chrome did not start (no DevToolsActivePort)'); }
+
+  let targets;
+  for (let i = 0; i < 50; i++) {
+    try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); if (targets.some(t => t.type === 'page')) break; } catch (e) { /* retry */ }
+    await sleep(100);
+  }
+  const ws = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
+  await new Promise(r => { ws.onopen = r; });
+
+  let id = 0, dragData = null;
+  const pending = {}, errors = [];
+  ws.onmessage = m => {
+    const d = JSON.parse(m.data);
+    if (d.id && pending[d.id]) pending[d.id](d);
+    else if (d.method === 'Input.dragIntercepted') dragData = d.params.data;
+    else if (d.method === 'Runtime.exceptionThrown') {
+      const x = d.params.exceptionDetails;
+      errors.push((x.exception && x.exception.description) || x.text);
+    } else if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') {
+      errors.push('console.error: ' + d.params.args.map(a => a.value || a.description).join(' '));
+    }
+  };
+  const send = (method, params = {}) => new Promise(r => { const i = ++id; pending[i] = r; ws.send(JSON.stringify({ id: i, method, params })); });
+
+  await send('Runtime.enable');
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+  await send('Page.enable');
+  await send('Page.navigate', { url });
+  await sleep(800);
+
+  const api = {
+    errors,
+    sleep,
+    /** Evaluate an expression in the page and return its (JSON-able) value. */
+    ev: async expr => {
+      const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+      if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails));
+      return r.result.result.value;
+    },
+    reload: async () => { await api.ev('location.reload(); 0'); await sleep(900); },
+    /** Wipe saved data and reload: the page starts from the sample data again. */
+    fresh: async () => { await api.ev('localStorage.clear(); 0'); await api.reload(); },
+    setScheme: v => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: v }] }),
+    center: sel => api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); if(!e) return null; e.scrollIntoView({block:'center',inline:'nearest'}); var r=e.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2];})()`),
+    click: async sel => {
+      const c = await api.center(sel);
+      if (!c) throw new Error('click: no element ' + sel);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c[0], y: c[1] });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c[0], y: c[1], button: 'left', clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c[0], y: c[1], button: 'left', clickCount: 1 });
+      await sleep(80);
+    },
+    clickAt: async (x, y) => {
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+      await sleep(80);
+    },
+    /** Type into the focused element (replaces the selection). */
+    type: async text => { await send('Input.insertText', { text }); await sleep(60); },
+    key: async (key, code, vk) => {
+      // Enter/Space need a char payload so the browser performs its default action (e.g. activating a focused button)
+      const text = key === 'Enter' ? '\r' : key === ' ' ? ' ' : undefined;
+      for (const type of ['keyDown', 'keyUp']) {
+        await send('Input.dispatchKeyEvent', Object.assign({ type, key, code: code || key, windowsVirtualKeyCode: vk || 0 }, type === 'keyDown' && text ? { text } : {}));
+      }
+      await sleep(80);
+    },
+    /** Select all text in a field and type over it (Backspace for an empty string). */
+    fill: async (sel, text) => {
+      await api.ev(`(function(){var e=document.querySelector(${JSON.stringify(sel)}); e.focus(); e.select(); return 1})()`);
+      if (text === '') await api.key('Backspace', 'Backspace', 8); else await api.type(text);
+    },
+    /** Real mouse drag: press on `from`, move to `to`, replay the intercepted drag as dragEnter/dragOver/drop, release. */
+    drag: async (fromSel, toSel, opts = {}) => {
+      const a = await api.center(fromSel), t = await api.center(toSel);
+      if (!a || !t) throw new Error('drag: missing ' + (a ? toSel : fromSel));
+      dragData = null;
+      await send('Input.setInterceptDrags', { enabled: true });
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a[0], y: a[1] });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a[0], y: a[1], button: 'left', clickCount: 1 });
+      for (let i = 1; i <= 8; i++) {
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a[0] + (t[0] - a[0]) * i / 8, y: a[1] + (t[1] - a[1]) * i / 8, button: 'left', buttons: 1 });
+        if (dragData) break;
+      }
+      for (let i = 0; i < 30 && !dragData; i++) await sleep(50);
+      if (!dragData) {
+        await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
+        await send('Input.setInterceptDrags', { enabled: false });
+        throw new Error('drag was not intercepted (dragstart did not start a drag)');
+      }
+      await send('Input.dispatchDragEvent', { type: 'dragEnter', x: t[0], y: t[1], data: dragData });
+      await send('Input.dispatchDragEvent', { type: 'dragOver', x: t[0], y: t[1], data: dragData });
+      if (opts.hold) await opts.hold();
+      await send('Input.dispatchDragEvent', { type: opts.cancel ? 'dragCancel' : 'drop', x: t[0], y: t[1], data: dragData });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
+      await send('Input.setInterceptDrags', { enabled: false });
+      await sleep(150);
+    },
+    /** PNG screenshot, e.g. when debugging a failing test. */
+    shot: async file => { const s = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(file, Buffer.from(s.result.data, 'base64')); },
+    close: () => {
+      try { ws.close(); } catch (e) { /* ignore */ }
+      proc.kill();
+      try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    }
+  };
+  return api;
+}
+
+module.exports = { launch, findChrome, unavailableReason };

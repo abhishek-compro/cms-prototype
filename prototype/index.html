@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content Studio (prototype)</title>
+  <script>
+    // Apply the saved theme before first paint (no flash). No attribute = follow the OS ("System").
+    try { var t = localStorage.getItem('cms-prototype-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="store.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "content-studio-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Clickable prototype for the WhatsApp template content platform (open prototype/index.html). This file only exists to run the tests; there is nothing to install or build.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/",
+    "test:unit": "node --test tests/unit/",
+    "test:ui": "node --test --test-concurrency=1 tests/ui/"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
