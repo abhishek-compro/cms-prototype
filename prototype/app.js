@@ -14,6 +14,7 @@
     editLang: null,      // language being edited (also the active tab when side-by-side is off)
     historyOpen: false,  // right sidebar visible (hidden by default)
     histSubject: 'edit', // side-by-side: whose history the sidebar shows ('edit' | 'ref')
+    treeDetails: {},     // Tree tab: ids of the steps whose details are open
     treeOpen: false,     // sidebar tab 'Tree' selected (the undo tree with rewind)
     nameOpen: false,     // sidebar tab 'Other' selected (name-level events) instead of a language tab
     search: '',
@@ -553,7 +554,7 @@
     }).join('');
   }
 
-  function eventHtml(e, compact) {
+  function eventBody(e) {
     var body = '';
     if (e.action === 'text_edited') body = diffHtml(e.before, e.after);
     else if (e.action === 'renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
@@ -589,6 +590,10 @@
     else if (e.action === 'rewound') body = 'Back to <strong>' + esc(eventTitle(S.eventOf(e.to))) + '</strong> <span class="muted">· from ' + esc(eventTitle(S.eventOf(e.from))) + '</span>';
     else if (e.action === 'campaign_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
+    return body;
+  }
+  function eventHtml(e, compact) {
+    var body = eventBody(e);
     return '<li class="event act-' + e.action + '"><div class="event-head">' +
       '<strong>' + esc(e.action === 'part_edited' ? 'Edited ' + String(e.detail).toLowerCase() : (S.ACTION_LABELS[e.action] || e.action)) + '</strong>' +
       (e.lang && !compact ? '<span class="chip">' + esc(S.langName(e.lang)) + '</span>' : '') +
@@ -645,18 +650,35 @@
     parts.push('<circle class="' + cls + '" cx="' + x(lane) + '" cy="' + TREE_MID + '" r="' + (row.isHead ? 6 : 4.5) + '"/>');
     return '<svg class="tree-graph" width="' + (x(width - 1) + 9) + '" height="' + TREE_H + '" aria-hidden="true">' + parts.join('') + '</svg>';
   }
+  // The lanes that run on past a step (drawn behind its details so the graph stays unbroken while they are open)
+  function treeThrough(row, width) {
+    var x = TREE_X, parts = [];
+    row.after.forEach(function (target, k) { if (target != null) parts.push('<line class="l' + (k % 6) + '" x1="' + x(k) + '" y1="0" x2="' + x(k) + '" y2="100%"/>'); });
+    return '<svg class="tree-graph through" width="' + (x(width - 1) + 9) + '" height="100%" aria-hidden="true">' + parts.join('') + '</svg>';
+  }
+  function treeDetailsHtml(row, width) {
+    var e = row.event, body = eventBody(e);
+    return '<div class="tree-detail" id="tree-detail-' + e.id + '" style="--tree-gutter:' + (TREE_X(width - 1) + 15) + 'px">' + treeThrough(row, width) + '<div class="tree-detail-body">' +
+      '<div class="tree-detail-head"><strong>' + esc(eventTitle(e)) + '</strong>' + (e.lang ? ' <span class="chip">' + esc(S.langName(e.lang)) + '</span>' : '') + '</div>' +
+      '<div class="muted small">' + esc(S.ACTION_LABELS[e.action] || e.action) + ' · by ' + esc(e.actor) + ' · ' + esc(fmtTime(e.ts)) + '</div>' +
+      (body ? '<div class="event-body">' + body + '</div>' : '') +
+      (row.isHead ? '<div class="muted small">This is the current step.</div>' : row.problem ? '<div class="muted small">Cannot rewind here: ' + esc(row.problem) + '.</div>' : '') +
+      '</div></div>';
+  }
   function treeHtml(c) {
     var tree = S.historyTree(c.id), dirty = c.translations.some(function (t) { return isDirty(c, t); });
-    var help = '<div class="muted small tree-help">Every change is a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a content step; publishing, renaming, campaigns and timing are shown but cannot be rewound to. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one.</div>';
+    var help = '<div class="muted small tree-help">Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.</div>';
     if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
-    return help + '<ol class="tree" aria-label="History tree, newest first">' + tree.rows.map(function (row) {
+    return help + '<ol class="tree" aria-label="Content history tree, newest first">' + tree.rows.map(function (row) {
       var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
-      var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts);
-      return '<li class="tree-row' + (row.isHead ? ' current' : '') + (row.content ? '' : ' meta-step') + '" data-event="' + e.id + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
+      var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts), open = !!ui.treeDetails[e.id];
+      return '<li class="tree-item' + (open ? ' open' : '') + '" data-event="' + e.id + '"><div class="tree-row' + (row.isHead ? ' current' : '') + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
         '<span class="tree-what">' + esc(what) + '</span>' +
-        (row.isHead ? '<span class="tree-cur" title="The template is as it was after this step">current</span>' : '') +
+        (row.isHead ? '<span class="tree-cur" title="The content is as it was after this step">current</span>' : '') +
         '<span class="tree-meta">' + esc(e.actor) + ' · ' + esc(shortTime(e.ts)) + '</span>' +
-        (row.isHead || !row.content ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the template back as it was after this step') + '">Rewind</button>') + '</li>';
+        '<button class="btn link tree-details" data-action="tree-detail" data-event="' + e.id + '" aria-expanded="' + open + '" aria-controls="tree-detail-' + e.id + '" aria-label="Details of: ' + esc(what) + '">Details</button>' +
+        (row.isHead ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the content back as it was after this step') + '">Rewind</button>') +
+        '</div>' + (open ? treeDetailsHtml(row, tree.width) : '') + '</li>';
     }).join('') + '</ol>';
   }
 
@@ -690,9 +712,9 @@
     if (active === 'tree') {
       body = treeHtml(c);
     } else if (active === 'other') {
-      var names = S.historyFor(c.id, 'content');
-      body = '<div class="muted small" style="margin-bottom:12px">Not tied to a language: created, renamed, approval blocked/allowed, header type changed, timing changed, rewound, copied or moved between campaigns.</div>' +
-        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
+      var names = S.historyFor(c.id, 'activity');
+      body = '<div class="muted small" style="margin-bottom:12px">Other activity, one after the other: published, renamed, approval blocked/allowed, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Tree</strong>.</div>' +
+        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, false); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     } else {
       var events = S.historyFor(c.id, lang);
       body = events.length
@@ -1844,6 +1866,13 @@
         else if (tab === 'other') { ui.nameOpen = true; ui.treeOpen = false; }
         else { ui.nameOpen = false; ui.treeOpen = false; ui.histSubject = tab; }
         updateHistoryPane();
+        return;
+      }
+      case 'tree-detail': {
+        var did = el.getAttribute('data-event');
+        if (ui.treeDetails[did]) delete ui.treeDetails[did]; else ui.treeDetails[did] = true;
+        updateHistoryPane();
+        var again = document.querySelector('.tree-details[data-event="' + did + '"]'); if (again) again.focus();
         return;
       }
       case 'rewind': {

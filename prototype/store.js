@@ -450,6 +450,7 @@
     return state.history.filter(function (e) {
       if (e.contentId !== contentId) return false;
       if (lang === 'content') return e.lang === null; // name-level events only (create, rename, block)
+      if (lang === 'activity') return !isContentStep(e); // everything that is not a content change (published, renamed, blocked, campaigns, timing)
       return !lang || lang === 'all' ? true : e.lang === lang;
     }).sort(function (a, b) { return a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : b.id - a.id; });
   }
@@ -523,13 +524,21 @@
     save();
     return { ok: true };
   }
-  // The tree for the sidebar, newest first, with the lanes of a "git log --graph": row.lane is the column of the node,
-  // row.before / row.after the event id each column is waiting for above / below the node (null = free), row.merge the columns that end here.
+  // The tree for the sidebar: only CONTENT steps (the other activity is a plain list). Newest first, with the lanes of a
+  // "git log --graph": row.lane is the column of the node, row.before / row.after the event id each column is waiting for above /
+  // below the node (null = free), row.merge the columns that end here. A step's parent in the tree is its nearest content ancestor
+  // (a publish or rename in between is skipped); the current marker is on the nearest content step at or above content.head.
+  function contentParent(e) {
+    var p = e.parent;
+    while (p != null) { var pe = eventOf(p); if (!pe) return null; if (isContentStep(pe)) return pe.id; p = pe.parent; }
+    return null;
+  }
   function historyTree(contentId) {
     var c = get(contentId);
     if (!c) return { rows: [], width: 0, head: null };
-    var events = state.history.filter(function (e) { return e.contentId === contentId; }).sort(function (a, b) { return b.id - a.id; });
-    var ids = {}; events.forEach(function (e) { ids[e.id] = true; });
+    var events = state.history.filter(function (e) { return e.contentId === contentId && isContentStep(e); }).sort(function (a, b) { return b.id - a.id; });
+    var head = null, h = c.head;
+    while (h != null) { var he = eventOf(h); if (!he) break; if (isContentStep(he)) { head = he.id; break; } h = he.parent; }
     var lanes = [], width = 0;
     var rows = events.map(function (e) {
       var before = lanes.slice(), mine = [];
@@ -537,13 +546,13 @@
       var lane = mine.length ? mine[0] : lanes.indexOf(null);
       if (lane === -1) { lane = lanes.length; lanes.push(null); }
       mine.forEach(function (k) { lanes[k] = null; });
-      lanes[lane] = e.parent != null && ids[e.parent] ? e.parent : null;
+      lanes[lane] = contentParent(e);
       while (lanes.length && lanes[lanes.length - 1] === null && lanes.length > lane + 1) lanes.pop();
-      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === c.head, content: isContentStep(e), problem: rewindProblem(contentId, e.id) };
+      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === head, problem: rewindProblem(contentId, e.id) };
       width = Math.max(width, before.length, lanes.length, lane + 1);
       return row;
     });
-    return { rows: rows, width: width, head: c.head };
+    return { rows: rows, width: width, head: head };
   }
 
   // ---- Operations ------------------------------------------------------------
@@ -1720,6 +1729,7 @@
     blockProblem: blockProblem,
     historyFor: historyFor,
     historyTree: historyTree,
+    isContentStep: isContentStep,
     rewind: rewind,
     rewindProblem: rewindProblem,
     eventOf: eventOf,

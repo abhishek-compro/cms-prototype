@@ -10,20 +10,41 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   const body = () => b.ev(`document.querySelector('.panel.edit [data-input=text]').value`);
   const eventsCount = () => b.ev(`Store.historyFor(Store.list()[0].id,'all').length`);
   const saveText = async t => { await b.fill('.panel.edit [data-input=text]', t); await b.click('.panel.edit .save'); };
-  const rewindBtn = i => `.tree-row:nth-child(${i}) [data-action=rewind]`;
+  const rewindBtn = i => `.tree-item:nth-child(${i}) [data-action=rewind]`;
 
   await b.click('[data-action=toggle-history-pane]');
   ok('the sidebar has a Tree tab after the language tab and Other', await b.ev(`[].map.call(document.querySelectorAll('.hp-tab'), function(t){return t.textContent.trim()}).join('|')`) === 'English|Other|Tree');
   await b.click('[data-tab=tree]');
   ok('the Tree tab is selected and the sidebar gets wider to fit one line per step', await b.ev(`document.querySelector('[data-tab=tree]').getAttribute('aria-selected')`) === 'true' && await b.ev(`document.querySelector('#history-pane').getBoundingClientRect().width`) > 400);
-  const n0 = await eventsCount();
-  ok('there is one line for every step of the template (all languages and name-level steps), newest first', await cnt('.tree-row') === n0 && n0 > 10, n0);
+  const n0 = await b.ev(`Store.historyTree(Store.list()[0].id).rows.length`);
+  ok('there is one line for every CONTENT step of the template (all languages), newest first', await cnt('.tree-row') === n0 && n0 > 8, n0);
   ok('every line says what, who and when, on one line', await b.ev(`[].every.call(document.querySelectorAll('.tree-row'), function(r){ var w=r.querySelector('.tree-what').textContent, m=r.querySelector('.tree-meta').textContent; return w.length>3 && /Demo user · \\w+ \\d+, /.test(m) && r.getBoundingClientRect().height < 40 })`));
-  ok('lines name the language and the part: "Hindi · published as welcome_message_v1", "English · edited the buttons"', (await rows()).some(r => /^Hindi · published as welcome_message_v1/.test(r)) && (await rows()).some(r => /^English · edited the buttons/.test(r)), (await rows()).join(' | '));
-  ok('exactly one line is marked current, the newest', await cnt('.tree-cur') === 1 && await q('.tree-row:first-child .tree-cur') && await q('.tree-row.current'));
-  ok('each line has a graph with a dot, and the dot of the current step is bigger', await cnt('.tree-row .tree-graph circle.node') === n0 && await b.ev(`+document.querySelector('.tree-row.current circle').getAttribute('r')`) > await b.ev(`+document.querySelector('.tree-row:nth-child(2) circle').getAttribute('r')`));
-  const contentRows = await b.ev(`Store.historyTree(Store.list()[0].id).rows.filter(function(r){return r.content}).length`);
-  ok('only content steps have a Rewind button (not the current one): publishing steps are listed, dimmed, without one', await cnt('.tree-rewind') === contentRows - 1 && contentRows < n0 && await b.ev(`![].some.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`) && await b.ev(`[].every.call(document.querySelectorAll('.tree-row.meta-step'), function(r){return !r.querySelector('.tree-rewind')})`) && await b.ev(`[].some.call(document.querySelectorAll('.tree-row.meta-step .tree-what'), function(x){return /published as/.test(x.textContent)})`) && await cnt('.tree-row.meta-step') === n0 - contentRows, contentRows + ' content of ' + n0);
+  ok('lines name the language and the part: "Hindi · edited the buttons", "English · edited the buttons"', (await rows()).some(r => /^Hindi · edited the buttons/.test(r)) && (await rows()).some(r => /^English · edited the buttons/.test(r)), (await rows()).join(' | '));
+  ok('exactly one line is marked current, the newest', await cnt('.tree-cur') === 1 && await q('.tree-item:first-child .tree-row .tree-cur') && await q('.tree-row.current'));
+  ok('each line has a graph with a dot, and the dot of the current step is bigger', await cnt('.tree-row .tree-graph circle.node') === n0 && await b.ev(`+document.querySelector('.tree-row.current circle').getAttribute('r')`) > await b.ev(`+document.querySelector('.tree-item:nth-child(2) circle').getAttribute('r')`));
+  const allEvents = await eventsCount();
+  ok('the tree has only content steps: publishing, renaming, campaign and timing steps are not in it', n0 < allEvents && !(await rows()).some(r => /published as|Renamed|Copied|Moved to|timing/i.test(r)) && (await rows()).some(r => /^Hindi · footer/.test(r)), (await rows()).join(' | '));
+  ok('every step except the current one has a Rewind button, enabled (the sample steps all have snapshots)', await cnt('.tree-rewind') === n0 - 1 && await b.ev(`![].some.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`));
+  ok('the sample\'s publish steps are not lost: they are in the Other tab, as a plain list', await (async () => {
+    await b.click('.hp-tab[data-tab=other]');
+    const o = await b.ev(`[].map.call(document.querySelectorAll('#history-pane .event'), function(e){return e.querySelector('.event-head strong').textContent + '|' + (e.querySelector('.chip')||{}).textContent}).join(' ; ')`);
+    const n = await cnt('#history-pane .event');
+    await b.click('[data-tab=tree]');
+    return n === await b.ev(`Store.historyFor(Store.list()[0].id,'activity').length`) && n === allEvents - n0 && /Published as template\|English/.test(o) && /Published as template\|Hindi/.test(o) && await q('#history-pane .tree');
+  })());
+
+  // ---- Details
+  ok('every line has a Details button, closed to begin with (no detail panels, aria-expanded false)', await cnt('.tree-details') === n0 && await cnt('.tree-detail') === 0 && await b.ev(`document.querySelector('.tree-details').getAttribute('aria-expanded')`) === 'false');
+  await b.click('.tree-item:first-child .tree-details');
+  ok('Details on the current step opens a panel under that line: title, kind, who and when, a note that it is current', await cnt('.tree-detail') === 1 && /Demo user/.test(await txt('.tree-detail')) && /current step/.test(await txt('.tree-detail')) && await b.ev(`document.querySelector('.tree-item:first-child .tree-details').getAttribute('aria-expanded')`) === 'true', await txt('.tree-detail'));
+  await b.click('.tree-item:nth-child(2) .tree-details');
+  ok('several can be open at once; a text step shows the word diff of what changed', await cnt('.tree-detail') === 2 && await q('.tree-item:nth-child(2) .tree-detail .d-add'), await txt('.tree-item:nth-child(2) .tree-detail'));
+  ok('the graph lines keep running through an open panel', await q('.tree-item:nth-child(2) .tree-detail svg.through line'));
+  await b.click('.tree-item:first-child .tree-details');
+  ok('clicking Details again closes it', await cnt('.tree-detail') === 1 && !await q('.tree-item:first-child .tree-detail'));
+  await b.click('.tree-item:nth-child(2) .tree-details');
+  ok('and nothing else changed: same lines, same current marker', await cnt('.tree-detail') === 0 && await cnt('.tree-row') === n0 && await q('.tree-item:first-child .tree-cur'));
+
   ok('a straight history is a single lane', await b.ev(`document.querySelector('.tree-graph').getAttribute('width')`) === '18' && !await q('.tree-graph .l1'));
 
   // ---- make some changes: A, B, C
@@ -32,17 +53,17 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   await saveText('Version B {{name}}');
   await saveText('Version C {{name}}');
   await b.click('[data-tab=tree]');
-  ok('saving adds lines at the top, each with a snippet of the new text, and moves the current marker', (await rows())[0] === 'English · text → “Version C {{name}}”' && (await rows())[1] === 'English · text → “Version B {{name}}”' && await cnt('.tree-row') === n0 + 3 && await q('.tree-row:first-child .tree-cur'), (await rows()).slice(0, 4).join(' | '));
+  ok('saving adds lines at the top, each with a snippet of the new text, and moves the current marker', (await rows())[0] === 'English · text → “Version C {{name}}”' && (await rows())[1] === 'English · text → “Version B {{name}}”' && await cnt('.tree-row') === n0 + 3 && await q('.tree-item:first-child .tree-row .tree-cur'), (await rows()).slice(0, 4).join(' | '));
 
   // ---- rewind to A
   await b.hover(rewindBtn(3));
   ok('a Rewind button shows when its line is hovered (not on other lines)', await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(3)}')).opacity`) === '1' && await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(4)}')).opacity`) === '0');
   await b.click(rewindBtn(3));
   ok('rewinding puts the text back: the editor shows version A, a toast says where to', await body() === 'Version A {{name}}' && /Rewound to: English · text → “Version A/.test(await txt('#toast')), await body());
-  ok('it is a NEW step at the top: "Rewound to: …", marked current; nothing was removed', await cnt('.tree-row') === n0 + 4 && /^Rewound to: English · text → “Version A/.test((await rows())[0]) && await q('.tree-row:first-child .tree-cur') && await cnt('.tree-cur') === 1);
-  ok('the steps after A (B and C) are still listed, as another branch: the graph now has a second lane', (await rows()).slice(1, 3).join('|') === 'English · text → “Version C {{name}}”|English · text → “Version B {{name}}”' && await q('.tree-graph .l1') && await cnt('.tree-row:first-child .tree-graph circle.rw') === 1);
+  ok('it is a NEW step at the top: "Rewound to: …", marked current; nothing was removed', await cnt('.tree-row') === n0 + 4 && /^Rewound to: English · text → “Version A/.test((await rows())[0]) && await q('.tree-item:first-child .tree-row .tree-cur') && await cnt('.tree-cur') === 1);
+  ok('the steps after A (B and C) are still listed, as another branch: the graph now has a second lane', (await rows()).slice(1, 3).join('|') === 'English · text → “Version C {{name}}”|English · text → “Version B {{name}}”' && await q('.tree-graph .l1') && await cnt('.tree-item:first-child .tree-row .tree-graph circle.rw') === 1);
   ok('the saved status follows the rule: the English text now differs from what was published', /Edited since publish/.test(await txt('.panel.edit .panel-head')));
-  ok('the Rewound step shows under Other too (it is not tied to one language), and not in the English tab', await (async () => { await b.click('.hp-tab[data-tab=other]'); const o = /Rewound/.test(await txt('#history-pane')); await b.click('.hp-tab[data-tab=edit]'); return o && !/Rewound/.test(await txt('#history-pane')); })());
+  ok('the Rewound step is a content step: it is in the Tree only, not in Other and not in the English tab', await (async () => { await b.click('.hp-tab[data-tab=other]'); const o = /Rewound/.test(await txt('#history-pane')); await b.click('.hp-tab[data-tab=edit]'); return !o && !/Rewound/.test(await txt('#history-pane')); })());
 
   // ---- editing from here grows a new branch; the abandoned one can still be rewound to
   await saveText('Version D {{name}}');
@@ -75,7 +96,7 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   await b.click('[data-action=toggle-history-pane]').catch(() => {});
   if (!await q('#history-pane')) await b.click('[data-action=toggle-history-pane]');
   await b.click('[data-tab=tree]');
-  ok('and so is the tree, with its current marker on the newest step', await cnt('.tree-cur') === 1 && await q('.tree-row:first-child .tree-cur') && /^Rewound to:/.test((await rows())[0]));
+  ok('and so is the tree, with its current marker on the newest step', await cnt('.tree-cur') === 1 && await q('.tree-item:first-child .tree-row .tree-cur') && /^Rewound to:/.test((await rows())[0]));
 
   // ---- dark theme
   await b.setScheme('dark');

@@ -857,18 +857,44 @@ test('rewind: only content changes can be rewound to (publish, rename, approval,
   S.renameContent(c.id, 'Content only 2');
   S.setTemplateTiming(c.id, { days: 2, when: 'after', ref: 'baby_dob' });
   patch(S, c, 'en', { text: 'two' });
-  const rows = S.historyTree(c.id).rows;
-  const byAction = a => rows.filter(r => r.event.action === a);
-  for (const a of ['deployed', 'renamed', 'timing_edited']) {
-    const r = byAction(a)[0];
-    assert.ok(r, a);
-    assert.equal(r.content, false, a + ' is not a content step');
-    assert.match(S.rewindProblem(c.id, r.event.id), /Only content changes/, a);
-    assert.match(S.rewind(c.id, r.event.id).error, /Only content changes/, a);
+  const activity = S.historyFor(c.id, 'activity');
+  assert.deepEqual(activity.map(e => e.action).sort(), ['deployed', 'renamed', 'timing_edited']);
+  for (const e of activity) {
+    assert.equal(S.isContentStep(e), false, e.action);
+    assert.match(S.rewindProblem(c.id, e.id), /Only content changes/, e.action);
+    assert.match(S.rewind(c.id, e.id).error, /Only content changes/, e.action);
   }
-  assert.ok(rows.filter(r => r.event.action === 'text_edited').every(r => r.content));
   assert.equal(S.rewindProblem(c.id, content), null);
+  const n = S.historyTree(c.id).rows.length;
   assert.ok(S.rewind(c.id, content).ok);
-  assert.equal(rows.length + 1, S.historyTree(c.id).rows.length);
-  assert.equal(S.historyTree(c.id).rows[0].content, true, 'a Rewound step is a content step you can go back to');
+  assert.equal(S.historyTree(c.id).rows.length, n + 1);
+  assert.equal(S.historyTree(c.id).rows[0].event.action, 'rewound', 'a Rewound step is a content step you can go back to');
+});
+
+test('historyTree: shows only content steps (the rest is the linear "activity" list); a publish or rename in between is skipped', () => {
+  const S = fresh();
+  const c = S.createContent('Skip test', 'en').content;
+  patch(S, c, 'en', { text: 'a' });
+  const a = lastEventId(S, c);
+  S.deployAll(c.id);
+  S.renameContent(c.id, 'Skip test 2');
+  const afterMeta = c.head;
+  assert.ok(S.eventOf(afterMeta).action === 'renamed', 'the current node is a non-content step');
+  patch(S, c, 'en', { text: 'b' });
+  const b = lastEventId(S, c);
+  const t = S.historyTree(c.id);
+  assert.ok(t.rows.every(r => S.isContentStep(r.event)));
+  assert.equal(t.rows.length + S.historyFor(c.id, 'activity').length, S.historyFor(c.id, 'all').length, 'tree + activity = everything, nothing twice');
+  assert.equal(t.width, 1, 'still one straight line: b hangs under a in the tree');
+  assert.equal(t.head, b);
+  assert.equal(t.rows.filter(r => r.isHead).length, 1);
+  // go back to a, publish, then check the marker sits on the Rewound step (nearest content step above the publish)
+  S.rewind(c.id, a);
+  S.setTemplateTiming(c.id, { days: 5, when: 'before', ref: 'baby_dob' });
+  const t2 = S.historyTree(c.id);
+  assert.equal(S.eventOf(c.head).action, 'timing_edited');
+  assert.equal(t2.rows.find(r => r.isHead).event.action, 'rewound', 'current marker = nearest content step at or above the head');
+  patch(S, c, 'en', { text: 'c' });
+  const lanes = S.historyTree(c.id);
+  assert.equal(lanes.width, 2, 'b and c are on separate branches even though a timing step sits between');
 });

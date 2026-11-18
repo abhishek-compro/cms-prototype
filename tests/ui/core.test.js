@@ -84,7 +84,10 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('"Show history" opens the sidebar; single view tabs are <language> | Other | Tree', await q('#history-pane') && /^edit:/.test(await tabs()) && /other:Other \| tree:Tree$/.test(await tabs()) && await cnt('#history-pane .hp-tab') === 3, await tabs());
   ok('there is no language filter dropdown and no History page tab', !await q('[data-change=history-lang]') && !await q('.tab[data-mode]'));
   await b.click('.hp-tab[data-tab=other]');
-  ok('the Other tab lists name-level events (created, header type, …)', /Created content/.test(await txt('#history-pane')) && await events() >= 1);
+  ok('the Other tab lists the activity that is not a content change, one after the other (published, …), with the language', /Published as template/.test(await txt('#history-pane')) && !/Created content|Edited text/.test(await txt('#history-pane')) && await events() >= 1 && await q('#history-pane .event .chip'));
+  await b.click('.hp-tab[data-tab=tree]');
+  ok('the Tree tab lists the content changes (created, header type, text, …) and not the publishing', /Created/.test(await txt('#history-pane')) && !/Published as/.test(await txt('#history-pane')) && await q('#history-pane .tree'));
+  await b.click('.hp-tab[data-tab=other]');
   await b.click('tr.clickable[data-lang=en]');
   ok('choosing a language row returns to that language\'s history', await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'edit' && /English/.test(await tabs()));
   const before = await events();

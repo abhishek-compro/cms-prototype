@@ -54,8 +54,8 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await b.ev(`(function(){var s=document.querySelector('.panel.edit [data-change=set-header-type]'); s.value='document'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
   ok('the type can be changed inside the section', await b.ev(`document.querySelector('.panel.edit [data-change=set-header-type]').value`) === 'document' && await b.ev(`Store.list()[0].headerType`) === 'document');
   ok('changing the header after publishing marks published languages as edited', /Edited since publish/.test(await rowBadge('hi')), await rowBadge('hi'));
-  const other = await hist('other');
-  ok('header changes are logged in the Other tab', /Changed header type/.test(other) && /Image → None/.test(other) && /None → Video/.test(other) && /Video → Document/.test(other), other);
+  const tree = await hist('tree');
+  ok('header type changes are content steps: they are in the Tree tab', /Header type: Image → None/.test(tree) && /Header type: None → Video/.test(tree) && /Header type: Video → Document/.test(tree), tree);
   await b.click('.hp-tab[data-tab=edit]'); await b.click('[data-action=toggle-history-pane]');
 
   // ================= only the body by default; everything else comes from the dropdown =================

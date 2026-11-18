@@ -642,4 +642,12 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .tree-meta { flex: none; color: var(--muted); font-size: 11px; }
 .tree-rewind { flex: none; padding: 1px 8px; font-size: 12px; opacity: 0; }   /* opacity, not visibility: it must stay reachable by keyboard */
 .tree-row:hover .tree-rewind, .tree-row:focus-within .tree-rewind { opacity: 1; }
-.tree-row.meta-step .tree-what, .tree-row.meta-step .tree-meta { color: var(--muted); }
+
+.tree-item { border-radius: 6px; }
+.tree-details { flex: none; padding: 0 4px; font-size: 12px; opacity: 0; }
+.tree-row:hover .tree-details, .tree-row:focus-within .tree-details, .tree-item.open .tree-details { opacity: 1; }
+.tree-detail { position: relative; padding: 2px 8px 10px 0; }
+.tree-detail .through { position: absolute; left: 0; top: 0; height: 100%; overflow: visible; }
+.tree-detail-body { margin-left: calc(var(--tree-gutter, 40px)); padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); white-space: normal; overflow-wrap: anywhere; }
+.tree-detail-head { margin-bottom: 2px; }
+.tree-detail .event-body { margin-top: 6px; }
