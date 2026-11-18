@@ -546,7 +546,7 @@
     else if (e.action === 'flow_out_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_out_removed') body = '<strong>' + esc(e.before) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_out_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong> <span class="muted">on ' + esc(e.detail) + '</span>';
-    else if (e.action === 'flow_input_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'flow_input_renamed' || e.action === 'flow_logic_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_action_renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'flow_action_defined') body = '<strong>' + esc(e.detail) + '</strong>: ' + diffHtml(e.before, e.after);
     else if (e.action === 'flow_step_added') body = '<strong>' + esc(e.after) + '</strong> <span class="muted">· ' + esc(e.detail) + '</span>';
@@ -751,7 +751,7 @@
     if (n.type === 'flow') return { flowId: n.flowId };
     if (n.type === 'input') return { title: n.title };
     if (n.type === 'action') return { name: n.name, definition: n.definition };
-    return { outs: n.outs.map(function (o) { return { id: o.id, label: o.label }; }) };
+    return { title: n.title, outs: n.outs.map(function (o) { return { id: o.id, label: o.label }; }) };
   }
 
   // Placeholder values of a template node (this flow only): one field per placeholder name of the template, all
@@ -771,8 +771,9 @@
     var editing = !!ui.nodeEdit && ui.nodeEdit.flow === f.id && ui.nodeEdit.node === n.id;
     var d = editing ? ui.nodeEdit.draft : null;
     var head = '<div class="fnode-head"><span class="ftype">' + NODE_LABEL[n.type] + '</span>' +
-      (n.type === 'input' && editing ? '<input class="field node-title-input" data-edit="title" data-first value="' + esc(d.title) + '" aria-label="Name of this input" autocomplete="off">'   // the label itself becomes the field
-        : n.type === 'template' || n.type === 'action' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
+      ((n.type === 'input' || n.type === 'logic' || n.type === 'action') && editing
+        ? '<input class="field node-title-input" data-edit="' + (n.type === 'action' ? 'name' : 'title') + '" data-first value="' + esc(n.type === 'action' ? d.name : d.title) + '" aria-label="Name of this ' + (n.type === 'logic' ? 'logic node' : n.type) + '" autocomplete="off">'   // the label itself becomes the field
+        : n.type === 'template' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
       '<span class="grow"></span>' +
       (editing ? '<button class="node-btn node-save" data-action="node-save" aria-label="Save changes to this node" title="Save">✓</button>' +
         '<button class="node-btn node-cancel" data-action="node-cancel" aria-label="Cancel and discard changes to this node" title="Cancel">✕</button>' : '') +
@@ -809,11 +810,10 @@
       }
     } else if (n.type === 'action') {
       if (editing) {
-        body = '<div class="fnode-body"><label class="fld"><span>Name</span><input class="field" data-edit="name" data-first value="' + esc(d.name) + '" autocomplete="off"></label>' +
+        body = '<div class="fnode-body">' +
           '<label class="fld"><span>Definition</span><textarea class="field" data-edit="definition" rows="3" placeholder="Describe what this action does">' + esc(d.definition) + '</textarea></label></div>';
       } else {
-        body = '<div class="fnode-body view"><div class="view-row"><strong class="view-name">' + esc(title) + '</strong></div>' +
-          (n.definition ? '<div class="view-def">' + esc(n.definition) + '</div>' : '') + '</div>';
+        body = n.definition ? '<div class="fnode-body view"><div class="view-def">' + esc(n.definition) + '</div></div>' : '';   // the name is in the header
       }
     } else if (n.type === 'input') {
       // nothing below the header: while editing, the header's label is the text field
@@ -821,7 +821,7 @@
       if (editing) {
         var single = d.outs.length <= 1;
         body = '<div class="fnode-body"><div class="muted small" style="margin-bottom:4px">Outgoing edges, named by condition</div>' + d.outs.map(function (o, i) {
-          return '<div class="out-row"><input class="field" data-edit="out" data-i="' + i + '"' + (i === 0 ? ' data-first' : '') + ' value="' + esc(o.label) + '" placeholder="Condition" aria-label="Condition for outgoing edge ' + (i + 1) + '" autocomplete="off">' +
+          return '<div class="out-row"><input class="field" data-edit="out" data-i="' + i + '" value="' + esc(o.label) + '" placeholder="Condition" aria-label="Condition for outgoing edge ' + (i + 1) + '" autocomplete="off">' +
             '<button class="btn link out-x" data-action="edit-out-remove" data-i="' + i + '" aria-label="Remove outgoing edge ' + (i + 1) + '" title="' + (single ? 'A logic node needs at least one outgoing edge' : 'Remove this outgoing edge') + '"' + (single ? ' disabled' : '') + '>×</button>' +
             (o.id ? '<span class="port out" ' + attrs + ' data-out="' + o.id + '" data-port="out" title="Drag onto another node to connect this edge"></span>' : '') + '</div>';
         }).join('') + '<button class="btn add-out" data-action="edit-out-add">+ Add outgoing edge</button></div>';
@@ -859,7 +859,7 @@
       : e.type === 'flow' ? S.changeNodeFlow(e.flow, e.node, e.draft.flowId)
       : e.type === 'input' ? S.renameInput(e.flow, e.node, e.draft.title)
       : e.type === 'action' ? S.updateAction(e.flow, e.node, { name: e.draft.name, definition: e.draft.definition })
-      : S.updateLogic(e.flow, e.node, e.draft.outs);
+      : S.updateLogic(e.flow, e.node, e.draft.outs, e.draft.title);
     if (r.ok || r.error === 'No change') {           // saved (or nothing changed): back to reading mode
       ui.nodeEdit = null;
       render();

@@ -53,6 +53,7 @@
     flow_out_renamed: 'Renamed an edge',
     flow_action_renamed: 'Renamed an action',
     flow_input_renamed: 'Renamed an input',
+    flow_logic_renamed: 'Renamed a logic node',
     flow_action_defined: 'Changed an action\'s definition',
     flow_timing_edited: 'Changed timing',
     flow_reordered: 'Moved in the flow list',
@@ -1144,9 +1145,13 @@
   // The dynamic part of a logic node: its outgoing edges can be added, removed and named by the condition they stand for.
   // Saved all at once (that is how the editor works: you edit, then save or cancel). `outs` is the wanted list in order:
   // { id } keeps an existing edge (and its connection), no id adds a new one; existing edges that are missing are removed.
-  function updateLogic(flowId, nodeId, outs) {
+  // `title` (optional) renames the node in the same save: required, up to 60 characters, unique among the flow's node names.
+  function updateLogic(flowId, nodeId, outs, title) {
     var f = getFlow(flowId), node = f && getNode(f, nodeId);
     if (!node || node.type !== 'logic') return fail('Logic node not found');
+    var newTitle = title === undefined ? node.title : String(title == null ? '' : title).trim();
+    var titleErr = title === undefined ? null : checkNodeName(f, newTitle, nodeId, 'logic node');
+    if (titleErr) return fail(titleErr);
     if (!outs.length) return fail('A logic node needs at least one outgoing edge');
     var seen = [], wanted = [];
     for (var i = 0; i < outs.length; i++) {
@@ -1162,7 +1167,9 @@
     var removed = node.outs.filter(function (o) { return keptIds.indexOf(o.id) === -1; });
     var renamed = wanted.filter(function (w) { return w.id && findOut(node, w.id).label !== w.label; });
     var added = wanted.filter(function (w) { return !w.id; });
-    if (!removed.length && !renamed.length && !added.length) return fail('No change');
+    var retitled = newTitle !== node.title;
+    if (!removed.length && !renamed.length && !added.length && !retitled) return fail('No change');
+    if (retitled) { logFlow(f, 'flow_logic_renamed', { before: node.title, after: newTitle }); node.title = newTitle; }
     var next = wanted.map(function (w) {
       if (w.id) { var o = findOut(node, w.id); return { id: o.id, label: w.label, to: o.to }; }
       return { id: 'o' + state.nextId++, label: w.label, to: null };

@@ -359,7 +359,8 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await addNode('logic');
   ok('+ Logic adds a logic node, titled Logic 1, with two outgoing edges ready to name; read-only, one port per edge', await titles() === 'Appointment reminder | Welcome message | Logic 1' && await outLabels('Logic 1') === 'Condition 1 | Condition 2' && await cnt((await node('Logic 1')) + ' .out-row .port.out') === 2 && await cnt((await node('Logic 1')) + ' input') === 0);
   await editNode('Logic 1');
-  ok('clicking it opens its edges as text boxes with a remove button each, and + Add outgoing edge', await editing() === 1 && await cnt('.fnode.editing [data-edit=out]') === 2 && await q('.fnode.editing [data-action=edit-out-add]') && await cnt('.fnode.editing [data-action=edit-out-remove]') === 2 && await b.ev(`document.activeElement.getAttribute('data-i')`) === '0');
+  ok('clicking it opens its edges as text boxes with a remove button each, and + Add outgoing edge', await editing() === 1 && await cnt('.fnode.editing [data-edit=out]') === 2 && await q('.fnode.editing [data-action=edit-out-add]') && await cnt('.fnode.editing [data-action=edit-out-remove]') === 2 && await q('.fnode.editing .fnode-head [data-edit=title]') && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'title' && await val('.fnode.editing [data-edit=title]') === 'Logic 1');
+  ok('the logic node\'s label in the header is the name field (focused), no separate Name box', !await q('.fnode.editing .fnode-title') && await cnt('.fnode.editing [data-edit=title]') === 1);
   await b.click('.fnode.editing [data-action=edit-out-add]');
   ok('+ Add outgoing edge adds a third, named Condition 3, only in the draft (the store still has two)', await cnt('.fnode.editing [data-edit=out]') === 3 && await val(outField(2)) === 'Condition 3' && await outLabels('Logic 1') === 'Condition 1 | Condition 2');
   await b.fill(outField(0), 'Replied yes');
@@ -388,6 +389,16 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await editNode('Logic 1');
   await b.fill(outField(0), 'Maybe'); await b.key('Escape', 'Escape', 27);
   ok('Escape cancels a logic edit', await editing() === 0 && await outLabels('Logic 1') === 'Replied yes | No reply');
+  await editNode('Logic 1');
+  await b.fill('.fnode.editing [data-edit=title]', 'appointment REMINDER'); await b.key('Enter', 'Enter', 13);
+  ok('a logic node\'s name must be unique among the flow\'s node names (any capitalisation): refused, stays in edit mode', /already called/.test(await toast()) && await editing() === 1 && await titles() === 'Appointment reminder | Welcome message | Logic 1');
+  await b.fill('.fnode.editing [data-edit=title]', '  '); await b.key('Enter', 'Enter', 13);
+  ok('an empty name is refused ("Name the logic node")', /Name the logic node/.test(await toast()) && await editing() === 1);
+  await b.fill('.fnode.editing [data-edit=title]', 'Did they reply?'); await b.fill(outField(0), 'Yes'); await saveEdit();
+  ok('✓ saves the new name together with the conditions (same node, same edges)', await editing() === 0 && await titles() === 'Appointment reminder | Welcome message | Did they reply?' && await outLabels('Did they reply?') === 'Yes | No reply');
+  await editNode('Did they reply?');
+  await b.fill('.fnode.editing [data-edit=title]', 'Logic 1'); await b.fill(outField(0), 'Replied yes'); await saveEdit();
+  ok('(and back, so the tests below keep their names)', await titles() === 'Appointment reminder | Welcome message | Logic 1' && await outLabels('Logic 1') === 'Replied yes | No reply');
 
   // ================= connecting nodes with the pointer =================
   ok('nothing is connected yet', await edges() === '' && await cnt('#edge-paths .edge') === 0 && await cnt('.edge-pill') === 0);
@@ -434,8 +445,9 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   await addNode('action');
   const act = (await titles()).split(' | ').filter(t => /^Action/.test(t))[0];
   ok('+ Action adds an action node, read-only: just its name; with no definition, no definition area is shown', await q((await node(act)) + '.fnode-action') && !await q((await node(act)) + ' input, ' + (await node(act)) + ' textarea') && !await q((await node(act)) + ' .view-def') && !/No definition/.test(await txt(await node(act))));
+  ok('an action\'s name is the label in the header of its node', (await txt((await node(act)) + ' .fnode-head')).indexOf(act) !== -1);
   await editNode(act);
-  ok('clicking it opens a name field (focused) and a definition field', await val('.fnode.editing [data-edit=name]') === act && await q('.fnode.editing textarea[data-edit=definition]') && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'name');
+  ok('clicking an action turns the header label into the name field (focused), with only the definition below it', await val('.fnode.editing [data-edit=name]') === act && await q('.fnode.editing .fnode-head [data-edit=name]') && await cnt('.fnode.editing [data-edit=name]') === 1 && await q('.fnode.editing textarea[data-edit=definition]') && await b.ev(`document.activeElement.getAttribute('data-edit')`) === 'name');
   await b.fill('.fnode.editing [data-edit=name]', 'Alert health worker');
   await b.fill('.fnode.editing [data-edit=definition]', 'Notify the community health worker to call the family.');
   await b.key('Enter', 'Enter', 13);

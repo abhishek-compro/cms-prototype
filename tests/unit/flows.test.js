@@ -862,3 +862,27 @@ test('the shared order keeps a template that joins a flow and later is alone aga
   S.removeNode(f.id, f.nodes.find(n => n.type === 'template' && n.templateId === w.id).id);
   assert.deepEqual(listing(S, 'k1'), ['T:Welcome message', 'F:Newborn first weeks'], 'back alone: still where it was put');
 });
+
+// ---------------------------------------------------------------- logic nodes can be named
+test('updateLogic with a title renames the node atomically with its edges: required, unique among node names, 60 characters, logged; edges keep their connections', () => {
+  const S = fresh();
+  const f = flow(S, 'Newborn first weeks'), n = node(S, f, 'Logic 1');
+  const outs = () => n.outs.map(o => ({ id: o.id, label: o.label }));
+  const before = edges(S, f).join('|');
+  assert.equal(S.updateLogic(f.id, n.id, outs(), 'Did they reply?').ok, true);
+  assert.equal(S.nodeTitle(n), 'Did they reply?');
+  assert.deepEqual([last(S, f).action, last(S, f).before, last(S, f).after], ['flow_logic_renamed', 'Logic 1', 'Did they reply?']);
+  assert.equal(edges(S, f).join('|'), before.replace(/Logic 1/g, 'Did they reply?'), 'edges stay connected');
+  assert.equal(S.updateLogic(f.id, n.id, outs(), 'Did they reply?').error, 'No change');
+  assert.equal(S.updateLogic(f.id, n.id, outs()).error, 'No change', 'title omitted: only the edges count');
+  assert.match(S.updateLogic(f.id, n.id, outs(), '   ').error, /Name the logic node/);
+  assert.match(S.updateLogic(f.id, n.id, outs(), 'WELCOME message').error, /already called/);
+  assert.match(S.updateLogic(f.id, n.id, outs(), 'x'.repeat(61)).error, /60 characters/);
+  const bad = outs(); bad[0].label = '';
+  assert.match(S.updateLogic(f.id, n.id, bad, 'New name').error, /Name the condition/);
+  assert.equal(S.nodeTitle(n), 'Did they reply?', 'a refused save changes nothing, the name included');
+  const renamedEdge = outs(); renamedEdge[0].label = 'Yes';
+  assert.equal(S.updateLogic(f.id, n.id, renamedEdge, 'Replied?').ok, true);
+  assert.deepEqual([S.nodeTitle(n), n.outs[0].label], ['Replied?', 'Yes']);
+  assert.equal(S.updateLogic(f.id, S.getFlow(f.id).nodes.find(x => x.type === 'input').id, outs(), 'x').error, 'Logic node not found');
+});
