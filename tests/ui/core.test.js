@@ -12,7 +12,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   const editLang = () => b.ev(`document.querySelector('.panel.edit').dataset.lang`);
   const badge = lang => b.ev(`(function(){var r=document.querySelector('tr.clickable[data-lang=${lang}]'); return r ? r.cells[2].textContent.replace(/\\s+/g,' ').trim() : null})()`);
   const waName = lang => b.ev(`(function(){var r=document.querySelector('tr.clickable[data-lang=${lang}]'); return r ? r.cells[1].textContent.trim() : null})()`);
-  const tabs = () => b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab + ':' + t.textContent.replace(/Reference|Editing/,'').trim()}).join(' | ')`);
+  const tabs = () => b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab + ':' + t.textContent.trim()}).join(' | ')`);
   const events = () => cnt('#history-pane .event');
   const idOf = n => b.ev(`Store.list().filter(function(c){return c.name===${JSON.stringify(n)}})[0].id`);
   const item = async n => '.content-item[data-id="' + await idOf(n) + '"]';
@@ -81,24 +81,21 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
 
   // ================= history sidebar =================
   await b.click('[data-action=toggle-history-pane]');
-  ok('"Show history" opens the sidebar; single view tabs are <language> | Other | Tree', await q('#history-pane') && /^edit:/.test(await tabs()) && /other:Other \| tree:Tree$/.test(await tabs()) && await cnt('#history-pane .hp-tab') === 3, await tabs());
+  ok('"Show history" opens the sidebar with exactly two tabs: Content | Other (no language tabs, no Tree tab)', await q('#history-pane') && await tabs() === 'content:Content | other:Other' && await cnt('#history-pane .hp-tab') === 2, await tabs());
+  ok('Content is the tab shown first, and it is the tree: one line per content step with who and when', await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'content' && await q('#history-pane .tree') && await cnt('#history-pane .tree-row') > 5 && /Created/.test(await txt('#history-pane')) && !/Published as/.test(await txt('#history-pane')));
   ok('there is no language filter dropdown and no History page tab', !await q('[data-change=history-lang]') && !await q('.tab[data-mode]'));
   await b.click('.hp-tab[data-tab=other]');
-  ok('the Other tab lists the activity that is not a content change, one after the other (published, …), with the language', /Published as template/.test(await txt('#history-pane')) && !/Created content|Edited text/.test(await txt('#history-pane')) && await events() >= 1 && await q('#history-pane .event .chip'));
-  await b.click('.hp-tab[data-tab=tree]');
-  ok('the Tree tab lists the content changes (created, header type, text, …) and not the publishing', /Created/.test(await txt('#history-pane')) && !/Published as/.test(await txt('#history-pane')) && await q('#history-pane .tree'));
-  await b.click('.hp-tab[data-tab=other]');
+  ok('the Other tab is a plain list of the activity that is not a content change (published, …), with the language, and no tree', /Published as template/.test(await txt('#history-pane')) && !/Created content|Edited text/.test(await txt('#history-pane')) && await events() >= 1 && await q('#history-pane .event .chip') && !await q('#history-pane .tree'));
   await b.click('tr.clickable[data-lang=en]');
-  ok('choosing a language row returns to that language\'s history', await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'edit' && /English/.test(await tabs()));
-  const before = await events();
+  ok('choosing a language row does not change the tabs: the same two, Other still selected', await tabs() === 'content:Content | other:Other' && await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'other');
+  await b.click('.hp-tab[data-tab=content]');
+  const before = await cnt('#history-pane .tree-row');
   await b.fill('.panel.edit [data-input=footer]', 'Noora Health Team');
   await b.click('.panel.edit .save');
-  ok('saving adds an "Edited footer" event live, with who and a word diff', await events() === before + 1 && /Edited footer/.test(await txt('#history-pane')) && /Demo user/.test(await txt('#history-pane')) && await q('#history-pane .d-add'));
+  ok('saving adds a line to the Content tree live: the language and part, who and when', await cnt('#history-pane .tree-row') === before + 1 && /^English · footer/.test(await txt('#history-pane .tree-item:first-child .tree-what')) && /Demo user/.test(await txt('#history-pane .tree-item:first-child .tree-meta')));
   await b.click('[data-change=toggle-side]');
-  ok('side by side tabs: Reference | Editing | Other | Tree, in the same order as the panels', (await b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab}).join()`)) === 'ref,edit,other,tree');
-  ok('the panel whose history is shown has the highlight', await q('.panel.edit.subject') && !await q('.panel.ref.subject'));
-  await b.click('.panel.ref .ref-text');
-  ok('clicking the reference panel switches the history to it', await q('.panel.ref.subject') && await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'ref');
+  ok('side by side: still just Content | Other, and the languages are named on the lines', await tabs() === 'content:Content | other:Other' && /Hindi · /.test(await txt('#history-pane')) && /English · /.test(await txt('#history-pane')) && !await q('.panel.subject'));
+  await b.click('[data-change=toggle-side]');
   await b.click('[data-change=toggle-side]');
   await b.click('[data-action=toggle-history-pane]');
   ok('"Hide" closes the sidebar', !await q('#history-pane'));

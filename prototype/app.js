@@ -13,10 +13,8 @@
     refLang: null,       // read-only reference language (side-by-side)
     editLang: null,      // language being edited (also the active tab when side-by-side is off)
     historyOpen: false,  // right sidebar visible (hidden by default)
-    histSubject: 'edit', // side-by-side: whose history the sidebar shows ('edit' | 'ref')
+    histTab: 'content',  // history sidebar tab: 'content' (the one-line tree) | 'other' (plain list of the rest)
     treeDetails: {},     // Tree tab: ids of the steps whose details are open
-    treeOpen: false,     // sidebar tab 'Tree' selected (the undo tree with rewind)
-    nameOpen: false,     // sidebar tab 'Other' selected (name-level events) instead of a language tab
     search: '',
     renaming: false,
     newError: '',
@@ -239,7 +237,7 @@
     var r = S.createCampaign(document.getElementById('new-campaign').value);
     if (!r.ok) { ui.campError = r.error; document.getElementById('camp-error').textContent = r.error; return; }
     ui.campBox = false; ui.campError = '';
-    ui.campaignId = r.campaign.id; ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;   // jump to the new (empty) campaign
+    ui.campaignId = r.campaign.id; ui.renaming = false;   // jump to the new (empty) campaign
     render();
     toast('Created campaign "' + r.campaign.name + '"');
   }
@@ -496,7 +494,7 @@
 
   function refPanelHtml(c, tr) {
     var p = S.partsOf(tr);
-    return '<section class="panel ref' + subjectCls('ref') + '" data-role="ref" data-lang="' + tr.lang + '">' +
+    return '<section class="panel ref" data-role="ref" data-lang="' + tr.lang + '">' +
       '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="ref" data-lang="' + tr.lang + '" title="Show this template as a WhatsApp message on a phone">Preview</button><span class="role">Reference (read-only)</span></div>' +
       secHeader(c, tr, p, true) + secBody(c, tr, p, true) + secPlaceholders(c, tr, p, true) + secButtons(c, tr, p, true) + secFooter(c, tr, p, true) +
       '<div class="panel-foot">' + waNameHtml(tr) + '</div></section>';
@@ -505,7 +503,7 @@
   function editPanelHtml(c, tr) {
     var p = currentParts(c, tr);
     var dirty = isDirty(c, tr);
-    return '<section class="panel edit' + subjectCls('edit') + '" data-role="edit" data-lang="' + tr.lang + '">' +
+    return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
       '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="edit" data-lang="' + tr.lang + '" title="Show this template (with your unsaved edits) as a WhatsApp message on a phone">Preview</button><span class="role">Editing</span></div>' +
       secHeader(c, tr, p, false) + secBody(c, tr, p, false) + secPlaceholders(c, tr, p, false) + secButtons(c, tr, p, false) + secFooter(c, tr, p, false) + secAdd(c, tr, p) + secProblems(c, p) +
       '<div class="panel-foot">' +
@@ -603,12 +601,6 @@
   }
 
   // ---- right sidebar: history -------------------------------------------------
-  function sideActive(c) { return ui.side && c.translations.length > 1; }
-  function subjectLang(c) { return sideActive(c) && ui.histSubject === 'ref' ? ui.refLang : ui.editLang; }
-  function subjectCls(role) {
-    var c = S.get(ui.selectedId);
-    return c && sideActive(c) && ui.histSubject === role ? ' subject' : '';
-  }
 
   // ---- the undo tree (Tree tab): one line per step, drawn like `git log --graph` ---------------------------------
   // One line: what happened, who, when. The current step has a marker; "Rewind" puts the template back as it was after that step
@@ -691,35 +683,24 @@
         '<div class="hp-tabs" role="tablist"><button class="hp-tab active" role="tab" aria-selected="true">Flow</button></div></div>' +
         (fev.length ? '<ul class="timeline compact">' + fev.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">No history yet.</div>');
     }
-    var side = sideActive(c);
-    var lang = subjectLang(c);
-    var tabs = side
-      ? [{ id: 'ref', label: S.langName(ui.refLang), cap: 'Reference' }, { id: 'edit', label: S.langName(ui.editLang), cap: 'Editing' }]
-      : [{ id: 'edit', label: S.langName(ui.editLang) }];
-    tabs.push({ id: 'other', label: 'Other' });
-    tabs.push({ id: 'tree', label: 'Tree' });
-    var active = ui.treeOpen ? 'tree' : ui.nameOpen ? 'other' : (side ? ui.histSubject : 'edit');
+    var tabs = [{ id: 'content', label: 'Content' }, { id: 'other', label: 'Other' }];   // content changes as a tree; everything else as a list
+    var active = ui.histTab;
 
     var tabsHtml = '<div class="hp-tabs" role="tablist">' + tabs.map(function (t) {
       return '<button class="hp-tab' + (t.id === active ? ' active' : '') + '" role="tab" aria-selected="' + (t.id === active) + '" data-action="hist-tab" data-tab="' + t.id + '">' +
-        (t.cap ? '<span class="cap">' + t.cap + '</span>' : '') + esc(t.label) + '</button>';
+        esc(t.label) + '</button>';
     }).join('') + '</div>';
 
     var head = '<div class="hp-head"><div class="hp-top"><h3>History</h3><span class="grow"></span>' +
       '<button class="btn link" data-action="toggle-history-pane" title="Hide history">Hide</button></div>' + tabsHtml + '</div>';
 
     var body;
-    if (active === 'tree') {
+    if (active === 'content') {
       body = treeHtml(c);
-    } else if (active === 'other') {
-      var names = S.historyFor(c.id, 'activity');
-      body = '<div class="muted small" style="margin-bottom:12px">Other activity, one after the other: published, renamed, approval blocked/allowed, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Tree</strong>.</div>' +
-        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, false); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     } else {
-      var events = S.historyFor(c.id, lang);
-      body = events.length
-        ? '<ul class="timeline compact">' + events.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>'
-        : '<div class="hint">No history yet for ' + esc(S.langName(lang)) + '.</div>';
+      var names = S.historyFor(c.id, 'activity');
+      body = '<div class="muted small" style="margin-bottom:12px">Other activity, one after the other: published, renamed, approval blocked/allowed, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Content</strong> tab.</div>' +
+        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, false); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     }
     return head + body;
   }
@@ -730,11 +711,7 @@
     if (!c && !currentFlow()) return;
     var pane = document.getElementById('history-pane');
     if (pane) pane.innerHTML = historyPaneInner(c);
-    var lay = document.querySelector('.layout'); if (lay) lay.classList.toggle('tree-on', !!c && ui.treeOpen);
-    var panels = document.querySelectorAll('.panel[data-role]');
-    for (var i = 0; i < panels.length; i++) {
-      panels[i].classList.toggle('subject', !!c && sideActive(c) && panels[i].getAttribute('data-role') === ui.histSubject);
-    }
+    var lay = document.querySelector('.layout'); if (lay) lay.classList.toggle('tree-on', !!c && ui.histTab === 'content');
   }
 
   // ---- Flows tab: selection, the flow editor, the card for a template that is a flow by itself ----------
@@ -1149,7 +1126,7 @@
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
     var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
     var pane = subject && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (pane && ui.treeOpen && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (pane && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
@@ -1255,7 +1232,7 @@
     panel.querySelector('.dirty-note').textContent = dirty ? 'Unsaved changes' : '';
     panel.querySelector('.save').disabled = !dirty;
     panel.querySelector('.revert').disabled = !dirty;
-    if (ui.treeOpen) updateHistoryPane();       // Rewind is unavailable while something is unsaved
+    if (ui.histTab === 'content') updateHistoryPane();       // Rewind is unavailable while something is unsaved
   }
 
   document.addEventListener('input', function (ev) {
@@ -1746,13 +1723,6 @@
     }
   });
 
-  function pickSubject(ev) {
-    var panel = ev.target.closest && ev.target.closest('.panel[data-role]');
-    if (!panel) return;
-    var role = panel.getAttribute('data-role');
-    if (ui.histSubject !== role) { ui.histSubject = role; updateHistoryPane(); }
-  }
-  document.addEventListener('focusin', pickSubject);
 
   document.addEventListener('focusout', function (ev) {
     if (!ui.sideBox || rerendering) return;
@@ -1782,7 +1752,6 @@
       startNodeEdit(nodeEl.getAttribute('data-flow'), nodeEl.getAttribute('data-node'));
       return;
     }
-    pickSubject(ev);
     var el = ev.target.closest('[data-action]');
     if (!el) return;
     var action = el.getAttribute('data-action');
@@ -1791,7 +1760,7 @@
 
     switch (action) {
       case 'select':
-        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null; ui.nameOpen = false; ui.treeOpen = false;
+        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null;
         break;
       case 'dialog-copy': applyDialog('copy'); return;
       case 'dialog-refer': applyDialog('refer'); return;
@@ -1818,7 +1787,7 @@
       case 'select-flow':
         ui.flowSel = { kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') };
         if (ui.flowSel.kind === 'template') { ui.selectedId = ui.flowSel.id; ui.editLang = null; ui.refLang = null; }
-        ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;
+        ui.renaming = false;
         break;
       case 'open-template': {          // jump from a flow step to the template itself
         var tid = el.getAttribute('data-id'), tpl = S.get(tid);
@@ -1846,7 +1815,7 @@
       case 'edit-out-remove': ui.nodeEdit.draft.outs.splice(parseInt(el.getAttribute('data-i'), 10), 1); break;
       case 'edge-remove': result(S.disconnect(el.getAttribute('data-flow'), el.getAttribute('data-node'), el.getAttribute('data-out') || null)); break;
       case 'select-campaign':
-        ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;
+        ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false;
         break;
       case 'open-search': openSideBox('search'); return;
       case 'open-add': openSideBox('add'); return;
@@ -1857,14 +1826,11 @@
         if (ui.sideBox) focusSideBox();
         return;
       case 'new-content': addContent(); return;
-      case 'pick-lang': ui.editLang = lang; ui.nameOpen = false; ui.treeOpen = false; break;
+      case 'pick-lang': ui.editLang = lang; break;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; break;
       case 'hist-tab': {
-        var tab = el.getAttribute('data-tab');
-        if (tab === 'tree') { ui.treeOpen = true; ui.nameOpen = false; }
-        else if (tab === 'other') { ui.nameOpen = true; ui.treeOpen = false; }
-        else { ui.nameOpen = false; ui.treeOpen = false; ui.histSubject = tab; }
+        ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';
         updateHistoryPane();
         return;
       }

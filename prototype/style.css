@@ -271,7 +271,6 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .hp-top { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
 .hp-top h3 { margin: 0; font-size: 14px; }
 .hp-top .grow { flex: 1; }
-.panel.subject { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .timeline.compact { padding-left: 14px; }
 .timeline.compact .event { margin-bottom: 10px; padding: 8px 10px; }
 .timeline.compact .event::before { left: -22px; top: 13px; }

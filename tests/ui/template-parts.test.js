@@ -25,6 +25,8 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   const stored = () => b.ev(`JSON.stringify(JSON.parse(localStorage.getItem('cms-prototype-v1')))`).then(JSON.parse);
   const trOf = async (name, lang) => { const st = await stored(); const c = st.contents.find(x => x.name === name); return Object.assign({ _c: c }, c.translations.find(t => t.lang === lang)); };
   const rowBadge = lang => b.ev(`(function(){var r=document.querySelector('tr.clickable[data-lang=${lang}]'); return r ? r.cells[2].textContent.replace(/\\s+/g,' ').trim() : null})()`);
+  // the Content tab with the Details of the newest steps opened (the lines alone are one-liners)
+  const histDetails = async (n = 4) => { const t = await hist('content'); for (let i = 1; i <= n; i++) await b.click('.tree-item:nth-child(' + i + ') .tree-details'); return b.ev(`document.getElementById('history-pane').innerText.replace(/\\s+/g,' ')`); };
   const hist = async tab => { if (!await q('#history-pane')) await b.click('[data-action=toggle-history-pane]'); await b.click('.hp-tab[data-tab=' + tab + ']'); return b.ev(`document.getElementById('history-pane').innerText.replace(/\\s+/g,' ')`); };
 
   // ================= structure =================
@@ -54,9 +56,9 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await b.ev(`(function(){var s=document.querySelector('.panel.edit [data-change=set-header-type]'); s.value='document'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
   ok('the type can be changed inside the section', await b.ev(`document.querySelector('.panel.edit [data-change=set-header-type]').value`) === 'document' && await b.ev(`Store.list()[0].headerType`) === 'document');
   ok('changing the header after publishing marks published languages as edited', /Edited since publish/.test(await rowBadge('hi')), await rowBadge('hi'));
-  const tree = await hist('tree');
+  const tree = await hist('content');
   ok('header type changes are content steps: they are in the Tree tab', /Header type: Image → None/.test(tree) && /Header type: None → Video/.test(tree) && /Header type: Video → Document/.test(tree), tree);
-  await b.click('.hp-tab[data-tab=edit]'); await b.click('[data-action=toggle-history-pane]');
+  await b.click('[data-action=toggle-history-pane]');
 
   // ================= only the body by default; everything else comes from the dropdown =================
   await fresh();
@@ -97,8 +99,8 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await b.click(E('.save'));
   let tr = await trOf('Welcome message', 'en');
   ok('Save stores the body and its defaults', tr.text === 'Hi {{first}}, {{first}} is {{age}}' && JSON.stringify(tr.defaults) === '{"first":"Asha","age":"2 weeks"}', JSON.stringify(tr.defaults));
-  let h = await hist('edit');
-  ok('history (language tab) has an "Edited text" and an "Edited placeholders" event', /Edited text/.test(h) && /Edited placeholders/.test(h) && /age = 2 weeks/.test(h), h.slice(0, 300));
+  let h = await histDetails(2);
+  ok('history (Content tab) has a line for the text and one for the placeholders; Details show the change', /English · text → “Hi \{\{first\}\}/.test(h) && /English · edited the placeholders/.test(h) && /age = 2 weeks/.test(h), h.slice(0, 400));
   await b.click('[data-action=toggle-history-pane]');
 
   // renaming drops stale defaults
@@ -143,8 +145,8 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   tr = await trOf('Welcome message', 'en');
   ok('Save stores the buttons in the schema shape (default_payload / url + default_parameters)',
     tr.buttons.length === 3 && tr.buttons[2].default_payload === 'call_me' && tr.buttons[1].url === 'https://x.org/{{id}}/{{id}}' && JSON.stringify(tr.buttons[1].default_parameters) === '{"id":"42"}', JSON.stringify(tr.buttons.slice(1)));
-  h = await hist('edit');
-  ok('history shows "Edited buttons" with the new button lines', /Edited buttons/.test(h) && /Quick reply "Call me" → call_me/.test(h), h.slice(0, 400));
+  h = await histDetails(1);
+  ok('history shows a line for the buttons; its Details have the new button lines', /English · edited the buttons/.test(h) && /Quick reply "Call me" → call_me/.test(h), h.slice(0, 400));
   await b.click('[data-action=toggle-history-pane]');
 
   // the limits

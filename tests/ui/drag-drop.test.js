@@ -121,7 +121,7 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   await b.click('[data-action=toggle-history-pane]'); await b.click('.hp-tab[data-tab=other]');
   const hist = await b.ev(`document.getElementById('history-pane').innerText.replace(/\\s+/g,' ')`);
   ok('Other tab records the move (by Demo user)', /Moved to campaign/.test(hist) && /Postnatal check-ups → Newborn care/.test(hist) && /Demo user/.test(hist), hist);
-  await b.click('.hp-tab[data-tab=edit]');
+  await b.click('.hp-tab[data-tab=content]');
   await b.click('[data-action=toggle-history-pane]');
 
   // ---- persistence + CSV + migration

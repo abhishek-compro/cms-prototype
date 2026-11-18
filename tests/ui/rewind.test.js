@@ -13,9 +13,9 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   const rewindBtn = i => `.tree-item:nth-child(${i}) [data-action=rewind]`;
 
   await b.click('[data-action=toggle-history-pane]');
-  ok('the sidebar has a Tree tab after the language tab and Other', await b.ev(`[].map.call(document.querySelectorAll('.hp-tab'), function(t){return t.textContent.trim()}).join('|')`) === 'English|Other|Tree');
-  await b.click('[data-tab=tree]');
-  ok('the Tree tab is selected and the sidebar gets wider to fit one line per step', await b.ev(`document.querySelector('[data-tab=tree]').getAttribute('aria-selected')`) === 'true' && await b.ev(`document.querySelector('#history-pane').getBoundingClientRect().width`) > 400);
+  ok('the sidebar has exactly two tabs: Content and Other (the tree lives in Content)', await b.ev(`[].map.call(document.querySelectorAll('.hp-tab'), function(t){return t.textContent.trim()}).join('|')`) === 'Content|Other');
+  await b.click('[data-tab=content]');
+  ok('the Content tab is selected (first) and the sidebar gets wider to fit one line per step', await b.ev(`document.querySelector('[data-tab=content]').getAttribute('aria-selected')`) === 'true' && await b.ev(`document.querySelector('#history-pane').getBoundingClientRect().width`) > 400);
   const n0 = await b.ev(`Store.historyTree(Store.list()[0].id).rows.length`);
   ok('there is one line for every CONTENT step of the template (all languages), newest first', await cnt('.tree-row') === n0 && n0 > 8, n0);
   ok('every line says what, who and when, on one line', await b.ev(`[].every.call(document.querySelectorAll('.tree-row'), function(r){ var w=r.querySelector('.tree-what').textContent, m=r.querySelector('.tree-meta').textContent; return w.length>3 && /Demo user · \\w+ \\d+, /.test(m) && r.getBoundingClientRect().height < 40 })`));
@@ -29,7 +29,7 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
     await b.click('.hp-tab[data-tab=other]');
     const o = await b.ev(`[].map.call(document.querySelectorAll('#history-pane .event'), function(e){return e.querySelector('.event-head strong').textContent + '|' + (e.querySelector('.chip')||{}).textContent}).join(' ; ')`);
     const n = await cnt('#history-pane .event');
-    await b.click('[data-tab=tree]');
+    await b.click('[data-tab=content]');
     return n === await b.ev(`Store.historyFor(Store.list()[0].id,'activity').length`) && n === allEvents - n0 && /Published as template\|English/.test(o) && /Published as template\|Hindi/.test(o) && await q('#history-pane .tree');
   })());
 
@@ -48,11 +48,11 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('a straight history is a single lane', await b.ev(`document.querySelector('.tree-graph').getAttribute('width')`) === '18' && !await q('.tree-graph .l1'));
 
   // ---- make some changes: A, B, C
-  await b.click('.hp-tab[data-tab=edit]');
+  await b.click('.hp-tab[data-tab=content]');
   await saveText('Version A {{name}}');
   await saveText('Version B {{name}}');
   await saveText('Version C {{name}}');
-  await b.click('[data-tab=tree]');
+  await b.click('[data-tab=content]');
   ok('saving adds lines at the top, each with a snippet of the new text, and moves the current marker', (await rows())[0] === 'English · text → “Version C {{name}}”' && (await rows())[1] === 'English · text → “Version B {{name}}”' && await cnt('.tree-row') === n0 + 3 && await q('.tree-item:first-child .tree-row .tree-cur'), (await rows()).slice(0, 4).join(' | '));
 
   // ---- rewind to A
@@ -63,11 +63,11 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('it is a NEW step at the top: "Rewound to: …", marked current; nothing was removed', await cnt('.tree-row') === n0 + 4 && /^Rewound to: English · text → “Version A/.test((await rows())[0]) && await q('.tree-item:first-child .tree-row .tree-cur') && await cnt('.tree-cur') === 1);
   ok('the steps after A (B and C) are still listed, as another branch: the graph now has a second lane', (await rows()).slice(1, 3).join('|') === 'English · text → “Version C {{name}}”|English · text → “Version B {{name}}”' && await q('.tree-graph .l1') && await cnt('.tree-item:first-child .tree-row .tree-graph circle.rw') === 1);
   ok('the saved status follows the rule: the English text now differs from what was published', /Edited since publish/.test(await txt('.panel.edit .panel-head')));
-  ok('the Rewound step is a content step: it is in the Tree only, not in Other and not in the English tab', await (async () => { await b.click('.hp-tab[data-tab=other]'); const o = /Rewound/.test(await txt('#history-pane')); await b.click('.hp-tab[data-tab=edit]'); return !o && !/Rewound/.test(await txt('#history-pane')); })());
+  ok('the Rewound step is a content step: it is in the Content tree, not in Other', await (async () => { await b.click('.hp-tab[data-tab=other]'); const o = /Rewound/.test(await txt('#history-pane')); await b.click('.hp-tab[data-tab=content]'); return !o && /Rewound/.test(await txt('#history-pane')); })());
 
   // ---- editing from here grows a new branch; the abandoned one can still be rewound to
   await saveText('Version D {{name}}');
-  await b.click('[data-tab=tree]');
+  await b.click('[data-tab=content]');
   ok('editing after a rewind adds a step on top of the Rewound step (a new branch from A)', (await rows())[0] === 'English · text → “Version D {{name}}”' && /^Rewound to:/.test((await rows())[1]));
   await b.click(rewindBtn(3));      // rows: D, Rewound, C, B ...
   ok('the abandoned branch can be rewound to: version C comes back', await body() === 'Version C {{name}}' && /^Rewound to: English · text → “Version C/.test((await rows())[0]), await body() + ' | ' + (await rows())[0]);
@@ -82,12 +82,11 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   await b.ev(`document.querySelector('${rewindBtn(5)}').focus(); 0`);
   ok('a Rewind button can be focused by keyboard, then it is visible, and its label names the step', await b.ev(`document.activeElement.getAttribute('data-action')`) === 'rewind' && await b.ev(`getComputedStyle(document.activeElement).opacity`) === '1' && /^Rewind to: /.test(await b.ev(`document.activeElement.getAttribute('aria-label')`)));
 
-  // ---- leaving the tab
+  // ---- the tab stays
   await b.click('tr.clickable[data-lang=hi]');
-  ok('picking a language row leaves the Tree tab (like Other)', !await q('.tree') && /Hindi/.test(await txt('.hp-tab.active')));
-  await b.click('[data-tab=tree]');
+  ok('picking a language row keeps the Content tab and its tree (languages are named on the lines)', await q('.tree') && /Content/.test(await txt('.hp-tab.active')));
   await b.click('.item[data-id]:nth-child(2), [data-action=select]:nth-of-type(2)');
-  ok('picking another template shows that template\'s language tab, not the tree', !await q('.tree'));
+  ok('picking another template shows that template\'s tree in the same tab', await q('.tree') && await cnt('.tree-row') > 0);
 
   // ---- the rewound text is what is saved (survives a reload) and the current marker too
   await b.click('[data-action=select][data-id]');
@@ -95,7 +94,7 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('after a reload the text is still the rewound one', (await b.ev(`Store.list()[0].translations[0].text`)) === 'Version C {{name}}');
   await b.click('[data-action=toggle-history-pane]').catch(() => {});
   if (!await q('#history-pane')) await b.click('[data-action=toggle-history-pane]');
-  await b.click('[data-tab=tree]');
+  await b.click('[data-tab=content]');
   ok('and so is the tree, with its current marker on the newest step', await cnt('.tree-cur') === 1 && await q('.tree-item:first-child .tree-row .tree-cur') && /^Rewound to:/.test((await rows())[0]));
 
   // ---- dark theme
