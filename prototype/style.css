@@ -642,3 +642,4 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .tree-meta { flex: none; color: var(--muted); font-size: 11px; }
 .tree-rewind { flex: none; padding: 1px 8px; font-size: 12px; opacity: 0; }   /* opacity, not visibility: it must stay reachable by keyboard */
 .tree-row:hover .tree-rewind, .tree-row:focus-within .tree-rewind { opacity: 1; }
+.tree-row.meta-step .tree-what, .tree-row.meta-step .tree-meta { color: var(--muted); }

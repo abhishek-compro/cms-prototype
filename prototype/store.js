@@ -493,11 +493,16 @@
     return langs.every(function (l) { return partsSig(a.tr[l] || EMPTY_PARTS()) === partsSig(b.tr[l] || EMPTY_PARTS()); });
   }
   function eventOf(id) { for (var i = 0; i < state.history.length; i++) if (state.history[i].id === id) return state.history[i]; return null; }
+  // Only changes to the content itself can be rewound to. Publishing, renaming, approval block, campaigns and timing stay in the tree
+  // for context but are not places to go back to (rewinding does not restore them anyway).
+  var CONTENT_ACTIONS = ['content_created', 'text_edited', 'part_edited', 'language_added', 'header_type_changed', 'rewound'];
+  function isContentStep(e) { return CONTENT_ACTIONS.indexOf(e.action) !== -1; }
   // null when the template can be rewound to this step, else why not
   function rewindProblem(contentId, eventId) {
     var c = get(contentId), e = eventOf(eventId);
     if (!c) return 'Content not found';
     if (!e || e.contentId !== contentId) return 'That step is not in this template\'s history';
+    if (!isContentStep(e)) return 'Only content changes can be rewound to';
     if (!e.snap) return 'This step was saved before rewinding existed, so it cannot be restored';
     if (sameSnapshot(snapshotOf(c), e.snap)) return 'The template already looks like this';
     return null;
@@ -534,7 +539,7 @@
       mine.forEach(function (k) { lanes[k] = null; });
       lanes[lane] = e.parent != null && ids[e.parent] ? e.parent : null;
       while (lanes.length && lanes[lanes.length - 1] === null && lanes.length > lane + 1) lanes.pop();
-      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === c.head, problem: rewindProblem(contentId, e.id) };
+      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === c.head, content: isContentStep(e), problem: rewindProblem(contentId, e.id) };
       width = Math.max(width, before.length, lanes.length, lane + 1);
       return row;
     });

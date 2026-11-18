@@ -22,7 +22,8 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('lines name the language and the part: "Hindi · published as welcome_message_v1", "English · edited the buttons"', (await rows()).some(r => /^Hindi · published as welcome_message_v1/.test(r)) && (await rows()).some(r => /^English · edited the buttons/.test(r)), (await rows()).join(' | '));
   ok('exactly one line is marked current, the newest', await cnt('.tree-cur') === 1 && await q('.tree-row:first-child .tree-cur') && await q('.tree-row.current'));
   ok('each line has a graph with a dot, and the dot of the current step is bigger', await cnt('.tree-row .tree-graph circle.node') === n0 && await b.ev(`+document.querySelector('.tree-row.current circle').getAttribute('r')`) > await b.ev(`+document.querySelector('.tree-row:nth-child(2) circle').getAttribute('r')`));
-  ok('the current step has no Rewind button; every other one has one, enabled (the sample steps all have snapshots)', await cnt('.tree-rewind') === n0 - 1 && await b.ev(`![].some.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`));
+  const contentRows = await b.ev(`Store.historyTree(Store.list()[0].id).rows.filter(function(r){return r.content}).length`);
+  ok('only content steps have a Rewind button (not the current one): publishing steps are listed, dimmed, without one', await cnt('.tree-rewind') === contentRows - 1 && contentRows < n0 && await b.ev(`![].some.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`) && await b.ev(`[].every.call(document.querySelectorAll('.tree-row.meta-step'), function(r){return !r.querySelector('.tree-rewind')})`) && await b.ev(`[].some.call(document.querySelectorAll('.tree-row.meta-step .tree-what'), function(x){return /published as/.test(x.textContent)})`) && await cnt('.tree-row.meta-step') === n0 - contentRows, contentRows + ' content of ' + n0);
   ok('a straight history is a single lane', await b.ev(`document.querySelector('.tree-graph').getAttribute('width')`) === '18' && !await q('.tree-graph .l1'));
 
   // ---- make some changes: A, B, C
@@ -35,7 +36,7 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
 
   // ---- rewind to A
   await b.hover(rewindBtn(3));
-  ok('a Rewind button shows when its line is hovered (not on other lines)', await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(3)}')).opacity`) === '1' && await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(6)}')).opacity`) === '0');
+  ok('a Rewind button shows when its line is hovered (not on other lines)', await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(3)}')).opacity`) === '1' && await b.ev(`getComputedStyle(document.querySelector('${rewindBtn(4)}')).opacity`) === '0');
   await b.click(rewindBtn(3));
   ok('rewinding puts the text back: the editor shows version A, a toast says where to', await body() === 'Version A {{name}}' && /Rewound to: English · text → “Version A/.test(await txt('#toast')), await body());
   ok('it is a NEW step at the top: "Rewound to: …", marked current; nothing was removed', await cnt('.tree-row') === n0 + 4 && /^Rewound to: English · text → “Version A/.test((await rows())[0]) && await q('.tree-row:first-child .tree-cur') && await cnt('.tree-cur') === 1);

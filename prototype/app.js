@@ -647,16 +647,16 @@
   }
   function treeHtml(c) {
     var tree = S.historyTree(c.id), dirty = c.translations.some(function (t) { return isDirty(c, t); });
-    var help = '<div class="muted small tree-help">Every change is a step. <strong>Rewind</strong> puts the template back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one.</div>';
+    var help = '<div class="muted small tree-help">Every change is a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a content step; publishing, renaming, campaigns and timing are shown but cannot be rewound to. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one.</div>';
     if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
     return help + '<ol class="tree" aria-label="History tree, newest first">' + tree.rows.map(function (row) {
       var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
       var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts);
-      return '<li class="tree-row' + (row.isHead ? ' current' : '') + '" data-event="' + e.id + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
+      return '<li class="tree-row' + (row.isHead ? ' current' : '') + (row.content ? '' : ' meta-step') + '" data-event="' + e.id + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
         '<span class="tree-what">' + esc(what) + '</span>' +
         (row.isHead ? '<span class="tree-cur" title="The template is as it was after this step">current</span>' : '') +
         '<span class="tree-meta">' + esc(e.actor) + ' · ' + esc(shortTime(e.ts)) + '</span>' +
-        (row.isHead ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the template back as it was after this step') + '">Rewind</button>') + '</li>';
+        (row.isHead || !row.content ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the template back as it was after this step') + '">Rewind</button>') + '</li>';
     }).join('') + '</ol>';
   }
 

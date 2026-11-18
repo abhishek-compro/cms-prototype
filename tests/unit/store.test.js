@@ -772,8 +772,8 @@ test('rewind: does not touch name, campaigns, timing, approval block or publish 
   const S = fresh();
   const c = S.createContent('Keep test', 'en').content;
   patch(S, c, 'en', { text: 'v1' });
+  const published = lastEventId(S, c);        // the content step the publish was made from
   S.deployAll(c.id);
-  const published = lastEventId(S, c);
   patch(S, c, 'en', { text: 'v2' });
   S.renameContent(c.id, 'Kept name');
   assert.equal(S.statusOf(tr(c, 'en'), c), 'modified');
@@ -846,4 +846,29 @@ test('migration: history from before rewinding is chained, the newest step becom
   assert.deepEqual([1, 2, 3].map(i => S.eventOf(i).parent), [null, 1, 2]);
   assert.deepEqual([1, 2, 3].map(i => !!S.eventOf(i).snap), [false, false, true]);
   assert.match(S.rewindProblem(c.id, 1), /before rewinding existed/);
+});
+
+test('rewind: only content changes can be rewound to (publish, rename, approval, campaign and timing steps cannot)', () => {
+  const S = fresh();
+  const c = S.createContent('Content only', 'en').content;
+  patch(S, c, 'en', { text: 'one' });
+  const content = lastEventId(S, c);
+  S.deployAll(c.id);
+  S.renameContent(c.id, 'Content only 2');
+  S.setTemplateTiming(c.id, { days: 2, when: 'after', ref: 'baby_dob' });
+  patch(S, c, 'en', { text: 'two' });
+  const rows = S.historyTree(c.id).rows;
+  const byAction = a => rows.filter(r => r.event.action === a);
+  for (const a of ['deployed', 'renamed', 'timing_edited']) {
+    const r = byAction(a)[0];
+    assert.ok(r, a);
+    assert.equal(r.content, false, a + ' is not a content step');
+    assert.match(S.rewindProblem(c.id, r.event.id), /Only content changes/, a);
+    assert.match(S.rewind(c.id, r.event.id).error, /Only content changes/, a);
+  }
+  assert.ok(rows.filter(r => r.event.action === 'text_edited').every(r => r.content));
+  assert.equal(S.rewindProblem(c.id, content), null);
+  assert.ok(S.rewind(c.id, content).ok);
+  assert.equal(rows.length + 1, S.historyTree(c.id).rows.length);
+  assert.equal(S.historyTree(c.id).rows[0].content, true, 'a Rewound step is a content step you can go back to');
 });
