@@ -531,7 +531,7 @@ test('migration: data from before template parts -> empty header/footer/defaults
 
 test('migration: current-shape data is left exactly as it is', () => {
   const timing = { days: 3, when: 'after', ref: 'date_of_birth' };
-  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image', timing })], history: [] };
+  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image', timing, head: null })], history: [] };
   state.contents[0].translations[0] = Object.assign({ footer: 'f', header: 'h', defaults: { a: 'b' }, buttons: [] }, state.contents[0].translations[0]);
   const { S, saved } = load(JSON.parse(JSON.stringify(state)));
   assert.deepEqual(JSON.parse(JSON.stringify({ campaigns: S.listCampaigns(), flows: S.listFlows(), contents: S.list() })), { campaigns: state.campaigns, flows: [], contents: state.contents });
@@ -686,4 +686,164 @@ test('media: a header file of the wrong kind for the header type is a problem; r
   S.reset();
   assert.equal(S.getMedia(i), null);
   assert.equal(mem['cms-prototype-media'], undefined);
+});
+
+// ---------------------------------------------------------------- rewinding: the undo tree
+const evOf = (S, c) => S.historyFor(c.id, 'all').slice().sort((a, b) => a.id - b.id);
+const textOf = (c, lang) => tr(c, lang).text;
+function lastEventId(S, c) { return evOf(S, c).pop().id; }
+
+test('rewind: every content event is a node with a parent and a snapshot; the current marker is the last one', () => {
+  const S = fresh();
+  for (const c of S.list()) {
+    const evs = evOf(S, c);
+    assert.ok(evs.length > 0);
+    assert.equal(c.head, evs[evs.length - 1].id, c.name + ': current = newest');
+    evs.forEach((e, i) => { assert.equal(e.parent, i ? evs[i - 1].id : null); assert.ok(e.snap, 'snapshot'); });
+  }
+});
+
+test('rewind: back to an earlier step restores it, is logged as a new step under it, and nothing is lost', () => {
+  const S = fresh();
+  const c = S.createContent('Tree test', 'en').content;
+  patch(S, c, 'en', { text: 'one' });
+  const one = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'two' });
+  const two = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'three' });
+  const before = S.historyFor(c.id, 'all').length;
+  assert.ok(S.rewind(c.id, one).ok);
+  assert.equal(textOf(c, 'en'), 'one');
+  const evs = evOf(S, c);
+  assert.equal(evs.length, before + 1, 'one new step; nothing removed');
+  const r = evs[evs.length - 1];
+  assert.equal(r.action, 'rewound');
+  assert.equal(r.parent, one, 'it hangs under the step we went back to');
+  assert.equal(r.to, one);
+  assert.equal(r.from, evs[evs.length - 2].id, 'remembers where we came from');
+  assert.equal(c.head, r.id, 'the current marker is on it');
+  assert.equal(S.eventOf(two).parent, one, 'the old branch is still there');
+  // editing now grows a new branch from the rewind step
+  patch(S, c, 'en', { text: 'four' });
+  const four = evs.length ? lastEventId(S, c) : 0;
+  assert.equal(S.eventOf(four).parent, r.id);
+  // and the abandoned branch can still be restored
+  assert.ok(S.rewind(c.id, two).ok);
+  assert.equal(textOf(c, 'en'), 'two');
+});
+
+test('rewind: one save with several changed parts makes one step per part, each restorable on its own', () => {
+  const S = fresh();
+  const c = S.createContent('Parts test', 'en').content;
+  patch(S, c, 'en', { text: 'Hello' });
+  patch(S, c, 'en', { text: 'Hello again', footer: 'Foot' });
+  const evs = evOf(S, c), textStep = evs[evs.length - 2], footerStep = evs[evs.length - 1];
+  assert.equal(textStep.action, 'text_edited');
+  assert.equal(footerStep.detail, 'Footer');
+  assert.equal(footerStep.parent, textStep.id);
+  assert.equal(textStep.snap.tr.en.footer, '', 'after the text part only: no footer yet');
+  assert.equal(textStep.snap.tr.en.text, 'Hello again');
+  assert.equal(footerStep.snap.tr.en.footer, 'Foot');
+  assert.ok(S.rewind(c.id, textStep.id).ok);
+  assert.equal(textOf(c, 'en'), 'Hello again');
+  assert.equal(tr(c, 'en').footer, '');
+});
+
+test('rewind: restores the header type, every language\'s parts, and empties a language added later', () => {
+  const S = fresh();
+  const c = S.createContent('Langs test', 'en').content;
+  patch(S, c, 'en', { text: 'Hi {{name}}', defaults: { name: 'Friend' }, buttons: [S.newButton('QUICK_REPLY')] });
+  const start = lastEventId(S, c);
+  S.setHeaderType(c.id, 'video');
+  S.addTranslation(c.id, 'hi', 'नमस्ते');
+  patch(S, c, 'en', { text: 'Changed', defaults: {}, buttons: [] });
+  assert.ok(S.rewind(c.id, start).ok);
+  assert.equal(c.headerType, 'none');
+  assert.equal(textOf(c, 'en'), 'Hi {{name}}');
+  assert.deepEqual(tr(c, 'en').defaults, { name: 'Friend' });
+  assert.equal(tr(c, 'en').buttons.length, 1);
+  assert.equal(textOf(c, 'hi'), '', 'Hindi did not exist at that step: it stays as an empty language');
+  assert.ok(S.rewind(c.id, S.historyFor(c.id, 'hi')[0].id).ok, 'rewinding to the step that added Hindi brings its text back');
+  assert.equal(textOf(c, 'hi'), 'नमस्ते');
+  assert.equal(c.headerType, 'video');
+});
+
+test('rewind: does not touch name, campaigns, timing, approval block or publish bookkeeping; status follows the usual rule', () => {
+  const S = fresh();
+  const c = S.createContent('Keep test', 'en').content;
+  patch(S, c, 'en', { text: 'v1' });
+  S.deployAll(c.id);
+  const published = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'v2' });
+  S.renameContent(c.id, 'Kept name');
+  assert.equal(S.statusOf(tr(c, 'en'), c), 'modified');
+  assert.ok(S.rewind(c.id, published).ok);
+  assert.equal(c.name, 'Kept name');
+  assert.equal(tr(c, 'en').waName, 'keep_test_v1', 'publish bookkeeping is left alone');
+  assert.equal(S.statusOf(tr(c, 'en'), c), 'deployed', 'it equals what was published again');
+});
+
+test('rewind: refused when nothing would change, for another template\'s step, or for a step without a snapshot', () => {
+  const S = fresh();
+  const c = S.createContent('Refuse test', 'en').content, d = S.createContent('Other one', 'en').content;
+  patch(S, c, 'en', { text: 'a' });
+  const a = lastEventId(S, c);
+  assert.match(S.rewind(c.id, a).error, /already looks like this/, 'the current step');
+  patch(S, c, 'en', { text: 'b' });
+  assert.ok(S.rewind(c.id, a).ok);
+  assert.match(S.rewindProblem(c.id, lastEventId(S, c)) || '', /already looks like this/, 'the rewind step itself');
+  assert.match(S.rewind(c.id, lastEventId(S, d)).error, /not in this template/);
+  assert.match(S.rewind(c.id, 99999).error, /not in this template/);
+  S.eventOf(a).snap = undefined;
+  patch(S, c, 'en', { text: 'c' });
+  assert.match(S.rewind(c.id, a).error, /before rewinding existed/);
+});
+
+test('rewind: saved, so the current marker and the tree survive a reload', () => {
+  const { S, mem } = loadStore();
+  const c = S.createContent('Persist test', 'en').content;
+  patch(S, c, 'en', { text: 'x' });
+  const x = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'y' });
+  S.rewind(c.id, x);
+  const S2 = loadStore(mem).S, c2 = S2.list().find(k => k.name === 'Persist test');
+  assert.equal(textOf(c2, 'en'), 'x');
+  assert.equal(c2.head, c.head);
+  assert.equal(S2.historyTree(c2.id).rows.filter(r => r.isHead).length, 1);
+});
+
+test('historyTree: a straight history is one lane; a branch opens a second lane that joins at the step it left from', () => {
+  const S = fresh();
+  const c = S.createContent('Lanes test', 'en').content;
+  patch(S, c, 'en', { text: 'a' });
+  const lin = S.historyTree(c.id);
+  assert.equal(lin.width, 1);
+  assert.ok(lin.rows.every(r => r.lane === 0));
+  assert.deepEqual(lin.rows.map(r => r.event.id), lin.rows.map(r => r.event.id).slice().sort((p, q) => q - p), 'newest first');
+  assert.equal(lin.rows[0].isHead, true);
+  const a = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'b' });                 // branch 1: b
+  S.rewind(c.id, a);                                  // rewind step under a
+  patch(S, c, 'en', { text: 'c' });                 // branch 2 continues from the rewind step
+  const t = S.historyTree(c.id);
+  assert.equal(t.width, 2, 'two lines are alive at the same time');
+  const atA = t.rows.find(r => r.event.id === a);
+  assert.deepEqual(atA.merge.length, 1, 'both lines join at the step they left from');
+  assert.equal(t.rows.filter(r => r.isHead).length, 1);
+  assert.equal(t.rows[0].event.action, 'text_edited');
+  assert.equal(t.rows.find(r => r.event.action === 'rewound').event.parent, a);
+  // every row's lane is a valid column and each step's parent comes later in the list (so lines only go downwards)
+  const index = {}; t.rows.forEach((r, i) => { index[r.event.id] = i; });
+  t.rows.forEach((r, i) => { assert.ok(r.lane < t.width); if (r.event.parent != null) assert.ok(index[r.event.parent] > i); });
+});
+
+test('migration: history from before rewinding is chained, the newest step becomes current and is the only one with a snapshot', () => {
+  const ev = (id, action) => ({ id, ts: '2026-01-0' + id + 'T00:00:00Z', actor: 'Demo user', contentId: 'c1', contentName: 'One', lang: null, action, before: null, after: null, detail: null });
+  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { id: 'c1', campaignIds: ['k1'] })], history: [ev(1, 'content_created'), ev(2, 'renamed'), ev(3, 'renamed')] };
+  const { S } = load(state);
+  const c = S.list()[0];
+  assert.equal(c.head, 3);
+  assert.deepEqual([1, 2, 3].map(i => S.eventOf(i).parent), [null, 1, 2]);
+  assert.deepEqual([1, 2, 3].map(i => !!S.eventOf(i).snap), [false, false, true]);
+  assert.match(S.rewindProblem(c.id, 1), /before rewinding existed/);
 });

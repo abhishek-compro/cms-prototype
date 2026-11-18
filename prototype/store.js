@@ -35,6 +35,7 @@
     header_type_changed: 'Changed header type',
     campaign_copied: 'Copied to campaign',
     campaign_moved: 'Moved to campaign',
+    rewound: 'Rewound',
     timing_edited: 'Changed timing',
     flow_created: 'Created flow',
     flow_renamed: 'Renamed flow',
@@ -133,6 +134,16 @@
       if ('campaignId' in c) { delete c.campaignId; changed = true; }
     });
     if (!state.flows) { state.flows = []; changed = true; }
+    // Data saved before rewinding existed: chain each template's events in order and make the last one the current step, with a
+    // snapshot of how the template looks now (older steps have none, so they are listed but cannot be restored).
+    state.contents.forEach(function (c) {
+      if (c.head !== undefined) return;
+      var evs = state.history.filter(function (e) { return e.contentId === c.id; }).sort(function (a, b) { return a.id - b.id; });
+      evs.forEach(function (e, i) { e.parent = i ? evs[i - 1].id : null; });
+      c.head = evs.length ? evs[evs.length - 1].id : null;
+      if (evs.length) evs[evs.length - 1].snap = snapshotOf(c);
+      changed = true;
+    });
     state.flows.forEach(function (f) {          // flows used to be an ordered list of steps: now a chain of connected template nodes
       if (f.nodes) return;
       var steps = f.steps || [], ids = steps.map(function () { return 'n' + state.nextId++; });
@@ -456,8 +467,78 @@
       after: null,
       detail: null
     };
+    // Every content event is a node of an undo tree (like Emacs' undo-tree): `parent` is the node that was current when it
+    // happened, `snap` what the template's content looked like right after it, and content.head is the current node.
+    e.parent = content.head === undefined ? null : content.head;
+    e.snap = snapshotOf(content);
     for (var k in extra) e[k] = extra[k];
     state.history.push(e);
+    content.head = e.id;
+  }
+
+  // ---- Rewinding: the undo tree ----------------------------------------------------------------------------------
+  // What a rewind restores (and a snapshot holds): the header type and, per language, the body, header file, footer, placeholder
+  // defaults and buttons. NOT restored: name, campaigns, timing, the approval block, or publish bookkeeping (publishing is
+  // external; after a rewind the status simply follows the usual rule: Published when it equals what was published).
+  var EMPTY_PARTS = function () { return { text: '', footer: '', header: '', defaults: {}, buttons: [] }; };
+  function snapshotOf(c, override) {
+    var tr = {};
+    c.translations.forEach(function (t) { tr[t.lang] = cloneParts(partsOf(t)); });
+    if (override) tr[override.lang] = cloneParts(override.parts);
+    return { headerType: c.headerType, tr: tr };
+  }
+  function sameSnapshot(a, b) {
+    if (a.headerType !== b.headerType) return false;
+    var langs = Object.keys(a.tr).concat(Object.keys(b.tr));
+    return langs.every(function (l) { return partsSig(a.tr[l] || EMPTY_PARTS()) === partsSig(b.tr[l] || EMPTY_PARTS()); });
+  }
+  function eventOf(id) { for (var i = 0; i < state.history.length; i++) if (state.history[i].id === id) return state.history[i]; return null; }
+  // null when the template can be rewound to this step, else why not
+  function rewindProblem(contentId, eventId) {
+    var c = get(contentId), e = eventOf(eventId);
+    if (!c) return 'Content not found';
+    if (!e || e.contentId !== contentId) return 'That step is not in this template\'s history';
+    if (!e.snap) return 'This step was saved before rewinding existed, so it cannot be restored';
+    if (sameSnapshot(snapshotOf(c), e.snap)) return 'The template already looks like this';
+    return null;
+  }
+  // Put the template back as it was after step `eventId`. Nothing is deleted: the rewind is logged as a new step ("Rewound") that
+  // hangs under the step you went back to, so anything done after that step stays in the tree as another branch (and can be
+  // rewound to as well); editing from here grows a new branch from it.
+  function rewind(contentId, eventId) {
+    var why = rewindProblem(contentId, eventId);
+    if (why) return fail(why);
+    var c = get(contentId), e = eventOf(eventId), from = c.head;
+    c.headerType = e.snap.headerType;
+    c.translations.forEach(function (t) {
+      var p = cloneParts(e.snap.tr[t.lang] || EMPTY_PARTS());
+      t.text = p.text; t.footer = p.footer; t.header = p.header; t.defaults = p.defaults; t.buttons = p.buttons;
+    });
+    log(c, null, 'rewound', { parent: e.id, from: from, to: e.id, snap: JSON.parse(JSON.stringify(e.snap)) });
+    save();
+    return { ok: true };
+  }
+  // The tree for the sidebar, newest first, with the lanes of a "git log --graph": row.lane is the column of the node,
+  // row.before / row.after the event id each column is waiting for above / below the node (null = free), row.merge the columns that end here.
+  function historyTree(contentId) {
+    var c = get(contentId);
+    if (!c) return { rows: [], width: 0, head: null };
+    var events = state.history.filter(function (e) { return e.contentId === contentId; }).sort(function (a, b) { return b.id - a.id; });
+    var ids = {}; events.forEach(function (e) { ids[e.id] = true; });
+    var lanes = [], width = 0;
+    var rows = events.map(function (e) {
+      var before = lanes.slice(), mine = [];
+      lanes.forEach(function (x, k) { if (x === e.id) mine.push(k); });
+      var lane = mine.length ? mine[0] : lanes.indexOf(null);
+      if (lane === -1) { lane = lanes.length; lanes.push(null); }
+      mine.forEach(function (k) { lanes[k] = null; });
+      lanes[lane] = e.parent != null && ids[e.parent] ? e.parent : null;
+      while (lanes.length && lanes[lanes.length - 1] === null && lanes.length > lane + 1) lanes.pop();
+      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === c.head, problem: rewindProblem(contentId, e.id) };
+      width = Math.max(width, before.length, lanes.length, lane + 1);
+      return row;
+    });
+    return { rows: rows, width: width, head: c.head };
   }
 
   // ---- Operations ------------------------------------------------------------
@@ -489,6 +570,7 @@
       timing: cloneTiming(DEFAULT_TIMING),
       blocked: false,
       deployCounter: 0,
+      head: null,
       createdAt: clock().toISOString(),
       translations: [newTranslation(firstLang || 'en', '')]
     };
@@ -553,7 +635,14 @@
     if (!changed.length) return fail('No changes to save');
 
     tr.text = next.text; tr.footer = next.footer; tr.header = next.header; tr.defaults = next.defaults; tr.buttons = next.buttons;
-    changed.forEach(function (ch) { log(c, lang, ch[0], { detail: ch[1], before: ch[2], after: ch[3] }); });
+    // one event per part, each with the snapshot as it stood right after that part (so every step can be rewound to)
+    var work = cloneParts(prev), KEY = { Footer: 'footer', Header: 'header', Placeholders: 'defaults', Buttons: 'buttons' };
+    changed.forEach(function (ch, i) {
+      var key = ch[0] === 'text_edited' ? 'text' : KEY[ch[1]];
+      work[key] = cloneParts(next)[key];
+      var snap = snapshotOf(c, { lang: lang, parts: i === changed.length - 1 ? next : work });
+      log(c, lang, ch[0], { detail: ch[1], before: ch[2], after: ch[3], snap: snap });
+    });
     save();
     return { ok: true };
   }
@@ -1625,6 +1714,10 @@
     isDeployed: isDeployed,
     blockProblem: blockProblem,
     historyFor: historyFor,
+    historyTree: historyTree,
+    rewind: rewind,
+    rewindProblem: rewindProblem,
+    eventOf: eventOf,
     validateName: validateName,
     createContent: createContent,
     renameContent: renameContent,

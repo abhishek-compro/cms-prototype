@@ -12,6 +12,7 @@
   --muted: #667085;
   --code-bg: #eef0f3;
   --accent: #1f6feb;
+  --lane-0: #1f6feb; --lane-1: #d9822b; --lane-2: #1a7f4b; --lane-3: #a855c7; --lane-4: #d1435b; --lane-5: #0e9aa7;
   --accent-soft: #e8f0fe;
   --accent-border: #c5d8fb;
   --selected: #f3f7ff;
@@ -58,6 +59,7 @@
     --muted: #98a2b3;
     --code-bg: #222b38;
     --accent: #6ea8ff;
+    --lane-0: #6ea8ff; --lane-1: #f0a050; --lane-2: #4cc88a; --lane-3: #c58af0; --lane-4: #ff7a90; --lane-5: #4fd1dd;
     --accent-soft: #1a2b47;
     --accent-border: #2e4a7a;
     --selected: #19243a;
@@ -103,6 +105,7 @@
   --muted: #98a2b3;
   --code-bg: #222b38;
   --accent: #6ea8ff;
+  --lane-0: #6ea8ff; --lane-1: #f0a050; --lane-2: #4cc88a; --lane-3: #c58af0; --lane-4: #ff7a90; --lane-5: #4fd1dd;
   --accent-soft: #1a2b47;
   --accent-border: #2e4a7a;
   --selected: #19243a;
@@ -611,3 +614,31 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .wa-img { display: block; width: 100%; max-height: 220px; object-fit: cover; }
 .wa-doc { display: flex; align-items: center; gap: 8px; padding: 10px; margin-bottom: 4px; border-radius: 6px; background: var(--code-bg); color: var(--wa-meta); }
 .wa-doc-name { color: inherit; font-weight: 600; overflow-wrap: anywhere; }
+
+/* the undo tree */
+.layout.tree-on { grid-template-columns: 210px 260px minmax(0, 1fr) 520px; }
+@media (max-width: 1180px) { .layout.tree-on { grid-template-columns: 180px 220px minmax(0, 1fr) 460px; } }
+@media (max-width: 900px) { .layout.tree-on { grid-template-columns: 1fr; } }
+.tree-help { margin-bottom: 8px; line-height: 1.4; }
+.tree-note { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-size: 12px; }
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree-row { display: flex; align-items: center; gap: 6px; height: 30px; padding-right: 4px; border-radius: 6px; white-space: nowrap; }
+.tree-row:hover, .tree-row:focus-within { background: var(--hover); }
+.tree-row.current { background: var(--accent-soft); }
+.tree-graph { flex: none; overflow: visible; }
+.tree-graph line, .tree-graph path { fill: none; stroke-width: 2; }
+.tree-graph .node { stroke-width: 2; }
+.tree-graph .node.rw { fill: var(--surface); }
+.tree-graph .node.head { stroke-width: 3; }
+.tree-graph .l0 { stroke: var(--lane-0); } .tree-graph .l1 { stroke: var(--lane-1); } .tree-graph .l2 { stroke: var(--lane-2); }
+.tree-graph .l3 { stroke: var(--lane-3); } .tree-graph .l4 { stroke: var(--lane-4); } .tree-graph .l5 { stroke: var(--lane-5); }
+.tree-graph circle.l0 { fill: var(--lane-0); } .tree-graph circle.l1 { fill: var(--lane-1); } .tree-graph circle.l2 { fill: var(--lane-2); }
+.tree-graph circle.l3 { fill: var(--lane-3); } .tree-graph circle.l4 { fill: var(--lane-4); } .tree-graph circle.l5 { fill: var(--lane-5); }
+.tree-graph circle.rw { fill: var(--surface); }
+.tree-graph circle.head { stroke: var(--text); }
+.tree-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-row.current .tree-what { font-weight: 600; }
+.tree-cur { flex: none; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; }
+.tree-meta { flex: none; color: var(--muted); font-size: 11px; }
+.tree-rewind { flex: none; padding: 1px 8px; font-size: 12px; opacity: 0; }   /* opacity, not visibility: it must stay reachable by keyboard */
+.tree-row:hover .tree-rewind, .tree-row:focus-within .tree-rewind { opacity: 1; }

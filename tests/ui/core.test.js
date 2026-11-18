@@ -81,7 +81,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
 
   // ================= history sidebar =================
   await b.click('[data-action=toggle-history-pane]');
-  ok('"Show history" opens the sidebar; single view tabs are <language> | Other', await q('#history-pane') && /^edit:/.test(await tabs()) && /other:Other$/.test(await tabs()) && await cnt('#history-pane .hp-tab') === 2, await tabs());
+  ok('"Show history" opens the sidebar; single view tabs are <language> | Other | Tree', await q('#history-pane') && /^edit:/.test(await tabs()) && /other:Other \| tree:Tree$/.test(await tabs()) && await cnt('#history-pane .hp-tab') === 3, await tabs());
   ok('there is no language filter dropdown and no History page tab', !await q('[data-change=history-lang]') && !await q('.tab[data-mode]'));
   await b.click('.hp-tab[data-tab=other]');
   ok('the Other tab lists name-level events (created, header type, …)', /Created content/.test(await txt('#history-pane')) && await events() >= 1);
@@ -92,7 +92,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   await b.click('.panel.edit .save');
   ok('saving adds an "Edited footer" event live, with who and a word diff', await events() === before + 1 && /Edited footer/.test(await txt('#history-pane')) && /Demo user/.test(await txt('#history-pane')) && await q('#history-pane .d-add'));
   await b.click('[data-change=toggle-side]');
-  ok('side by side tabs: Reference | Editing | Other, in the same order as the panels', (await b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab}).join()`)) === 'ref,edit,other');
+  ok('side by side tabs: Reference | Editing | Other | Tree, in the same order as the panels', (await b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab}).join()`)) === 'ref,edit,other,tree');
   ok('the panel whose history is shown has the highlight', await q('.panel.edit.subject') && !await q('.panel.ref.subject'));
   await b.click('.panel.ref .ref-text');
   ok('clicking the reference panel switches the history to it', await q('.panel.ref.subject') && await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'ref');

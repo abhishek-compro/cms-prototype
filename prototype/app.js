@@ -14,6 +14,7 @@
     editLang: null,      // language being edited (also the active tab when side-by-side is off)
     historyOpen: false,  // right sidebar visible (hidden by default)
     histSubject: 'edit', // side-by-side: whose history the sidebar shows ('edit' | 'ref')
+    treeOpen: false,     // sidebar tab 'Tree' selected (the undo tree with rewind)
     nameOpen: false,     // sidebar tab 'Other' selected (name-level events) instead of a language tab
     search: '',
     renaming: false,
@@ -237,7 +238,7 @@
     var r = S.createCampaign(document.getElementById('new-campaign').value);
     if (!r.ok) { ui.campError = r.error; document.getElementById('camp-error').textContent = r.error; return; }
     ui.campBox = false; ui.campError = '';
-    ui.campaignId = r.campaign.id; ui.renaming = false; ui.nameOpen = false;   // jump to the new (empty) campaign
+    ui.campaignId = r.campaign.id; ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;   // jump to the new (empty) campaign
     render();
     toast('Created campaign "' + r.campaign.name + '"');
   }
@@ -585,6 +586,7 @@
     else if (e.action === 'flow_duplicated') body = 'Duplicated as <strong>' + esc(e.after) + '</strong> <span class="muted">in ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'header_type_changed') body = esc(e.before || 'None') + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'rewound') body = 'Back to <strong>' + esc(eventTitle(S.eventOf(e.to))) + '</strong> <span class="muted">· from ' + esc(eventTitle(S.eventOf(e.from))) + '</span>';
     else if (e.action === 'campaign_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     return '<li class="event act-' + e.action + '"><div class="event-head">' +
@@ -603,6 +605,61 @@
     return c && sideActive(c) && ui.histSubject === role ? ' subject' : '';
   }
 
+  // ---- the undo tree (Tree tab): one line per step, drawn like `git log --graph` ---------------------------------
+  // One line: what happened, who, when. The current step has a marker; "Rewind" puts the template back as it was after that step
+  // (logged as a new step, nothing is deleted: the steps after it stay as another branch).
+  function clip(t, n) { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+  function eventTitle(e) {
+    if (!e) return 'an earlier step';
+    var lang = e.lang ? S.langName(e.lang) + ' · ' : '';
+    switch (e.action) {
+      case 'text_edited': return lang + 'text → “' + clip(e.after, 36) + '”';
+      case 'part_edited': return lang + (e.detail === 'Footer' ? 'footer → “' + clip(e.after, 30) + '”' : 'edited the ' + String(e.detail).toLowerCase());
+      case 'language_added': return 'Added ' + S.langName(e.lang);
+      case 'deployed': return lang + 'published as ' + e.detail;
+      case 'content_created': return 'Created';
+      case 'renamed': return 'Renamed to “' + e.after + '”';
+      case 'header_type_changed': return 'Header type: ' + (e.before || 'None') + ' → ' + e.after;
+      case 'campaign_copied': return 'Copied to ' + e.after;
+      case 'campaign_moved': return 'Moved to ' + e.after;
+      case 'rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
+      case 'flow_list_moved': return 'Moved in the flow list';
+      default: return S.ACTION_LABELS[e.action] || e.action;
+    }
+  }
+  function shortTime(iso) { return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  var TREE_X = function (k) { return 9 + k * 14; }, TREE_H = 30, TREE_MID = 15;
+  function treeGraph(row, width) {
+    var x = TREE_X, parts = [], lane = row.lane, id = row.event.id;
+    row.before.forEach(function (target, k) {
+      if (target == null) return;
+      if (target === id) {                                              // this line ends at the node
+        parts.push(k === lane ? '<line class="l' + (k % 6) + '" x1="' + x(k) + '" y1="0" x2="' + x(k) + '" y2="' + TREE_MID + '"/>'
+          : '<path class="l' + (k % 6) + '" d="M' + x(k) + ' 0 C' + x(k) + ' ' + (TREE_MID - 2) + ' ' + x(lane) + ' 4 ' + x(lane) + ' ' + TREE_MID + '"/>');
+      } else if (k !== lane) {                                           // a line passing by
+        parts.push('<line class="l' + (k % 6) + '" x1="' + x(k) + '" y1="0" x2="' + x(k) + '" y2="' + TREE_H + '"/>');
+      }
+    });
+    if (row.after[lane] != null) parts.push('<line class="l' + (lane % 6) + '" x1="' + x(lane) + '" y1="' + TREE_MID + '" x2="' + x(lane) + '" y2="' + TREE_H + '"/>');
+    var cls = 'node l' + (lane % 6) + (row.isHead ? ' head' : '') + (row.event.action === 'rewound' ? ' rw' : '');
+    parts.push('<circle class="' + cls + '" cx="' + x(lane) + '" cy="' + TREE_MID + '" r="' + (row.isHead ? 6 : 4.5) + '"/>');
+    return '<svg class="tree-graph" width="' + (x(width - 1) + 9) + '" height="' + TREE_H + '" aria-hidden="true">' + parts.join('') + '</svg>';
+  }
+  function treeHtml(c) {
+    var tree = S.historyTree(c.id), dirty = c.translations.some(function (t) { return isDirty(c, t); });
+    var help = '<div class="muted small tree-help">Every change is a step. <strong>Rewind</strong> puts the template back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one.</div>';
+    if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
+    return help + '<ol class="tree" aria-label="History tree, newest first">' + tree.rows.map(function (row) {
+      var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
+      var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts);
+      return '<li class="tree-row' + (row.isHead ? ' current' : '') + '" data-event="' + e.id + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
+        '<span class="tree-what">' + esc(what) + '</span>' +
+        (row.isHead ? '<span class="tree-cur" title="The template is as it was after this step">current</span>' : '') +
+        '<span class="tree-meta">' + esc(e.actor) + ' · ' + esc(shortTime(e.ts)) + '</span>' +
+        (row.isHead ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the template back as it was after this step') + '">Rewind</button>') + '</li>';
+    }).join('') + '</ol>';
+  }
+
   function historyPaneInner(c) {
     var fl = currentFlow();
     if (fl) {
@@ -618,7 +675,8 @@
       ? [{ id: 'ref', label: S.langName(ui.refLang), cap: 'Reference' }, { id: 'edit', label: S.langName(ui.editLang), cap: 'Editing' }]
       : [{ id: 'edit', label: S.langName(ui.editLang) }];
     tabs.push({ id: 'other', label: 'Other' });
-    var active = ui.nameOpen ? 'other' : (side ? ui.histSubject : 'edit');
+    tabs.push({ id: 'tree', label: 'Tree' });
+    var active = ui.treeOpen ? 'tree' : ui.nameOpen ? 'other' : (side ? ui.histSubject : 'edit');
 
     var tabsHtml = '<div class="hp-tabs" role="tablist">' + tabs.map(function (t) {
       return '<button class="hp-tab' + (t.id === active ? ' active' : '') + '" role="tab" aria-selected="' + (t.id === active) + '" data-action="hist-tab" data-tab="' + t.id + '">' +
@@ -629,9 +687,11 @@
       '<button class="btn link" data-action="toggle-history-pane" title="Hide history">Hide</button></div>' + tabsHtml + '</div>';
 
     var body;
-    if (active === 'other') {
+    if (active === 'tree') {
+      body = treeHtml(c);
+    } else if (active === 'other') {
       var names = S.historyFor(c.id, 'content');
-      body = '<div class="muted small" style="margin-bottom:12px">Not tied to a language: created, renamed, approval blocked/allowed, header type changed, timing changed, copied or moved between campaigns.</div>' +
+      body = '<div class="muted small" style="margin-bottom:12px">Not tied to a language: created, renamed, approval blocked/allowed, header type changed, timing changed, rewound, copied or moved between campaigns.</div>' +
         (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     } else {
       var events = S.historyFor(c.id, lang);
@@ -648,6 +708,7 @@
     if (!c && !currentFlow()) return;
     var pane = document.getElementById('history-pane');
     if (pane) pane.innerHTML = historyPaneInner(c);
+    var lay = document.querySelector('.layout'); if (lay) lay.classList.toggle('tree-on', !!c && ui.treeOpen);
     var panels = document.querySelectorAll('.panel[data-role]');
     for (var i = 0; i < panels.length; i++) {
       panels[i].classList.toggle('subject', !!c && sideActive(c) && panels[i].getAttribute('data-role') === ui.histSubject);
@@ -1066,7 +1127,7 @@
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
     var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
     var pane = subject && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (pane && ui.treeOpen && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
@@ -1172,6 +1233,7 @@
     panel.querySelector('.dirty-note').textContent = dirty ? 'Unsaved changes' : '';
     panel.querySelector('.save').disabled = !dirty;
     panel.querySelector('.revert').disabled = !dirty;
+    if (ui.treeOpen) updateHistoryPane();       // Rewind is unavailable while something is unsaved
   }
 
   document.addEventListener('input', function (ev) {
@@ -1707,7 +1769,7 @@
 
     switch (action) {
       case 'select':
-        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null; ui.nameOpen = false;
+        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null; ui.nameOpen = false; ui.treeOpen = false;
         break;
       case 'dialog-copy': applyDialog('copy'); return;
       case 'dialog-refer': applyDialog('refer'); return;
@@ -1734,7 +1796,7 @@
       case 'select-flow':
         ui.flowSel = { kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') };
         if (ui.flowSel.kind === 'template') { ui.selectedId = ui.flowSel.id; ui.editLang = null; ui.refLang = null; }
-        ui.renaming = false; ui.nameOpen = false;
+        ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;
         break;
       case 'open-template': {          // jump from a flow step to the template itself
         var tid = el.getAttribute('data-id'), tpl = S.get(tid);
@@ -1762,7 +1824,7 @@
       case 'edit-out-remove': ui.nodeEdit.draft.outs.splice(parseInt(el.getAttribute('data-i'), 10), 1); break;
       case 'edge-remove': result(S.disconnect(el.getAttribute('data-flow'), el.getAttribute('data-node'), el.getAttribute('data-out') || null)); break;
       case 'select-campaign':
-        ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false; ui.nameOpen = false;
+        ui.campaignId = el.getAttribute('data-id') || null; ui.renaming = false; ui.nameOpen = false; ui.treeOpen = false;
         break;
       case 'open-search': openSideBox('search'); return;
       case 'open-add': openSideBox('add'); return;
@@ -1773,15 +1835,23 @@
         if (ui.sideBox) focusSideBox();
         return;
       case 'new-content': addContent(); return;
-      case 'pick-lang': ui.editLang = lang; ui.nameOpen = false; break;
+      case 'pick-lang': ui.editLang = lang; ui.nameOpen = false; ui.treeOpen = false; break;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; break;
       case 'hist-tab': {
         var tab = el.getAttribute('data-tab');
-        if (tab === 'other') ui.nameOpen = true;
-        else { ui.nameOpen = false; ui.histSubject = tab; }
+        if (tab === 'tree') { ui.treeOpen = true; ui.nameOpen = false; }
+        else if (tab === 'other') { ui.nameOpen = true; ui.treeOpen = false; }
+        else { ui.nameOpen = false; ui.treeOpen = false; ui.histSubject = tab; }
         updateHistoryPane();
         return;
+      }
+      case 'rewind': {
+        var evId = parseInt(el.getAttribute('data-event'), 10);
+        if (c.translations.some(function (t) { return isDirty(c, t); })) { toast('Save or revert your unsaved edits first', true); return; }
+        var label = eventTitle(S.eventOf(evId));
+        if (!result(S.rewind(c.id, evId), 'Rewound to: ' + label)) return;
+        break;
       }
       case 'rename-start': ui.renaming = true; break;
       case 'rename-cancel': ui.renaming = false; break;
