@@ -174,7 +174,7 @@ test('publish all: one shared template name per click, counter goes up, only pub
   assert.equal(tr(a, 'hi').waName, 'appointment_reminder_v1');
   assert.equal(tr(a, 'kn').waName, '');
   assert.match(S.deployAll(a.id).error, /Nothing to publish/);
-  patch(S, a, 'hi', { footer: 'new footer' });
+  patch(S, a, 'hi', { text: tr(a, 'hi').text + ' धन्यवाद।' });
   const r2 = S.deployAll(a.id);
   assert.deepEqual([r2.waName, r2.count], ['appointment_reminder_v2', 1], 'only the edited language is republished, under the next version');
   assert.equal(tr(a, 'en').waName, 'appointment_reminder_v1', 'the untouched language keeps its name');
@@ -445,7 +445,9 @@ test('toExtraContent: the orchestrator shape - every key per language, positions
   assert.deepEqual(Object.keys(x).sort(), ['body_param_defaults', 'body_param_positions', 'buttons', 'footer', 'header']);
   assert.deepEqual(x.body_param_defaults.en, { name: 'Friend' });
   assert.deepEqual(x.body_param_positions.en, { name: [1] });
-  assert.deepEqual(x.header, { en: '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40', hi: '' }, 'every language gets a header value (empty = none yet)');
+  assert.deepEqual(x.header, { en: '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40', hi: '7c1d4e92-5b38-4f0a-9d6e-2a8b3c5f1e07' }, 'every language gets a header value (empty = none yet)');
+  S.addTranslation(w.id, 'kn', 'ಹಲೋ');
+  assert.equal(S.toExtraContent(w.id).header.kn, '', 'a language without a header gets an empty value');
   assert.deepEqual(x.buttons.en[0], { type: 'QUICK_REPLY', text: 'Tell me more', default_payload: 'welcome_more' });
   assert.deepEqual(x.buttons.en[1], { type: 'URL', text: 'Visit website', url: 'https://www.noorahealth.org/{{page}}', default_parameters: { page: 'about' }, parameter_positions: { page: [1] } });
   assert.deepEqual(x.footer, { en: 'Noora Health', hi: 'नूरा हेल्थ' });
@@ -543,4 +545,78 @@ test('reset: discards saved changes and reloads the sample data', () => {
   S.reset();
   assert.equal(S.list().length, 3);
   assert.equal(JSON.parse(mem['cms-prototype-v1']).contents.length, 3);
+});
+
+// ---------------------------------------------------------------- consistency between languages
+test('consistency: the seed templates are consistent; empty and single languages are ignored', () => {
+  const S = fresh();
+  ['Welcome message', 'Appointment reminder', 'Daily health tip'].forEach(n => {
+    const r = S.consistency(byName(S, n));
+    assert.deepEqual([r.errors, r.warnings], [[], []], n);
+  });
+  const a = byName(S, 'Appointment reminder');
+  patch(S, a, 'kn', { footer: 'only here' });                           // kn has no text: not compared, not published
+  assert.deepEqual(S.consistency(a).errors, []);
+});
+
+test('consistency: the number of buttons, then the type of buttons, must match in every language (errors, saving still works)', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  const hi = S.partsOf(tr(w, 'hi')).buttons;
+  assert.equal(patch(S, w, 'hi', { buttons: hi.slice(0, 1) }).ok, true, 'saving is never blocked');
+  let e = S.consistency(w).errors;
+  assert.equal(e.length, 1);
+  assert.match(e[0].message, /number of buttons differs between languages: English 2, Hindi 1/);
+  assert.equal(e[0].part, 'Buttons');
+  patch(S, w, 'hi', { buttons: [hi[1], hi[0]] });                       // same count, swapped order: types differ
+  e = S.consistency(w).errors;
+  assert.equal(e.length, 1);
+  assert.match(e[0].message, /type of buttons differs between languages \(button 1: English quick reply, Hindi URL; button 2: English URL, Hindi quick reply\)/);
+  patch(S, w, 'hi', { buttons: hi });
+  assert.deepEqual(S.consistency(w).errors, []);
+});
+
+test('consistency: a header media or a footer set in one language must be set in all; the header is only compared when the name has a header', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  patch(S, w, 'hi', { header: '', footer: '' });
+  const msgs = S.consistency(w).errors.map(e => e.part + ': ' + e.message);
+  assert.deepEqual(msgs, ['Header: The header media is set in English but missing in Hindi', 'Footer: The footer is set in English but missing in Hindi']);
+  patch(S, w, 'en', { footer: '' });
+  assert.deepEqual(S.consistency(w).errors.map(e => e.part), ['Header'], 'a footer in none is fine');
+  S.setHeaderType(w.id, 'none');
+  assert.deepEqual(S.consistency(w).errors, [], 'no header at all: nothing to compare');
+});
+
+test('consistency: placeholders are only a warning (names used in some languages and not in others); defaults are not compared', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  patch(S, w, 'hi', { text: 'नमस्ते, नूरा हेल्थ में आपका स्वागत है।', defaults: {} });
+  const r = S.consistency(w);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings.map(x => x.message), ['{{name}} is used in English but not in Hindi']);
+  assert.equal(S.canDeploy(w, tr(w, 'hi')), null, 'a warning does not block publishing');
+  patch(S, w, 'hi', { text: 'नमस्ते {{naam}}', defaults: { naam: 'x' } });
+  assert.deepEqual(S.consistency(w).warnings.map(x => x.message).sort(), ['{{naam}} is used in Hindi but not in English', '{{name}} is used in English but not in Hindi']);
+});
+
+test('consistency errors block publishing of every language (saving stays possible); fixing them unblocks', () => {
+  const S = fresh();
+  const a = byName(S, 'Appointment reminder');
+  patch(S, a, 'hi', { buttons: S.partsOf(tr(a, 'hi')).buttons.slice(0, 1) });
+  assert.match(S.canDeploy(a, tr(a, 'en')), /1 mismatch between languages to fix before publishing/);
+  assert.match(S.canDeploy(a, tr(a, 'hi')), /mismatch/);
+  assert.match(S.deployAll(a.id).error, /Nothing to publish.*mismatches between languages/);
+  assert.equal(tr(a, 'en').waName, '', 'nothing was published');
+  patch(S, a, 'hi', { buttons: S.partsOf(tr(a, 'en')).buttons });
+  assert.equal(S.deployAll(a.id).ok, true);
+});
+
+test('consistency: the editor can pass unsaved drafts', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  const draft = S.cloneParts(S.partsOf(tr(w, 'hi')));
+  draft.buttons = [];
+  assert.deepEqual(S.consistency(w).errors, []);
+  assert.match(S.consistency(w, { hi: draft }).errors[0].message, /English 2, Hindi 0/);
 });

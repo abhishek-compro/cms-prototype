@@ -530,11 +530,56 @@
     return { ok: true };
   }
 
+  // ---- consistency between the languages of one template ------------------------------------------------------------
+  // WhatsApp templates published under one name should have the same shape in every language. Only languages that have
+  // text are compared (an empty translation is not published). `partsByLang` ({lang: parts}) lets the editor pass unsaved
+  // drafts; by default the saved parts are used. Errors block publishing (saving is never blocked); warnings do not.
+  //   errors:   the number of buttons, the type of buttons, the header (media) and the footer must be present in all or none
+  //   warnings: a placeholder name used in some languages but not in others (the placeholder defaults are not compared)
+  function consistency(content, partsByLang) {
+    var errors = [], warnings = [];
+    var rows = content.translations.filter(function (t) { return t.text.trim(); }).map(function (t) {
+      return { lang: t.lang, name: langName(t.lang), p: (partsByLang && partsByLang[t.lang]) || partsOf(t) };
+    });
+    if (rows.length < 2) return { errors: errors, warnings: warnings };
+    function list(items) { return items.join(', '); }
+    function typeName(t) { return t === 'URL' ? 'URL' : 'quick reply'; }
+    function err(part, message) { errors.push({ part: part, message: message, code: 'mismatch' }); }
+
+    var counts = rows.map(function (r) { return (r.p.buttons || []).length; });
+    if (counts.some(function (n) { return n !== counts[0]; })) {
+      err('Buttons', 'The number of buttons differs between languages: ' + list(rows.map(function (r, i) { return r.name + ' ' + counts[i]; })));
+    }
+    var shortest = Math.min.apply(null, counts), typeDiff = [];
+    for (var i = 0; i < shortest; i++) {
+      var types = rows.map(function (r) { return (r.p.buttons[i] || {}).type; });
+      if (types.some(function (t) { return t !== types[0]; })) typeDiff.push('button ' + (i + 1) + ': ' + list(rows.map(function (r, k) { return r.name + ' ' + typeName(types[k]); })));
+    }
+    if (typeDiff.length) err('Buttons', 'The type of buttons differs between languages (' + typeDiff.join('; ') + ')');
+
+    function presence(part, label, has) {
+      var withIt = rows.filter(has), without = rows.filter(function (r) { return !has(r); });
+      if (withIt.length && without.length) err(part, label + ' is set in ' + list(withIt.map(function (r) { return r.name; })) + ' but missing in ' + list(without.map(function (r) { return r.name; })));
+    }
+    if (content.headerType !== 'none') presence('Header', 'The header media', function (r) { return !!(r.p.header || '').trim(); });
+    presence('Footer', 'The footer', function (r) { return !!(r.p.footer || '').trim(); });
+
+    var names = [], used = rows.map(function (r) { return Object.keys(positionsOf(r.p.text || '')); });
+    used.forEach(function (u) { u.forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); }); });
+    names.forEach(function (n) {
+      var inL = rows.filter(function (r, k) { return used[k].indexOf(n) !== -1; }), outL = rows.filter(function (r, k) { return used[k].indexOf(n) === -1; });
+      if (outL.length) warnings.push({ part: 'Placeholders', message: '{{' + n + '}} is used in ' + list(inL.map(function (r) { return r.name; })) + ' but not in ' + list(outL.map(function (r) { return r.name; })), code: 'placeholder' });
+    });
+    return { errors: errors, warnings: warnings };
+  }
+
   function canDeploy(content, tr) {
     if (content.blocked) return 'Template approval is blocked for this content';
     if (!tr.text.trim()) return 'Text is empty';
     var bad = problems(content, partsOf(tr));
     if (bad.length) return bad.length + ' problem' + (bad.length === 1 ? '' : 's') + ' to fix before publishing';
+    var mismatch = consistency(content).errors;
+    if (mismatch.length) return mismatch.length + ' mismatch' + (mismatch.length === 1 ? '' : 'es') + ' between languages to fix before publishing';
     if (statusOf(tr, content) === 'deployed') return 'Already published, no changes since';
     return null;
   }
@@ -569,7 +614,7 @@
     if (!c) return fail('Content not found');
     if (c.blocked) return fail('Template approval is blocked for this content');
     var targets = c.translations.filter(function (tr) { return !canDeploy(c, tr); });
-    if (!targets.length) return fail('Nothing to publish: every translation is empty, has problems or is already published');
+    if (!targets.length) return fail('Nothing to publish: every translation is empty, has problems or mismatches between languages, or is already published');
     return { ok: true, waName: deployMany(c, targets), count: targets.length };
   }
 
@@ -1393,6 +1438,7 @@
     addTranslation(w.id, 'hi', 'नमस्ते {{name}}, नूरा हेल्थ में आपका स्वागत है। हम आपको नवजात शिशु की देखभाल के सुझाव भेजेंगे।');
     patch(w.id, 'hi', {
       defaults: { name: 'दोस्त' },
+      header: '7c1d4e92-5b38-4f0a-9d6e-2a8b3c5f1e07',
       footer: 'नूरा हेल्थ',
       buttons: [
         { type: 'QUICK_REPLY', text: 'और जानें', default_payload: 'welcome_more' },
@@ -1512,6 +1558,7 @@
     slugOf: slugOf,
     statusOf: statusOf,
     canDeploy: canDeploy,
+    consistency: consistency,
     isDeployed: isDeployed,
     blockProblem: blockProblem,
     historyFor: historyFor,

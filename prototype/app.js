@@ -55,7 +55,9 @@
     if (!ui.drafts[k]) ui.drafts[k] = S.cloneParts(S.partsOf(tr));
     return ui.drafts[k];
   }
-  function problemCount(c, tr) { return tr.text.trim() ? S.problems(c, S.partsOf(tr)).length : 0; }
+  // problems of this language plus the mismatches between languages (those block publishing too; saved parts)
+  function problemCount(c, tr) { return tr.text.trim() ? S.problems(c, S.partsOf(tr)).length + S.consistency(c).errors.length : 0; }
+  function draftsByLang(c) { var m = {}; c.translations.forEach(function (t) { m[t.lang] = currentParts(c, t); }); return m; }
   function fmtTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
   function langLabel(code) { return esc(S.langName(code)) + ' <code>' + esc(code) + '</code>'; }
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
@@ -458,11 +460,16 @@
   }
 
   // Only shown when there is something wrong (the container stays so it can appear while typing)
+  // Errors block publishing (this language's own, and mismatches between the languages of the template, which use the
+  // unsaved drafts too); warnings do not (a placeholder used in some languages and not in others).
   function secProblems(c, p) {
-    var list = S.problems(c, p).filter(function (x) { return x.code !== 'empty'; });
-    if (!list.length) return '<div data-sec="problems"></div>';
-    return '<div class="sec" data-sec="problems"><div class="probs"><div class="sec-label">Problems (' + list.length + ') <span class="muted">· these block publishing</span></div><ul>' +
-      list.map(function (x) { return '<li><strong>' + esc(x.part) + '</strong> ' + esc(x.message) + '</li>'; }).join('') + '</ul></div></div>';
+    var cross = S.consistency(c, draftsByLang(c));
+    var list = S.problems(c, p).filter(function (x) { return x.code !== 'empty'; }).concat(cross.errors), warns = cross.warnings;
+    if (!list.length && !warns.length) return '<div data-sec="problems"></div>';
+    function items(a) { return a.map(function (x) { return '<li><strong>' + esc(x.part) + '</strong> ' + esc(x.message) + '</li>'; }).join(''); }
+    return '<div class="sec" data-sec="problems">' +
+      (list.length ? '<div class="probs"><div class="sec-label">Problems (' + list.length + ') <span class="muted">· these block publishing, saving still works</span></div><ul>' + items(list) + '</ul></div>' : '') +
+      (warns.length ? '<div class="warns"><div class="sec-label">Warnings (' + warns.length + ') <span class="muted">· these do not block publishing</span></div><ul>' + items(warns) + '</ul></div>' : '') + '</div>';
   }
 
   function refPanelHtml(c, tr) {

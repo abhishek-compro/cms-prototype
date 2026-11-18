@@ -591,3 +591,8 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .node-preview .wa-chat { min-height: 220px; }
 
 .node-title-input { flex: 1; min-width: 0; height: 26px; padding: 2px 6px; font-weight: 600; }
+
+.warns { margin: 0; padding: 8px 0 4px; }
+.warns ul { margin: 0; padding-left: 18px; color: var(--warn); }
+.warns li { margin-bottom: 2px; }
+.warns li strong { color: var(--text); }

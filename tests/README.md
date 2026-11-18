@@ -29,6 +29,7 @@ run here is reported as **skipped** with the reason, never as a pass.
 | `ui/sidebar-tools.test.js` | Left bar: search and + icons, text boxes that close on blur, filter chip. |
 | `ui/campaigns.test.js`, `ui/add-campaign.test.js` | Campaigns sidebar: filtering, creating content inside a campaign, adding campaigns, old saved data. |
 | `ui/drag-drop.test.js` | Real mouse drags: the grip handle, the Copy / Move / Cancel dialog, "Can't move". |
+| `ui/language-consistency.test.js` | Mismatches between a template's languages: button count / type, header, footer (errors that block publishing while saving works) and placeholder names (warning only), live in the editor. |
 | `ui/preview.test.js` | The phone preview dialog: opens only on the Preview button, placeholders filled with defaults, formatting, header / footer / buttons, unsaved edits as a snapshot, reference panel, focus and closing, light / dark. |
 | `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, JSON export. |
 | `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
