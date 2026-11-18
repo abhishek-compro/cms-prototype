@@ -350,19 +350,39 @@
   function shownFor(c, tr) { var k = draftKey(c.id, tr.lang); return ui.shown[k] || (ui.shown[k] = {}); }
   function footerShown(c, tr, p) { var sh = ui.shown[draftKey(c.id, tr.lang)]; return p.footer.length > 0 || !!(sh && sh.footer); }
 
-  // Header type is one per template (name level); each language has its own media id
+  // The header file as it looks to the author: the image, a video player, or a card for a document (or only its id when the file is
+  // not known here: sample data, or a big file that was not kept after a reload)
+  function mediaHtml(id, type) {
+    id = (id || '').trim();
+    if (!id) return '<div class="media-card empty"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[type] + '</span><span>No ' + type + ' uploaded yet</span></div>';
+    var m = S.getMedia(id), url = m && S.mediaData(id);
+    if (!m) return '<div class="media-card"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[type] + '</span><span>Media id <code>' + esc(id) + '</code><br><span class="muted small">No file in this prototype, so nothing to preview</span></span></div>';
+    var info = '<div class="media-name" title="' + esc(m.name) + '">' + esc(m.name) + '</div><div class="muted small">' + esc(S.fmtSize(m.size)) + '</div>';
+    if (url && m.kind === 'image') return '<div class="media-box"><img class="media-img" src="' + esc(url) + '" alt="' + esc(m.name) + '"></div>' + info;
+    if (url && m.kind === 'video') return '<div class="media-box"><video class="media-video" src="' + esc(url) + '" controls preload="metadata"></video></div>' + info;
+    return '<div class="media-card"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[m.kind] + '</span><span>' + info +
+      (url ? '' : '<span class="muted small">Preview is not kept after a reload for a file this big</span>') + '</span></div>';
+  }
+
+  // Header type is one per template (name level); each language has its own media file (stored as a media id)
   function secHeader(c, tr, p, ro) {
     if (c.headerType === 'none') return '';
     var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
     if (ro) {
       return '<div class="sec" data-sec="header">' + lbl('Header', '· ' + label.toLowerCase() + ' media') +
-        '<div class="ro-val">' + (p.header ? '<code>' + esc(p.header) + '</code>' : '<span class="muted">No media id</span>') + '</div></div>';
+        '<div class="media" data-media="' + tr.lang + '">' + mediaHtml(p.header, c.headerType) + '</div></div>';
     }
+    var has = !!(p.header || '').trim();
     return '<div class="sec" data-sec="header"><div class="sec-label sec-row"><span>Header</span>' +
       '<select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
       S.HEADER_TYPES.filter(function (h) { return h.id !== 'none'; }).map(function (h) { return '<option value="' + h.id + '"' + (h.id === c.headerType ? ' selected' : '') + '>' + h.label + '</option>'; }).join('') + '</select>' +
       '<span class="grow"></span><button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove</button></div>' +
-      '<input class="field" data-input="header" data-lang="' + tr.lang + '" value="' + esc(p.header) + '" placeholder="Media ID (TurnMedia uuid)" autocomplete="off" spellcheck="false"></div>';
+      '<div class="media" data-media="' + tr.lang + '">' + mediaHtml(p.header, c.headerType) + '</div>' +
+      '<div class="media-actions"><button class="btn" data-action="pick-header" data-lang="' + tr.lang + '">' + (has ? 'Replace ' : 'Upload ') + c.headerType + '</button>' +
+      (has ? '<button class="btn link" data-action="clear-header-file" data-lang="' + tr.lang + '">Remove file</button>' : '') +
+      '<span class="muted small">' + esc(S.mediaHint(c.headerType)) + '</span>' +
+      '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div>' +
+      '<input class="field" data-input="header" data-lang="' + tr.lang + '" value="' + esc(p.header) + '" placeholder="Media ID (set by the upload, or paste a TurnMedia uuid)" aria-label="Media ID" autocomplete="off" spellcheck="false"></div>';
   }
 
   function secBody(c, tr, p, ro) {
@@ -1065,6 +1085,29 @@
     return r.ok;
   }
 
+  // A file was chosen for the header of one language: check it against WhatsApp's rules, read it, register it, show it right away.
+  // Nothing is saved until the language is saved (the file id is part of the draft like any other part).
+  function uploadHeader(input) {
+    var file = input.files && input.files[0], lang = input.getAttribute('data-lang');
+    var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang);
+    if (!file || !tr) return;
+    var why = S.checkMedia(c.headerType, { name: file.name, type: file.type, size: file.size });
+    input.value = '';
+    if (why) { toast(why, true); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var cur = S.get(ui.selectedId);
+      if (!cur || cur.id !== c.id || !panelOf(lang)) return;           // the author moved on while the file was being read
+      var r = S.addMedia(c.headerType, { name: file.name, type: file.type, size: file.size }, String(reader.result));
+      if (!r.ok) { toast(r.error, true); return; }
+      editableDraft(c, tr).header = r.id;
+      refreshSec(lang, 'header'); refreshSec(lang, 'problems'); syncDirty(lang);
+      toast(file.name + ' attached' + (r.kept ? '' : ' (this file is too big to keep after a reload)'));
+    };
+    reader.onerror = function () { toast('Could not read ' + file.name, true); };
+    reader.readAsDataURL(file);
+  }
+
   function panelOf(lang) { return document.querySelector('.panel.edit[data-lang="' + lang + '"]'); }
 
   // Re-render one section of the editing panel. Only sections that do not contain the field being typed in
@@ -1074,7 +1117,7 @@
     var el = panel.querySelector('[data-sec="' + sec + '"]');
     if (!el) return;
     var p = currentParts(c, tr);
-    var html = sec === 'placeholders' ? secPlaceholders(c, tr, p, false) : sec === 'buttons' ? secButtons(c, tr, p, false) : sec === 'problems' ? secProblems(c, p) : sec === 'add' ? secAdd(c, tr, p) : null;
+    var html = sec === 'placeholders' ? secPlaceholders(c, tr, p, false) : sec === 'buttons' ? secButtons(c, tr, p, false) : sec === 'problems' ? secProblems(c, p) : sec === 'add' ? secAdd(c, tr, p) : sec === 'header' ? secHeader(c, tr, p, false) : null;
     if (html !== null) el.outerHTML = html;
   }
   function refreshParams(lang, idx) {
@@ -1158,7 +1201,7 @@
       var d = editableDraft(c, tr), idx = parseInt(t.getAttribute('data-idx'), 10), name = t.getAttribute('data-name');
       if (kind === 'text') { d.text = t.value; setCount(lang, 'text', t.value.length, S.LIMITS.body); refreshSec(lang, 'placeholders'); }
       else if (kind === 'footer') { d.footer = t.value; setCount(lang, 'footer', t.value.length, S.LIMITS.footer); }
-      else if (kind === 'header') { d.header = t.value; }
+      else if (kind === 'header') { d.header = t.value; var mbox = panelOf(lang).querySelector('[data-media]'); if (mbox) mbox.innerHTML = mediaHtml(d.header, c.headerType); }
       else if (kind === 'default') { d.defaults[name] = t.value; }
       else if (kind === 'btn-text') { d.buttons[idx].text = t.value; setCount(lang, 'btn-text-' + idx, t.value.length, S.LIMITS.buttonText); }
       else if (kind === 'btn-payload') { d.buttons[idx].default_payload = t.value; }
@@ -1174,6 +1217,7 @@
     if (!what) return;
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
     if (what === 'timing') { saveTimingFromUi(t); return; }
+    if (what === 'upload-header') { uploadHeader(t); return; }
     var c = S.get(ui.selectedId);
     if (what === 'toggle-side') { ui.side = t.checked; }
     else if (what === 'set-ref') { ui.refLang = t.value; }
@@ -1376,7 +1420,11 @@
     var head = '';
     if (c.headerType !== 'none') {
       var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
-      head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
+      var hm = S.getMedia((p.header || '').trim()), hurl = hm && S.mediaData(hm.id);
+      if (hurl && hm.kind === 'image' && c.headerType === 'image') head = '<div class="wa-media-file"><img class="wa-img" src="' + esc(hurl) + '" alt="' + esc(hm.name) + '"></div>';
+      else if (hurl && hm.kind === 'video' && c.headerType === 'video') head = '<div class="wa-media-file"><video class="wa-img" src="' + esc(hurl) + '" controls preload="metadata"></video></div>';
+      else if (hm && hm.kind === 'document' && c.headerType === 'document') head = '<div class="wa-doc"><span class="wa-media-ic" aria-hidden="true">📄</span><div><div class="wa-doc-name">' + esc(hm.name) + '</div><div class="wa-sub">PDF · ' + esc(S.fmtSize(hm.size)) + '</div></div></div>';
+      else head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
     }
     var body = p.text.trim() ? '<div class="wa-text">' + waBodyHtml(p.text, p.defaults) + '</div>' : '<div class="wa-text muted">No text yet in this language</div>';
     var buttons = (p.buttons || []).map(function (b) {
@@ -1760,6 +1808,13 @@
         editableDraft(c, tr4).footer = '';
         shownFor(c, tr4).footer = false;
         break;
+      }
+      case 'pick-header': { var fi = panelOf(lang).querySelector('.file-input'); if (fi) fi.click(); return; }
+      case 'clear-header-file': {
+        editableDraft(c, S.getTr(c, lang)).header = '';
+        refreshSec(lang, 'header'); refreshSec(lang, 'problems'); syncDirty(lang);
+        ui.focusNext = '.panel.edit [data-action="pick-header"]';
+        return;
       }
       case 'remove-header': result(S.setHeaderType(c.id, 'none'), 'Header removed from every language'); break;
       case 'json-one': download(S.slugOf(c) + '.extra_content.json', JSON.stringify(S.toExtraContent(c.id), null, 2) + '\n', 'application/json'); return;

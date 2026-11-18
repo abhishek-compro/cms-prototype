@@ -596,3 +596,18 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .warns ul { margin: 0; padding-left: 18px; color: var(--warn); }
 .warns li { margin-bottom: 2px; }
 .warns li strong { color: var(--text); }
+
+/* header media: upload + preview */
+.media { margin-bottom: 8px; }
+.media-box { display: flex; justify-content: center; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.media-img, .media-video { display: block; max-width: 100%; max-height: 240px; border-radius: 4px; }
+.media-name { font-weight: 600; overflow-wrap: anywhere; margin-top: 4px; }
+.media-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--code-bg); border: 1px dashed var(--border); border-radius: 6px; overflow-wrap: anywhere; }
+.media-card.empty { color: var(--muted); }
+.media-ic { font-size: 22px; }
+.media-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.wa-media-file { margin-bottom: 4px; border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.wa-img { display: block; width: 100%; max-height: 220px; object-fit: cover; }
+.wa-doc { display: flex; align-items: center; gap: 8px; padding: 10px; margin-bottom: 4px; border-radius: 6px; background: var(--code-bg); color: var(--wa-meta); }
+.wa-doc-name { color: inherit; font-weight: 600; overflow-wrap: anywhere; }

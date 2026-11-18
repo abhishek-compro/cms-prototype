@@ -166,7 +166,8 @@
     if (changed) save();
   }
   function reset() {
-    try { root.localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+    try { root.localStorage.removeItem(STORAGE_KEY); root.localStorage.removeItem(MEDIA_KEY); } catch (e) { /* ignore */ }
+    mediaFiles = {}; mediaKept = {}; mediaFilesLoaded = false;
     seed();
   }
 
@@ -221,6 +222,65 @@
   var HEADER_TYPES = [
     { id: 'none', label: 'None' }, { id: 'image', label: 'Image' }, { id: 'video', label: 'Video' }, { id: 'document', label: 'Document' }
   ];
+  // ---- Header media files ---------------------------------------------------------------
+  // The header of a language is a media id. In the prototype "uploading" a file registers it under a new id (state.media keeps the
+  // name, type and size) and keeps the file itself in memory and, when it fits, in its own localStorage key (never in the main
+  // state, so a big video cannot stop the app from saving). The limits are WhatsApp's for template headers.
+  var MB = 1024 * 1024, MEDIA_KEY = 'cms-prototype-media';
+  var MEDIA_RULES = {
+    image: { label: 'JPEG or PNG', mimes: ['image/jpeg', 'image/png'], exts: ['jpg', 'jpeg', 'png'], max: 5 * MB },
+    video: { label: 'MP4 or 3GPP', mimes: ['video/mp4', 'video/3gpp'], exts: ['mp4', '3gp', '3gpp'], max: 16 * MB },
+    document: { label: 'PDF', mimes: ['application/pdf'], exts: ['pdf'], max: 100 * MB }
+  };
+  function fmtSize(n) { return n >= MB ? (Math.round(n / MB * 10) / 10) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  function mediaRule(type) { return MEDIA_RULES[type] || null; }
+  function mediaHint(type) { var r = MEDIA_RULES[type]; return r ? r.label + ', up to ' + fmtSize(r.max) : ''; }
+  function mediaAccept(type) { var r = MEDIA_RULES[type]; return r ? r.mimes.concat(r.exts.map(function (e) { return '.' + e; })).join(',') : ''; }
+  // null when `file` ({name, type (mime), size}) may be used as the header of `type`, else why not
+  function checkMedia(type, file) {
+    var r = MEDIA_RULES[type];
+    if (!r) return 'Choose a header type first';
+    if (!file || !file.name) return 'No file chosen';
+    var ext = (String(file.name).split('.').pop() || '').toLowerCase();
+    if (r.mimes.indexOf(file.type) === -1 && !(file.type === '' && r.exts.indexOf(ext) !== -1)) return file.name + ' is not allowed: a ' + type + ' header must be ' + r.label;
+    if (!(file.size > 0)) return file.name + ' is empty';
+    if (file.size > r.max) return file.name + ' is ' + fmtSize(file.size) + '; WhatsApp allows ' + fmtSize(r.max) + ' for a ' + type + ' header';
+    return null;
+  }
+  function kindOfMime(mime, name) {
+    var ext = (String(name || '').split('.').pop() || '').toLowerCase();
+    return ['image', 'video', 'document'].filter(function (k) { return MEDIA_RULES[k].mimes.indexOf(mime) !== -1 || (!mime && MEDIA_RULES[k].exts.indexOf(ext) !== -1); })[0] || null;
+  }
+  var mediaFiles = {}, mediaFilesLoaded = false;     // id -> data URL: everything uploaded in this session + what was kept in localStorage
+  var mediaKept = {};                                // the part of it that is in localStorage
+  function loadMediaFiles() {
+    if (mediaFilesLoaded) return;
+    mediaFilesLoaded = true;
+    try { var raw = root.localStorage.getItem(MEDIA_KEY); if (raw) { mediaKept = JSON.parse(raw) || {}; Object.keys(mediaKept).forEach(function (k) { mediaFiles[k] = mediaKept[k]; }); } } catch (e) { mediaKept = {}; }
+  }
+  function mediaMap() { if (!state.media) state.media = {}; return state.media; }
+  function newMediaId() {
+    var c = root.crypto;
+    if (c && c.randomUUID) return c.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return Math.floor(Math.random() * 16).toString(16); });
+  }
+  // Register an uploaded file (already checked with checkMedia) and its data URL; returns {id, kept}. `kept` = the file survives a reload.
+  function addMedia(type, file, dataUrl) {
+    var why = checkMedia(type, file);
+    if (why) return fail(why);
+    loadMediaFiles();
+    var id = newMediaId();
+    mediaFiles[id] = dataUrl || '';
+    var next = Object.assign({}, mediaKept); next[id] = dataUrl || '';
+    var kept = false;
+    if (dataUrl) { try { root.localStorage.setItem(MEDIA_KEY, JSON.stringify(next)); mediaKept = next; kept = true; } catch (e) { kept = false; } }
+    mediaMap()[id] = { id: id, name: file.name, mime: file.type || '', size: file.size, kind: type, kept: kept, uploadedAt: clock().toISOString() };
+    save();
+    return { ok: true, id: id, kept: kept };
+  }
+  function getMedia(id) { return (id && state.media && state.media[id]) || null; }
+  function mediaData(id) { loadMediaFiles(); return mediaFiles[id] || null; }
+
   // Button limits are a product rule (stricter than the orchestrator's schema, which allows 10 buttons):
   // at most 3 quick replies and 1 URL button per translation.
   function buttonCounts(buttons) {
@@ -334,6 +394,9 @@
       if (!d.length) add('Placeholders', '{{' + n + '}} needs a default value');
       else if (d.length > LIMITS.value) add('Placeholders', '{{' + n + '}} default is ' + d.length + ' characters; the maximum is ' + LIMITS.value);
     });
+
+    var media = getMedia((parts.header || '').trim());
+    if (content.headerType !== 'none' && media && media.kind !== content.headerType) add('Header', 'The header file ' + media.name + ' is ' + (media.kind === 'image' ? 'an image' : media.kind === 'video' ? 'a video' : 'a document') + ', but the header type is ' + content.headerType);
 
     var footer = parts.footer || '';
     if (footer.length > LIMITS.footer) add('Footer', 'Footer is ' + footer.length + ' characters; WhatsApp allows ' + LIMITS.footer);
@@ -1572,6 +1635,16 @@
     buttonCounts: buttonCounts,
     canAddButton: canAddButton,
     HEADER_TYPES: HEADER_TYPES,
+    MEDIA_RULES: MEDIA_RULES,
+    mediaRule: mediaRule,
+    mediaHint: mediaHint,
+    mediaAccept: mediaAccept,
+    checkMedia: checkMedia,
+    kindOfMime: kindOfMime,
+    addMedia: addMedia,
+    getMedia: getMedia,
+    mediaData: mediaData,
+    fmtSize: fmtSize,
     positionsOf: positionsOf,
     renamePlaceholder: renamePlaceholder,
     whatsappBody: whatsappBody,

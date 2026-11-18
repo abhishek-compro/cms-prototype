@@ -620,3 +620,70 @@ test('consistency: the editor can pass unsaved drafts', () => {
   assert.deepEqual(S.consistency(w).errors, []);
   assert.match(S.consistency(w, { hi: draft }).errors[0].message, /English 2, Hindi 0/);
 });
+
+// ---------------------------------------------------------------- header media files
+test('media: WhatsApp rules per header type (type, size, empty)', () => {
+  const S = fresh();
+  assert.equal(S.checkMedia('image', { name: 'a.png', type: 'image/png', size: 100 }), null);
+  assert.equal(S.checkMedia('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 }), null);
+  assert.match(S.checkMedia('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 + 1 }), /5 MB/);
+  assert.match(S.checkMedia('image', { name: 'a.gif', type: 'image/gif', size: 100 }), /not allowed.*JPEG or PNG/);
+  assert.match(S.checkMedia('image', { name: 'a.pdf', type: 'application/pdf', size: 100 }), /not allowed/);
+  assert.equal(S.checkMedia('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 }), null);
+  assert.equal(S.checkMedia('video', { name: 'a.3gp', type: 'video/3gpp', size: 10 }), null);
+  assert.match(S.checkMedia('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 + 1 }), /16 MB/);
+  assert.match(S.checkMedia('video', { name: 'a.mov', type: 'video/quicktime', size: 10 }), /MP4 or 3GPP/);
+  assert.equal(S.checkMedia('document', { name: 'a.pdf', type: 'application/pdf', size: 99 * 1024 * 1024 }), null);
+  assert.match(S.checkMedia('document', { name: 'a.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 10 }), /PDF/);
+  assert.match(S.checkMedia('image', { name: 'a.png', type: 'image/png', size: 0 }), /empty/);
+  assert.match(S.checkMedia('none', { name: 'a.png', type: 'image/png', size: 1 }), /header type/);
+  assert.equal(S.checkMedia('image', { name: 'PHOTO.PNG', type: '', size: 10 }), null, 'a browser that gives no mime type: the extension decides');
+  assert.match(S.checkMedia('image', { name: 'x.exe', type: '', size: 10 }), /not allowed/);
+  assert.equal(S.mediaHint('video'), 'MP4 or 3GPP, up to 16 MB');
+});
+
+test('media: an upload gets a new id, is remembered, and the file is kept separately from the main state', () => {
+  const { S, mem } = loadStore();
+  const r = S.addMedia('image', { name: 'baby.png', type: 'image/png', size: 10 }, 'data:image/png;base64,AAAA');
+  assert.ok(r.ok && r.kept);
+  assert.match(r.id, /^[0-9a-f-]{36}$/);
+  assert.equal(S.getMedia(r.id).name, 'baby.png');
+  assert.equal(S.getMedia(r.id).kind, 'image');
+  assert.equal(S.mediaData(r.id), 'data:image/png;base64,AAAA');
+  assert.ok(!JSON.stringify(JSON.parse(mem['cms-prototype-v1'])).includes('base64'), 'the file is not in the main saved state');
+  assert.ok(JSON.parse(mem['cms-prototype-media'])[r.id]);
+  // another page load: metadata and file come back
+  const S2 = loadStore(mem).S;
+  assert.equal(S2.getMedia(r.id).name, 'baby.png');
+  assert.equal(S2.mediaData(r.id), 'data:image/png;base64,AAAA');
+  assert.notEqual(S.addMedia('image', { name: 'b.png', type: 'image/png', size: 1 }, 'data:x').id, r.id);
+});
+
+test('media: a refused file registers nothing; a file that does not fit in localStorage is kept for the session only', () => {
+  const { S, mem } = loadStore();
+  assert.equal(S.addMedia('image', { name: 'a.pdf', type: 'application/pdf', size: 1 }, 'data:x').ok, false);
+  assert.deepEqual(Object.keys(S.getMedia('nope') || {}), []);
+  const realSet = globalThis.localStorage.setItem;
+  globalThis.localStorage.setItem = (k, v) => { if (k === 'cms-prototype-media') throw new Error('QuotaExceededError'); realSet(k, v); };
+  const r = S.addMedia('video', { name: 'big.mp4', type: 'video/mp4', size: 9 * 1024 * 1024 }, 'data:video/mp4;base64,AAAA');
+  assert.ok(r.ok && r.kept === false);
+  assert.equal(S.mediaData(r.id), 'data:video/mp4;base64,AAAA', 'still previewable in this session');
+  assert.equal(S.getMedia(r.id).kept, false);
+  assert.ok(!mem['cms-prototype-media'] || !JSON.parse(mem['cms-prototype-media'])[r.id]);
+});
+
+test('media: a header file of the wrong kind for the header type is a problem; reset forgets uploads', () => {
+  const { S, mem } = loadStore();
+  const w = byName(S, 'Welcome message');
+  const v = S.addMedia('video', { name: 'clip.mp4', type: 'video/mp4', size: 5 }, 'data:v').id;
+  const i = S.addMedia('image', { name: 'pic.png', type: 'image/png', size: 5 }, 'data:i').id;
+  assert.deepEqual(problems(S, w, 'en'), []);
+  assert.ok(patch(S, w, 'en', { header: v }).ok, 'saving is allowed');
+  assert.deepEqual(problems(S, w, 'en'), ['The header file clip.mp4 is a video, but the header type is image']);
+  assert.ok(patch(S, w, 'en', { header: i }).ok);
+  assert.deepEqual(problems(S, w, 'en'), []);
+  assert.equal(S.problems({ headerType: 'none' }, { text: 'x', header: v }).length, 0, 'no header type, no check');
+  S.reset();
+  assert.equal(S.getMedia(i), null);
+  assert.equal(mem['cms-prototype-media'], undefined);
+});
