@@ -898,3 +898,129 @@ test('historyTree: shows only content steps (the rest is the linear "activity" l
   const lanes = S.historyTree(c.id);
   assert.equal(lanes.width, 2, 'b and c are on separate branches even though a timing step sits between');
 });
+
+// ---------------------------------------------------------------- comments
+const flowOf = S => S.listFlows()[0];
+const nodeNamed = (S, f, title) => f.nodes.find(n => S.nodeTitle(n) === title);
+
+test('comments: the sample has open and resolved comments on a template and a flow node, separately per template / flow', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message'), f = flowOf(S);
+  assert.equal(S.commentsFor({ contentId: w.id }, 'open').length, 1);
+  assert.equal(S.commentsFor({ contentId: w.id }, 'resolved').length, 1);
+  assert.equal(S.commentsFor({ contentId: w.id }, 'all').length, 2);
+  assert.equal(S.commentsFor({ contentId: byName(S, 'Appointment reminder').id }, 'all').length, 0, 'other templates have none');
+  assert.equal(S.commentsFor({ flowId: f.id }).length, 1, 'open is the default');
+  assert.equal(S.commentsFor({ flowId: f.id })[0].nodeId, nodeNamed(S, f, 'Alert health worker').id);
+});
+
+test('comments: adding to a part of a template (whole part, or a selected piece of text)', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  const body = tr(w, 'en').text, q = 'newborn', at = body.indexOf(q);
+  let r = S.addComment({ contentId: w.id, lang: 'en', part: 'body', start: at, end: at + q.length, quote: q }, '  Say baby instead?  ');
+  assert.ok(r.ok);
+  const m = r.comment;
+  assert.equal(m.text, 'Say baby instead?', 'trimmed');
+  assert.equal(m.author, 'Demo user');
+  assert.equal(m.resolved, false);
+  assert.ok(m.createdAt);
+  assert.deepEqual([m.lang, m.part, m.start, m.end, m.quote], ['en', 'body', at, at + q.length, q]);
+  assert.ok(S.addComment({ contentId: w.id }, 'About the whole template').ok, 'no part = the whole template');
+  assert.ok(S.addComment({ contentId: w.id, lang: 'hi', part: 'footer' }, 'Footer as a whole').ok);
+  assert.ok(S.addComment({ contentId: w.id, lang: 'en', part: 'header' }, 'Header image').ok);
+  const b = S.addComment({ contentId: w.id, lang: 'en', part: 'button', idx: 1, start: 0, end: 5, quote: 'Visit' }, 'Button text');
+  assert.ok(b.ok); assert.equal(b.comment.idx, 1);
+  assert.equal(S.commentsFor({ contentId: w.id }).length, 6);
+});
+
+test('comments: refused when empty, too long, or pointing at something that does not exist', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message'), a = byName(S, 'Appointment reminder'), n0 = S.commentsFor({ contentId: w.id }, 'all').length;
+  assert.match(S.addComment({ contentId: w.id }, '   ').error, /Write a comment/);
+  assert.match(S.addComment({ contentId: w.id }, 'x'.repeat(1001)).error, /at most 1000/);
+  assert.ok(S.addComment({ contentId: w.id }, 'x'.repeat(1000)).ok);
+  assert.match(S.addComment({ contentId: 'nope' }, 'hi').error, /Content not found/);
+  assert.match(S.addComment({ contentId: w.id, lang: 'fr', part: 'body' }, 'hi').error, /Translation not found/);
+  assert.match(S.addComment({ contentId: w.id, lang: 'en', part: 'sidebar' }, 'hi').error, /Unknown part/);
+  assert.match(S.addComment({ contentId: a.id, lang: 'en', part: 'header' }, 'hi').error, /no header/, 'a template without a header has nothing to comment on');
+  assert.match(S.addComment({ contentId: w.id, lang: 'en', part: 'header', start: 0, end: 3, quote: 'abc' }, 'hi').error, /header can only be commented on as a whole/);
+  assert.match(S.addComment({ contentId: w.id, lang: 'en', part: 'button' }, 'hi').error, /Which button/);
+  assert.match(S.addComment({ contentId: w.id, lang: 'en', part: 'body', start: 5, end: 5, quote: 'x' }, 'hi').error, /Bad selection/);
+  assert.match(S.addComment({ contentId: w.id, lang: 'en', part: 'body', start: 0, end: 600, quote: 'x'.repeat(501) }, 'hi').error, /at most 500/);
+  assert.match(S.addComment({ flowId: 'nope' }, 'hi').error, /Flow not found/);
+  assert.match(S.addComment({ flowId: flowOf(S).id, nodeId: 'zzz' }, 'hi').error, /Node not found/);
+  assert.equal(S.commentsFor({ contentId: w.id }, 'all').length, n0 + 1, 'refusals write nothing');
+});
+
+test('comments: on a flow, or on a node of a flow (the node\'s name is remembered)', () => {
+  const S = fresh();
+  const f = flowOf(S), a = nodeNamed(S, f, 'Alert health worker');
+  const whole = S.addComment({ flowId: f.id }, 'About the flow').comment;
+  const onNode = S.addComment({ flowId: f.id, nodeId: a.id }, 'About this action').comment;
+  assert.equal(whole.nodeId, undefined);
+  assert.equal(onNode.nodeId, a.id);
+  assert.equal(onNode.nodeLabel, 'Alert health worker');
+  S.removeNode(f.id, a.id);
+  assert.equal(S.getComment(onNode.id).nodeLabel, 'Alert health worker', 'the comment outlives the node and still says which it was about');
+});
+
+test('comments: resolving moves a comment to the Resolved list (and out of Open); it can be reopened', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  const open = S.commentsFor({ contentId: w.id })[0];
+  assert.ok(S.setCommentResolved(open.id, true).ok);
+  assert.equal(S.commentsFor({ contentId: w.id }).length, 0, 'hidden from the default (open) list');
+  const done = S.commentsFor({ contentId: w.id }, 'resolved');
+  assert.equal(done.length, 2);
+  assert.equal(done[0].id, open.id, 'resolved list: most recently resolved first');
+  assert.equal(done[0].resolvedBy, 'Demo user');
+  assert.ok(done[0].resolvedAt);
+  assert.match(S.setCommentResolved(open.id, true).error, /Already resolved/);
+  assert.ok(S.setCommentResolved(open.id, false).ok);
+  const back = S.getComment(open.id);
+  assert.deepEqual([back.resolved, back.resolvedBy, back.resolvedAt], [false, null, null]);
+  assert.equal(S.commentsFor({ contentId: w.id }).length, 1);
+  assert.match(S.setCommentResolved(open.id, false).error, /Already open/);
+  assert.match(S.setCommentResolved('nope', true).error, /not found/);
+});
+
+test('comments: open list is newest first', () => {
+  const S = fresh();
+  const w = byName(S, 'Welcome message');
+  const x = S.addComment({ contentId: w.id }, 'first one').comment, y = S.addComment({ contentId: w.id }, 'second one').comment;
+  const list = S.commentsFor({ contentId: w.id });
+  assert.deepEqual(list.slice(0, 2).map(m => m.text), ['second one', 'first one']);
+});
+
+test('comments: where is the quote now? still there / moved / gone / no quote', () => {
+  const S = fresh();
+  const m = { quote: 'welcome to', start: 7, end: 17 };
+  assert.deepEqual(S.locateComment(m, 'Hello, welcome to Noora'), { state: 'ok', start: 7, end: 17 });
+  assert.deepEqual(S.locateComment(m, 'Hi there. Hello, welcome to Noora'), { state: 'moved', start: 17, end: 27 });
+  assert.deepEqual(S.locateComment(m, 'Hello there'), { state: 'gone' });
+  assert.deepEqual(S.locateComment({}, 'anything'), { state: 'whole' });
+});
+
+test('comments: saved, survive a reload, are not history steps, and a rewind leaves them alone', () => {
+  const { S, mem } = loadStore();
+  const c = S.createContent('Comment keep', 'en').content;
+  patch(S, c, 'en', { text: 'one two' });
+  const one = lastEventId(S, c);
+  const historyBefore = S.historyFor(c.id, 'all').length;
+  const m = S.addComment({ contentId: c.id, lang: 'en', part: 'body', start: 0, end: 3, quote: 'one' }, 'Keep this').comment;
+  S.setCommentResolved(m.id, true);
+  assert.equal(S.historyFor(c.id, 'all').length, historyBefore, 'commenting and resolving write no history');
+  patch(S, c, 'en', { text: 'changed' });
+  S.rewind(c.id, one);
+  assert.equal(S.getComment(m.id).resolved, true, 'rewinding does not touch comments');
+  const S2 = loadStore(mem).S;
+  assert.equal(S2.getComment(m.id).text, 'Keep this');
+  assert.equal(S2.commentsFor({ contentId: c.id }, 'resolved').length, 1);
+});
+
+test('migration: data saved before comments gets an empty list', () => {
+  const { S } = load({ nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { id: 'c1', campaignIds: [] })], history: [] });
+  assert.deepEqual(S.commentsFor({ contentId: 'c1' }, 'all'), []);
+  assert.ok(S.addComment({ contentId: 'c1' }, 'works').ok);
+});

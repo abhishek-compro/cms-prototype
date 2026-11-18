@@ -13,6 +13,10 @@
     refLang: null,       // read-only reference language (side-by-side)
     editLang: null,      // language being edited (also the active tab when side-by-side is off)
     historyOpen: false,  // right sidebar visible (hidden by default)
+    commentsOpen: false, // the "Show comments" list is open
+    commentsTab: 'open', // 'open' | 'resolved'
+    cmTarget: null,      // what the next comment is about: { scope, lang, part, idx, start, end, quote } | { scope, nodeId }
+    cmDraft: '',         // the comment being written (kept across re-renders)
     histTab: 'content',  // history sidebar tab: 'content' (the one-line tree) | 'other' (plain list of the rest)
     treeDetails: {},     // Tree tab: ids of the steps whose details are open
     search: '',
@@ -307,7 +311,7 @@
       '<button class="btn deploy" data-action="deploy-all"' + (deployable ? '' : ' disabled') + '>Publish all' + (deployable ? ' (' + deployable + ')' : '') + '</button>' +
       '</div></div>' +
       (c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '') +
-      '';
+      commentsHtml({ kind: 'content', id: c.id, c: c });
   }
 
   function langOptions(c, selected, exclude) {
@@ -373,7 +377,7 @@
         '<div class="media" data-media="' + tr.lang + '">' + mediaHtml(p.header, c.headerType) + '</div></div>';
     }
     var has = !!(p.header || '').trim();
-    return '<div class="sec" data-sec="header"><div class="sec-label sec-row"><span>Header</span>' +
+    return '<div class="sec" data-sec="header"><div class="sec-label sec-row"><span>Header' + cmBadge(c, tr.lang, 'header') + '</span>' +
       '<select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
       S.HEADER_TYPES.filter(function (h) { return h.id !== 'none'; }).map(function (h) { return '<option value="' + h.id + '"' + (h.id === c.headerType ? ' selected' : '') + '>' + h.label + '</option>'; }).join('') + '</select>' +
       '<span class="grow"></span><button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove</button></div>' +
@@ -390,7 +394,7 @@
       var empty = !p.text.trim();
       return '<div class="sec" data-sec="body">' + lbl('Body') + '<div class="ref-text' + (empty ? ' empty' : '') + '">' + (empty ? 'No text yet in this language' : esc(p.text)) + '</div></div>';
     }
-    return '<div class="sec" data-sec="body">' + lbl('Body', '· ' + counter('text', p.text.length, S.LIMITS.body)) +
+    return '<div class="sec" data-sec="body">' + lbl('Body' + cmBadge(c, tr.lang, 'body'), '· ' + counter('text', p.text.length, S.LIMITS.body)) +
       '<textarea data-input="text" data-lang="' + tr.lang + '" placeholder="Write the ' + esc(S.langName(tr.lang)) + ' text here. Use {{name}} for a placeholder." spellcheck="false">' + esc(p.text) + '</textarea></div>';
   }
 
@@ -444,7 +448,7 @@
       bs.map(function (b, i) {
         var url = b.type === 'URL';
         return '<div class="bcard" data-idx="' + i + '"><div class="bcard-head"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span>' +
-          '<span class="muted small">Button ' + (i + 1) + '</span><span class="grow"></span>' +
+          '<span class="muted small">Button ' + (i + 1) + '</span>' + cmBadge(c, tr.lang, 'button', i) + '<span class="grow"></span>' +
           '<button class="btn link" data-action="btn-remove" data-lang="' + tr.lang + '" data-idx="' + i + '" aria-label="Remove button ' + (i + 1) + '">Remove</button></div>' +
           '<label class="fld"><span>Text <span class="muted small">' + counter('btn-text-' + i, (b.text || '').length, S.LIMITS.buttonText) + '</span></span>' +
           '<input class="field" data-input="btn-text" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.text) + '" autocomplete="off"></label>' +
@@ -460,7 +464,7 @@
   function secFooter(c, tr, p, ro) {
     if (ro) return p.footer ? '<div class="sec" data-sec="footer">' + lbl('Footer') + '<div class="ro-val">' + esc(p.footer) + '</div></div>' : '';
     if (!footerShown(c, tr, p)) return '';
-    return '<div class="sec" data-sec="footer"><div class="sec-label sec-row"><span>Footer <span class="muted">· ' + counter('footer', p.footer.length, S.LIMITS.footer) + '</span></span>' +
+    return '<div class="sec" data-sec="footer"><div class="sec-label sec-row"><span>Footer' + cmBadge(c, tr.lang, 'footer') + ' <span class="muted">· ' + counter('footer', p.footer.length, S.LIMITS.footer) + '</span></span>' +
       '<span class="grow"></span><button class="btn link" data-action="remove-footer" data-lang="' + tr.lang + '">Remove</button></div>' +
       '<input class="field" data-input="footer" data-lang="' + tr.lang + '" value="' + esc(p.footer) + '" placeholder="No placeholders." autocomplete="off"></div>';
   }
@@ -598,6 +602,161 @@
       '<span class="muted small">by ' + esc(e.actor) + '</span>' +
       '<span class="when">' + esc(fmtTime(e.ts)) + '</span></div>' +
       (body ? '<div class="event-body">' + body + '</div>' : '') + '</li>';
+  }
+
+  // ---- comments: add at the top, list under "Show comments" (Open | Resolved), badges on the parts ------------------
+  // The composer at the top of a template / flow adds a comment about the whole thing, a part (body, header, footer, a button) or, for
+  // body / footer / button text, the text you selected in the field (the selection is picked up as you make it and shown as a quote).
+  // On a flow, about a node (the 💬 on a node, or the dropdown). Resolved comments leave the Open list and sit under Resolved.
+  function cmScopeNow() {
+    var f = currentFlow();
+    if (f) return { kind: 'flow', id: f.id, f: f };
+    var c = S.get(ui.selectedId);
+    return c ? { kind: 'content', id: c.id, c: c } : null;
+  }
+  function cmTargetNow(scope) { return ui.cmTarget && scope && ui.cmTarget.scope === scope.id ? ui.cmTarget : null; }
+  function cmWhere(scope) { return scope.kind === 'flow' ? { flowId: scope.id } : { contentId: scope.id }; }
+  function cmNodeLabel(f, nodeId, fallback) {
+    var n = S.getNode(f, nodeId);
+    return n ? NODE_LABEL[n.type] + ' · ' + S.nodeTitle(n) : (fallback || 'A node') + ' (removed)';
+  }
+  function cmPartLabel(c, m) {
+    if (m.part === 'body') return 'Body';
+    if (m.part === 'header') return 'Header';
+    if (m.part === 'footer') return 'Footer';
+    if (m.part === 'button') return 'Button ' + (m.idx + 1);
+    return 'Whole template';
+  }
+  function cmTextNow(c, m) {                 // the text a comment points into, as it is in the editor now (unsaved edits included)
+    var tr = S.getTr(c, m.lang);
+    if (!tr) return '';
+    var p = currentParts(c, tr);
+    if (m.part === 'body') return p.text;
+    if (m.part === 'footer') return p.footer;
+    if (m.part === 'button') return (p.buttons[m.idx] || {}).text || '';
+    return '';
+  }
+  function cmOpenCount(scope, test) {
+    return S.commentsFor(cmWhere(scope), 'open').filter(test || function () { return true; }).length;
+  }
+  // a small 💬 n next to the label of a part that has open comments
+  function cmBadge(c, lang, part, idx) {
+    var n = cmOpenCount({ kind: 'content', id: c.id }, function (m) { return m.lang === lang && m.part === part && (part !== 'button' || m.idx === idx); });
+    return n ? ' <button class="cm-badge" data-action="cm-show" title="' + n + ' open comment' + (n === 1 ? '' : 's') + ' on this part. Click to show them." aria-label="' + n + ' open comments on this part">💬 ' + n + '</button>' : '';
+  }
+  function cmSelectHtml(scope) {
+    var t = cmTargetNow(scope), opts = '';
+    function opt(v, label, sel) { return '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(label) + '</option>'; }
+    if (scope.kind === 'flow') {
+      opts = opt('general', 'Whole flow', !t || !t.nodeId) + scope.f.nodes.map(function (n) { return opt('node|' + n.id, cmNodeLabel(scope.f, n.id), t && t.nodeId === n.id); }).join('');
+    } else {
+      var c = scope.c;
+      opts = opt('general', 'Whole template', !t || !t.part) + c.translations.map(function (tr) {
+        var p = currentParts(c, tr), g = [];
+        function o(part, label, idx) { var sel = t && t.lang === tr.lang && t.part === part && (part !== 'button' || t.idx === idx); g.push(opt(tr.lang + '|' + part + '|' + (idx === undefined ? '' : idx), label, sel)); }
+        o('body', 'Body');
+        if (c.headerType !== 'none') o('header', 'Header');
+        if (p.footer || footerShown(c, tr, p)) o('footer', 'Footer');
+        (p.buttons || []).forEach(function (b, i) { o('button', 'Button ' + (i + 1) + (b.text ? ' · ' + b.text : ''), i); });
+        return '<optgroup label="' + esc(S.langName(tr.lang)) + '">' + g.join('') + '</optgroup>';
+      }).join('');
+    }
+    return '<select class="field-select" id="cm-target-sel" data-change="cm-target" aria-label="What the comment is about">' + opts + '</select>' +
+      (t && t.quote ? '<span class="cm-quote" title="The text you selected">“' + esc(clip(t.quote, 60)) + '” <button class="btn link" data-action="cm-clear-quote" aria-label="Comment on the whole part instead of the selected text">×</button></span>' : '');
+  }
+  function cmItemHtml(scope, m) {
+    var where, loc = null, note = '', goto = true;
+    if (scope.kind === 'flow') {
+      where = m.nodeId ? cmNodeLabel(scope.f, m.nodeId, m.nodeLabel) : 'Whole flow';
+      goto = !!(m.nodeId && S.getNode(scope.f, m.nodeId));
+    } else {
+      where = (m.lang ? S.langName(m.lang) + ' · ' : '') + cmPartLabel(scope.c, m);
+      if (m.quote) {
+        loc = S.locateComment(m, cmTextNow(scope.c, m));
+        note = loc.state === 'moved' ? 'The text has moved since' : loc.state === 'gone' ? 'This text has changed or been removed since' : '';
+      }
+      goto = !!m.part;
+    }
+    return '<li class="cm-item' + (m.resolved ? ' resolved' : '') + '" data-comment="' + m.id + '">' +
+      '<div class="cm-head"><strong>' + esc(m.author) + '</strong><span class="muted small">' + esc(fmtTime(m.createdAt)) + '</span><span class="chip">' + esc(where) + '</span></div>' +
+      (m.quote ? '<blockquote class="cm-q' + (loc && loc.state === 'gone' ? ' gone' : '') + '">“' + esc(m.quote) + '”' + (note ? ' <span class="muted small">' + note + '</span>' : '') + '</blockquote>' : '') +
+      '<div class="cm-text">' + esc(m.text) + '</div>' +
+      (m.resolved ? '<div class="muted small">Resolved by ' + esc(m.resolvedBy) + ' · ' + esc(fmtTime(m.resolvedAt)) + '</div>' : '') +
+      '<div class="cm-actions">' + (goto ? '<button class="btn link" data-action="cm-goto" data-comment="' + m.id + '">Go to</button>' : '') +
+      (m.resolved ? '<button class="btn link" data-action="cm-reopen" data-comment="' + m.id + '">Reopen</button>'
+        : '<button class="btn" data-action="cm-resolve" data-comment="' + m.id + '">Resolve</button>') + '</div></li>';
+  }
+  function commentsHtml(scope) {
+    if (!scope) return '';
+    var open = S.commentsFor(cmWhere(scope), 'open'), done = S.commentsFor(cmWhere(scope), 'resolved');
+    var list = '';
+    if (ui.commentsOpen) {
+      var showing = ui.commentsTab === 'resolved' ? done : open;
+      list = '<div class="cm-list"><div class="hp-tabs" role="tablist">' +
+        [['open', 'Open (' + open.length + ')'], ['resolved', 'Resolved (' + done.length + ')']].map(function (t) {
+          return '<button class="hp-tab' + (ui.commentsTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.commentsTab === t[0]) + '" data-action="cm-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
+        }).join('') + '</div>' +
+        (showing.length ? '<ul class="cm-items">' + showing.map(function (m) { return cmItemHtml(scope, m); }).join('') + '</ul>'
+          : '<div class="hint">' + (ui.commentsTab === 'resolved' ? 'No resolved comments.' : 'No open comments.') + '</div>') + '</div>';
+    }
+    return '<section class="comments" id="comments" aria-label="Comments"><div class="cm-bar">' +
+      '<label class="cm-on"><span class="muted small">Comment on</span><span id="cm-target-wrap" class="cm-target-wrap">' + cmSelectHtml(scope) + '</span></label>' +
+      '<textarea id="cm-text" rows="1" class="field cm-text-in" placeholder="Add a comment…" title="Ctrl+Enter adds the comment" aria-label="New comment" maxlength="' + S.COMMENT_MAX + '">' + esc(ui.cmDraft) + '</textarea>' +
+      '<button class="btn primary" data-action="cm-add">Add comment</button>' +
+      '<button class="btn" data-action="cm-toggle" aria-expanded="' + !!ui.commentsOpen + '">' + (ui.commentsOpen ? 'Hide' : 'Show') + ' comments (' + open.length + ')</button>' +
+      '</div>' + list + '</section>';
+  }
+  function refreshCmTarget() {
+    var scope = cmScopeNow(), el = document.getElementById('cm-target-wrap');
+    if (scope && el) el.innerHTML = cmSelectHtml(scope);       // only the target: the text box is never re-rendered
+  }
+  function captureSelection(t) {                 // text selected in the body, footer or a button's text becomes the comment's quote
+    if (!t || !t.getAttribute || ui.nodeEdit || document.activeElement !== t) return;   // only a selection being made right now, in the field you are in
+    var kind = t.getAttribute('data-input');
+    if (kind !== 'text' && kind !== 'footer' && kind !== 'btn-text') return;
+    if (t.selectionStart == null || t.selectionStart === t.selectionEnd) return;
+    var scope = cmScopeNow();
+    if (!scope || scope.kind !== 'content') return;
+    var quote = t.value.slice(t.selectionStart, t.selectionEnd);
+    if (quote.length > S.QUOTE_MAX) { toast('Select at most ' + S.QUOTE_MAX + ' characters to comment on', true); return; }
+    ui.cmTarget = { scope: scope.id, lang: t.getAttribute('data-lang'), part: kind === 'text' ? 'body' : kind === 'footer' ? 'footer' : 'button',
+      idx: kind === 'btn-text' ? parseInt(t.getAttribute('data-idx'), 10) : undefined, start: t.selectionStart, end: t.selectionEnd, quote: quote };
+    refreshCmTarget();
+  }
+  document.addEventListener('select', function (ev) { captureSelection(ev.target); }, true);
+  document.addEventListener('mouseup', function (ev) { captureSelection(ev.target); });
+  document.addEventListener('keyup', function (ev) { captureSelection(ev.target); });
+  function addCommentFromUi() {
+    var scope = cmScopeNow(), box = document.getElementById('cm-text');
+    if (!scope) return;
+    var t = cmTargetNow(scope), where = cmWhere(scope);
+    if (box) ui.cmDraft = box.value;
+    if (scope.kind === 'flow') { if (t && t.nodeId) where.nodeId = t.nodeId; }
+    else if (t && t.part) { where.lang = t.lang; where.part = t.part; if (t.idx !== undefined) where.idx = t.idx; if (t.quote) { where.start = t.start; where.end = t.end; where.quote = t.quote; } }
+    var r = S.addComment(where, ui.cmDraft);
+    if (!r.ok) { toast(r.error, true); return; }
+    ui.cmDraft = ''; ui.cmTarget = null; ui.commentsOpen = true; ui.commentsTab = 'open';
+    toast('Comment added');
+    render();
+  }
+  function gotoComment(id) {
+    var m = S.getComment(id), scope = cmScopeNow();
+    if (!m || !scope) return;
+    if (scope.kind === 'flow') {
+      var el = document.querySelector('.fnode[data-node="' + m.nodeId + '"]');
+      if (!el) { toast('That node is not in this flow any more', true); return; }
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      el.classList.add('flash'); setTimeout(function () { el.classList.remove('flash'); }, 1600);
+      return;
+    }
+    if (m.lang && ui.editLang !== m.lang) { ui.editLang = m.lang; render(); }
+    var sel = m.part === 'body' ? '[data-input="text"]' : m.part === 'footer' ? '[data-input="footer"]' : m.part === 'button' ? '[data-input="btn-text"][data-idx="' + m.idx + '"]' : m.part === 'header' ? '[data-input="header"]' : null;
+    var field = sel && document.querySelector('.panel.edit ' + sel);
+    if (!field) { toast('That part is not in the editor any more', true); return; }
+    field.scrollIntoView({ block: 'center' });
+    field.focus({ preventScroll: true });
+    var loc = m.quote ? S.locateComment(m, field.value) : null;
+    if (loc && loc.start !== undefined) field.setSelectionRange(loc.start, loc.end);
   }
 
   // ---- right sidebar: history -------------------------------------------------
@@ -862,6 +1021,8 @@
         ? '<input class="field node-title-input" data-edit="' + (n.type === 'action' ? 'name' : 'title') + '" data-first value="' + esc(n.type === 'action' ? d.name : d.title) + '" aria-label="Name of this ' + (n.type === 'logic' ? 'logic node' : n.type) + '" autocomplete="off">'   // the label itself becomes the field
         : n.type === 'template' || n.type === 'flow' ? '' : '<span class="fnode-title">' + esc(title) + '</span>') +
       '<span class="grow"></span>' +
+      (editing ? '' : (function () { var n2 = S.commentsFor({ flowId: f.id }, 'open').filter(function (m) { return m.nodeId === n.id; }).length;
+        return '<button class="node-cm' + (n2 ? ' has' : '') + '" data-action="cm-node" data-node="' + n.id + '" title="Comment on this node" aria-label="Comment on ' + esc(title) + (n2 ? ' (' + n2 + ' open)' : '') + '">💬' + (n2 ? '<span class="cm-n">' + n2 + '</span>' : '') + '</button>'; })()) +
       (editing ? '<button class="node-btn node-save" data-action="node-save" aria-label="Save changes to this node" title="Save">✓</button>' +
         '<button class="node-btn node-cancel" data-action="node-cancel" aria-label="Cancel and discard changes to this node" title="Cancel">✕</button>' : '') +
       '</div>';
@@ -979,6 +1140,9 @@
     var el = editingEl(), first = el.querySelector('[data-first]') || el.querySelector('.node-save');
     if (first) first.focus();
   }, true);
+  document.addEventListener('keydown', function (ev) {
+    if (ev.target && ev.target.id === 'cm-text' && ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); addCommentFromUi(); }
+  });
   document.addEventListener('keydown', function (ev) {      // Tab stays inside the node
     var el = editingEl();
     if (!el || ev.key !== 'Tab') return;
@@ -1006,6 +1170,7 @@
       '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
       (ui.historyOpen ? '' : '<div class="actions"><button class="btn" data-action="toggle-history-pane">Show history</button></div>') + '</div>' +
+      commentsHtml({ kind: 'flow', id: f.id, f: f }) +
       '<div class="flow-card"><div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
@@ -1249,6 +1414,7 @@
       }
       return;
     }
+    if (t.id === 'cm-text') { ui.cmDraft = t.value; return; }
     var edit = t.getAttribute && t.getAttribute('data-edit');
     if (edit && ui.nodeEdit) {
       if (edit === 'out') ui.nodeEdit.draft.outs[parseInt(t.getAttribute('data-i'), 10)].label = t.value;
@@ -1279,6 +1445,14 @@
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
     if (what === 'timing') { saveTimingFromUi(t); return; }
     if (what === 'upload-header') { uploadHeader(t); return; }
+    if (what === 'cm-target') {
+      var sc = cmScopeNow(), v = t.value.split('|');
+      if (!sc) return;
+      ui.cmTarget = v[0] === 'general' ? null : v[0] === 'node' ? { scope: sc.id, nodeId: v[1] }
+        : { scope: sc.id, lang: v[0], part: v[1], idx: v[2] === '' ? undefined : parseInt(v[2], 10) };
+      refreshCmTarget();
+      return;
+    }
     var c = S.get(ui.selectedId);
     if (what === 'toggle-side') { ui.side = t.checked; }
     else if (what === 'set-ref') { ui.refLang = t.value; }
@@ -1833,6 +2007,21 @@
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';
         updateHistoryPane();
         return;
+      }
+      case 'cm-add': addCommentFromUi(); return;
+      case 'cm-toggle': ui.commentsOpen = !ui.commentsOpen; break;
+      case 'cm-show': ui.commentsOpen = true; ui.commentsTab = 'open'; break;
+      case 'cm-tab': ui.commentsTab = el.getAttribute('data-tab') === 'resolved' ? 'resolved' : 'open'; break;
+      case 'cm-clear-quote': if (ui.cmTarget) { ui.cmTarget.quote = undefined; ui.cmTarget.start = ui.cmTarget.end = undefined; } refreshCmTarget(); return;
+      case 'cm-resolve': if (!result(S.setCommentResolved(el.getAttribute('data-comment'), true), 'Comment resolved')) return; break;
+      case 'cm-reopen': if (!result(S.setCommentResolved(el.getAttribute('data-comment'), false), 'Comment reopened')) return; ui.commentsTab = 'open'; break;
+      case 'cm-goto': gotoComment(el.getAttribute('data-comment')); return;
+      case 'cm-node': {
+        var sc2 = cmScopeNow();
+        if (!sc2 || sc2.kind !== 'flow') return;
+        ui.cmTarget = { scope: sc2.id, nodeId: el.getAttribute('data-node') };
+        ui.focusNext = '#cm-text';
+        break;
       }
       case 'tree-detail': {
         var did = el.getAttribute('data-event');

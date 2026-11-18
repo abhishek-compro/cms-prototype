@@ -650,3 +650,27 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .tree-detail-body { margin-left: calc(var(--tree-gutter, 40px)); padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); white-space: normal; overflow-wrap: anywhere; }
 .tree-detail-head { margin-bottom: 2px; }
 .tree-detail .event-body { margin-top: 6px; }
+
+/* comments */
+.comments { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.cm-bar { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.cm-on { display: flex; align-items: center; gap: 6px; }
+.cm-target-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.cm-text-in { flex: 1; min-width: 200px; resize: vertical; min-height: 34px; }
+.cm-quote { max-width: 260px; padding: 1px 8px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-quote .btn { padding: 0 2px; }
+.cm-list { margin-top: 10px; }
+.cm-items { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cm-item { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); }
+.cm-item.resolved { opacity: .85; }
+.cm-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cm-q { margin: 6px 0 4px; padding: 2px 10px; border-left: 3px solid var(--warn); color: var(--muted); overflow-wrap: anywhere; }
+.cm-q.gone { border-left-color: var(--border-strong); text-decoration: line-through; }
+.cm-text { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+.cm-badge { padding: 0 6px; border: 0; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 11px; cursor: pointer; }
+.node-cm { border: 0; background: none; padding: 0 2px; font-size: 13px; cursor: pointer; opacity: 0; }
+.fnode:hover .node-cm, .node-cm.has, .node-cm:focus-visible { opacity: 1; }
+.node-cm .cm-n { margin-left: 2px; padding: 0 5px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 11px; }
+.fnode.flash { animation: cm-flash 1.6s ease-out; }
+@keyframes cm-flash { 0%, 60% { box-shadow: 0 0 0 4px var(--warn); } 100% { box-shadow: none; } }

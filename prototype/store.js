@@ -134,6 +134,7 @@
       if ('campaignId' in c) { delete c.campaignId; changed = true; }
     });
     if (!state.flows) { state.flows = []; changed = true; }
+    if (!state.comments) { state.comments = []; changed = true; }
     // Data saved before rewinding existed: chain each template's events in order and make the last one the current step, with a
     // snapshot of how the template looks now (older steps have none, so they are listed but cannot be restored).
     state.contents.forEach(function (c) {
@@ -553,6 +554,89 @@
       return row;
     });
     return { rows: rows, width: width, head: head };
+  }
+
+  // ---- Comments ---------------------------------------------------------------------------------------------------
+  // A comment is attached to a part of a template (the body, footer or a button's text: optionally a selected piece of text;
+  // the header: the whole part; or the template as a whole) or to a node of a flow (or the flow as a whole). It can be resolved, which
+  // moves it from the Open list to the Resolved list (and it can be reopened). Comments are not history steps and a rewind does not
+  // touch them. A text anchor keeps the quote and where it was; if the text changes later the quote is looked for again.
+  //   { id, contentId | flowId, lang, part: 'body'|'header'|'footer'|'button'|null, idx (button), nodeId, nodeLabel,
+  //     start, end, quote, text, author, createdAt, resolved, resolvedBy, resolvedAt }
+  var COMMENT_MAX = 1000, QUOTE_MAX = 500;
+  var COMMENT_PARTS = ['body', 'header', 'footer', 'button'];
+  function allComments() { if (!state.comments) state.comments = []; return state.comments; }
+  function getComment(id) { return allComments().filter(function (m) { return m.id === id; })[0] || null; }
+  // where: { contentId, lang, part, idx?, start?, end?, quote? }  or  { flowId, nodeId? }
+  function addComment(where, text) {
+    text = String(text || '').trim();
+    if (!text) return fail('Write a comment first');
+    if (text.length > COMMENT_MAX) return fail('A comment can have at most ' + COMMENT_MAX + ' characters (it has ' + text.length + ')');
+    var m = { id: 'm' + state.nextId++, text: text, author: CURRENT_USER, createdAt: clock().toISOString(), resolved: false, resolvedBy: null, resolvedAt: null };
+    if (where.flowId) {
+      var f = getFlow(where.flowId);
+      if (!f) return fail('Flow not found');
+      m.flowId = f.id;
+      if (where.nodeId) {
+        var n = getNode(f, where.nodeId);
+        if (!n) return fail('Node not found');
+        m.nodeId = n.id; m.nodeLabel = nodeTitle(n);
+      }
+    } else {
+      var c = get(where.contentId);
+      if (!c) return fail('Content not found');
+      m.contentId = c.id;
+      if (where.part) {
+        if (COMMENT_PARTS.indexOf(where.part) === -1) return fail('Unknown part');
+        if (!getTr(c, where.lang)) return fail('Translation not found');
+        if (where.part === 'header' && c.headerType === 'none') return fail('This template has no header');
+        m.lang = where.lang; m.part = where.part;
+        if (where.part === 'button') {
+          if (!(where.idx >= 0 && where.idx === Math.floor(where.idx))) return fail('Which button?');
+          m.idx = where.idx;
+        }
+        if (where.quote) {
+          if (where.part === 'header') return fail('The header can only be commented on as a whole');
+          var q = String(where.quote);
+          if (q.length > QUOTE_MAX) return fail('Select at most ' + QUOTE_MAX + ' characters to comment on');
+          if (!(where.start >= 0 && where.end > where.start)) return fail('Bad selection');
+          m.start = where.start; m.end = where.end; m.quote = q;
+        }
+      }
+    }
+    allComments().push(m);
+    save();
+    return { ok: true, comment: m };
+  }
+  function setCommentResolved(id, resolved) {
+    var m = getComment(id);
+    if (!m) return fail('Comment not found');
+    resolved = !!resolved;
+    if (m.resolved === resolved) return fail(resolved ? 'Already resolved' : 'Already open');
+    m.resolved = resolved;
+    m.resolvedBy = resolved ? CURRENT_USER : null;
+    m.resolvedAt = resolved ? clock().toISOString() : null;
+    save();
+    return { ok: true };
+  }
+  // scope: { contentId } or { flowId }; status: 'open' (default) | 'resolved' | 'all'. Newest first (resolved: most recently resolved first).
+  function commentsFor(scope, status) {
+    status = status || 'open';
+    var list = allComments().filter(function (m) {
+      if (scope.flowId ? m.flowId !== scope.flowId : m.contentId !== scope.contentId) return false;
+      return status === 'all' || (status === 'resolved') === m.resolved;
+    });
+    function key(m) { return status === 'resolved' ? m.resolvedAt : m.createdAt; }
+    function seq(m) { return parseInt(String(m.id).slice(1), 10) || 0; }
+    return list.sort(function (a, b) { return key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : seq(b) - seq(a); });
+  }
+  // Where is the quote of a comment in `text` now? ok = still where it was, moved = found elsewhere, gone = no longer there, whole = no quote
+  function locateComment(m, text) {
+    if (!m.quote) return { state: 'whole' };
+    text = String(text || '');
+    if (text.slice(m.start, m.end) === m.quote) return { state: 'ok', start: m.start, end: m.end };
+    var i = text.indexOf(m.quote);
+    return i === -1 ? { state: 'gone' } : { state: 'moved', start: i, end: i + m.quote.length };
   }
 
   // ---- Operations ------------------------------------------------------------
@@ -1577,7 +1661,7 @@
 
   // ---- Demo data -------------------------------------------------------------
   function seed() {
-    state = { nextId: 1, campaigns: SAMPLE_CAMPAIGNS.map(function (c) { return { id: c.id, name: c.name }; }), contents: [], flows: [], history: [] };
+    state = { nextId: 1, campaigns: SAMPLE_CAMPAIGNS.map(function (c) { return { id: c.id, name: c.name }; }), contents: [], flows: [], comments: [], history: [] };
     var t = Date.now() - 6 * 24 * 3600 * 1000;
     clock = function () { t += 47 * 60 * 1000 + 13000; return new Date(t); };
 
@@ -1649,6 +1733,13 @@
     connect(fl.id, nL.id, nL.outs[0].id, nD.id);
     connect(fl.id, nL.id, nL.outs[1].id, nA.id);
     [[nI, 40, 40], [nW, 380, 40], [nL, 720, 40], [nD, 1100, 40], [nA, 1100, 260]].forEach(function (p) { moveNode(fl.id, p[0].id, p[1], p[2]); });   // tidy layout
+
+    // a few comments, one resolved, to show the lists
+    var wt = get(w.id).translations[0].text, qs = 'welcome to Noora Health', at = wt.indexOf(qs);
+    addComment({ contentId: w.id, lang: 'en', part: 'body', start: at, end: at + qs.length, quote: qs }, 'Should we say "Noora Health" or just "Noora"? Mothers know us as Noora.');
+    addComment({ contentId: w.id, lang: 'en', part: 'footer', start: 0, end: 5, quote: 'Noora' }, 'Footer matches the Hindi one now.');
+    setCommentResolved(allComments()[1].id, true);
+    addComment({ flowId: fl.id, nodeId: nA.id }, 'Who is the community health worker here? Name the role in the definition.');
 
     clock = function () { return new Date(); };
     save();
@@ -1729,6 +1820,13 @@
     blockProblem: blockProblem,
     historyFor: historyFor,
     historyTree: historyTree,
+    addComment: addComment,
+    setCommentResolved: setCommentResolved,
+    commentsFor: commentsFor,
+    getComment: getComment,
+    locateComment: locateComment,
+    COMMENT_MAX: COMMENT_MAX,
+    QUOTE_MAX: QUOTE_MAX,
     isContentStep: isContentStep,
     rewind: rewind,
     rewindProblem: rewindProblem,
