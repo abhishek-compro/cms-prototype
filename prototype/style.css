@@ -474,12 +474,12 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .out-row .port.out { top: 50%; margin-top: -7px; right: -19px; }
 .out-x { padding: 0 4px; font-size: 16px; line-height: 1; }
 .add-out { margin-top: 2px; font-size: 12px; padding: 3px 10px; }
-.edge-pill { position: absolute; z-index: 3; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 99px; font-size: 11px; box-shadow: 0 1px 4px var(--shadow); }
+.edge-pill { position: absolute; z-index: 3; transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 24px; height: 24px; padding: 0; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 50%; font-size: 11px; box-shadow: 0 1px 4px var(--shadow); }
 .edge-pill .pill-x { opacity: 0; pointer-events: none; }
 .edge-pill.hot, .edge-pill:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 1px 4px var(--shadow); }
 .edge-pill.hot .pill-x, .edge-pill:focus-within .pill-x { opacity: 1; pointer-events: auto; }
 .edge-pill:not(.hot):not(:focus-within) { opacity: 0; pointer-events: none; }
-.pill-x { border: 0; background: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 1px 5px; border-radius: 50%; }
+.pill-x { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 0; background: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0 0 1px; border-radius: 50%; }
 .pill-x:hover { background: var(--bad-soft); color: var(--bad); }
 
 /* remove a node: a small cross on the corner of its border, shown only while the node is hovered (or the button has focus) */

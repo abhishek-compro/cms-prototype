@@ -135,6 +135,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('hovering a node outlines it (an outline, not a different box)', await b.ev(`(function(){var s=getComputedStyle(document.querySelector('${await node('Daily health tip')}')); return s.outlineStyle==='solid' && parseFloat(s.outlineWidth)>=2})()`));
   await b.hover('.canvas-wrap', 0.5, 0.97);
   ok('the outline is gone when the pointer leaves', await b.ev(`getComputedStyle(document.querySelector('${await node('Daily health tip')}')).outlineStyle`) === 'none');
+  ok('an edge\'s pill is a small circle with its × exactly in the middle', await b.ev(`[].every.call(document.querySelectorAll('.edge-pill'), function(p){var a=p.getBoundingClientRect(), x=p.querySelector('.pill-x').getBoundingClientRect(); return Math.abs(a.width-a.height)<1 && a.width<=28 && Math.abs(x.left+x.width/2-a.left-a.width/2)<1 && Math.abs(x.top+x.height/2-a.top-a.height/2)<1 && getComputedStyle(p).borderRadius.indexOf('50%')!==-1})`));
   ok('edge crosses are hidden until the edge is hovered', await b.ev(`[].every.call(document.querySelectorAll('.edge-pill .pill-x'), function(x){return getComputedStyle(x).opacity==='0' && getComputedStyle(x).pointerEvents==='none'})`) && await b.ev(`getComputedStyle(document.querySelector('.edge-pill:not(.labeled)')).opacity`) === '0');
   // hover an edge: find a point along its line that is really on the line (not under a node) and put the pointer there
   const hoverEdge = async key => {
