@@ -21,6 +21,7 @@
   --btn-primary-hover: #1a5fd0;
   --btn-ok: #1a7f4b;
   --btn-ok-hover: #146c3f;
+  --toolbar-bg: #dfe8f5; --toolbar-line: #b8c7de;
   --stage-done-bg: #c6ecd2; --stage-done-text: #14532d; --stage-now-bg: #ffe066; --stage-now-bg-2: #fff3b0; --stage-now-text: #5c4400; --stage-dot: #d49a00; --stage-glow: rgba(212, 154, 0, .6);
   --ok: #1a7f4b;
   --ok-soft: #e3f5ea;
@@ -69,6 +70,7 @@
     --btn-primary-hover: #3b7de8;
     --btn-ok: #1f8a54;
     --btn-ok-hover: #26a064;
+    --toolbar-bg: #1d2a3d; --toolbar-line: #34465f;
     --stage-done-bg: #1e4d2e; --stage-done-text: #b7efc9; --stage-now-bg: #6b5200; --stage-now-bg-2: #8a6a00; --stage-now-text: #ffe9a0; --stage-dot: #ffd23f; --stage-glow: rgba(255, 210, 63, .65);
     --ok: #4cc88a;
     --ok-soft: #13301f;
@@ -116,6 +118,7 @@
   --btn-primary-hover: #3b7de8;
   --btn-ok: #1f8a54;
   --btn-ok-hover: #26a064;
+    --toolbar-bg: #1d2a3d; --toolbar-line: #34465f;
     --stage-done-bg: #1e4d2e; --stage-done-text: #b7efc9; --stage-now-bg: #6b5200; --stage-now-bg-2: #8a6a00; --stage-now-text: #ffe9a0; --stage-dot: #ffd23f; --stage-glow: rgba(255, 210, 63, .65);
   --ok: #4cc88a;
   --ok-soft: #13301f;
@@ -729,7 +732,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .toolbar .btn:hover:not(:disabled), .toolbar .btn.on, .toolbar .block-switch.on { position: relative; z-index: 1; }
 
 /* the toolbar stays at the top of the editor while the content scrolls under it */
-.toolbar { position: sticky; top: 0; z-index: 30; background: var(--bg); }
+.toolbar { position: sticky; top: 0; z-index: 30; background: var(--toolbar-bg); border-bottom: 1px solid var(--toolbar-line); }   /* its own colour, so it stands out from the page and the panels */
 
 /* history: one language at a time */
 .hp-lang { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }

@@ -39,6 +39,13 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   const tbTop = () => b.ev(`Math.round(document.querySelector('.toolbar').getBoundingClientRect().top - document.querySelector('.main').getBoundingClientRect().top)`);
   await b.ev(`document.querySelector('.main').scrollTop = 400; 0`); await b.settle();
   ok('the toolbar stays fixed at the top of the editor while the content is scrolled (the content really scrolled)', await b.ev(`document.querySelector('.main').scrollTop`) > 200 && await tbTop() === 0 && await b.ev(`(function(){var tb=document.querySelector('.toolbar').getBoundingClientRect(), e=document.elementFromPoint(tb.left + 40, tb.top + tb.height / 2); return !!e.closest('.toolbar')})()`));
+  const tbColors = () => b.ev(`(function(){function c(e){return getComputedStyle(e).backgroundColor} return {bar: c(document.querySelector('.toolbar')), page: c(document.body), panel: c(document.querySelector('.panel-head')), side: c(document.querySelector('.sidebar'))}})()`);
+  const lightC = await tbColors();
+  ok('the toolbar has a colour of its own: different from the page, the panels and the sidebar (light)', lightC.bar !== lightC.page && lightC.bar !== lightC.panel && lightC.bar !== lightC.side && lightC.bar !== 'rgba(0, 0, 0, 0)', JSON.stringify(lightC));
+  await b.setScheme('dark');
+  const darkC = await tbColors();
+  ok('...and in dark mode too, with its own dark value (a theme variable)', darkC.bar !== darkC.page && darkC.bar !== darkC.panel && darkC.bar !== darkC.side && darkC.bar !== lightC.bar, JSON.stringify(darkC));
+  await b.setScheme('light');
   ok('it has an opaque background, so the scrolled content does not show through', await b.ev(`getComputedStyle(document.querySelector('.toolbar')).backgroundColor !== 'rgba(0, 0, 0, 0)'`));
   await b.ev(`document.querySelector('.main').scrollTop = 0; 0`); await b.settle();
   // ================= the layout does not move when you type (a regression: typing used to add the history column) =================
