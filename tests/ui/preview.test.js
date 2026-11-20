@@ -27,6 +27,7 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   const phone = await rect(E('.phone'));
   const below = async s => (await rect(E(s))).top >= phone.bottom - 1;
   ok('the placeholders table is below the phone', await q(E('[data-sec=placeholders]')) && await below('[data-sec=placeholders]'));
+  ok('the table is titled "Body placeholders" (the URL button variables have their own table)', /^Body placeholders/.test((await txt(E('[data-sec=placeholders] .sec-label'))).trim()));
   ok('the buttons\' payloads and URLs are below the phone, with the URL variables', await below('[data-input=btn-payload]') && await below('[data-input=btn-url]') && await below('[data-input=btn-param]'));
   ok('the header media id is below the phone', await below('[data-input=header]'));
   ok('none of those fields is inside the phone', !await q(E('.phone [data-input=btn-payload]')) && !await q(E('.phone [data-input=btn-url]')) && !await q(E('.phone [data-input=default]')) && !await q(E('.phone [data-input=header]')));

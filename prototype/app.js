@@ -417,7 +417,7 @@
       return '<tr><td>' + (ro ? '<code>{{' + esc(n) + '}}</code>' : nameInput('ph-rename', tr, n, '')) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
         (ro ? esc(d) : '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default value" autocomplete="off">') + '</td></tr>';
     }).join('');
-    return '<div class="sec" data-sec="placeholders">' + lbl('Placeholders') +
+    return '<div class="sec" data-sec="placeholders">' + lbl('Body placeholders') +
       '<table class="ph-table"><thead><tr><th>Name</th><th>WhatsApp position</th><th>Default value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       (ro ? '' : '<div class="muted small ph-help">Edit a name to rename it everywhere. One name can fill several WhatsApp positions: use it more than once, or rename another placeholder to it.</div>') + '</div>';
   }
