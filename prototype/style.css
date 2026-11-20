@@ -208,7 +208,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .rename-row input { padding: 4px 8px; border: 1px solid var(--accent); border-radius: 6px; font-size: 16px; }
 .block-switch { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; }
 .block-switch.on { border-color: var(--bad-border); background: var(--bad-soft); color: var(--bad); }
-.banner { margin: 14px 0 0; padding: 8px 12px; border-radius: var(--radius); background: var(--bad-soft); color: var(--bad); }
 
 .tabs { display: flex; gap: 2px; margin: 18px 0 14px; border-bottom: 1px solid var(--border); }
 .tab { padding: 8px 14px; border: 0; background: none; border-bottom: 2px solid transparent; color: var(--muted); }

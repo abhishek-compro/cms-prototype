@@ -141,9 +141,9 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('the checkbox in the toolbar is called "Free text"', /^\s*Free text\s*$/.test(await txt('.toolbar .block-switch')) && !/Block template approval/.test(await txt('.toolbar')));
   ok('not published yet: the block checkbox is offered', await q('[data-change=toggle-block]') && await b.ev(`!document.querySelector('[data-change=toggle-block]').checked`));
   await b.click('[data-change=toggle-block]');
-  ok('blocking: a banner appears, the content cannot be published, the list shows "no template"', await q('.banner') && /blocked/.test((await b.ev(`Store.deployAll(${JSON.stringify(await idOf('Appointment reminder'))})`)).error) && /no template/.test(await txt('.content-item.active')));
+  ok('blocking: no warning banner appears (removed on request), the content cannot be published, the list shows "no template"', !await q('.banner') && !/Template approval is blocked/.test(await txt('.main')) && /blocked/.test((await b.ev(`Store.deployAll(${JSON.stringify(await idOf('Appointment reminder'))})`)).error) && /no template/.test(await txt('.content-item.active')));
   await b.click('[data-change=toggle-block]');
-  ok('unblocking restores publishing', !await q('.banner') && await b.ev(`Store.get(${JSON.stringify(await idOf('Appointment reminder'))}).blocked === false && Store.canDeploy(Store.get(${JSON.stringify(await idOf('Appointment reminder'))}), Store.get(${JSON.stringify(await idOf('Appointment reminder'))}).translations[0]) === null`));
+  ok('unblocking restores publishing', await b.ev(`Store.get(${JSON.stringify(await idOf('Appointment reminder'))}).blocked === false && Store.canDeploy(Store.get(${JSON.stringify(await idOf('Appointment reminder'))}), Store.get(${JSON.stringify(await idOf('Appointment reminder'))}).translations[0]) === null`));
 
   // ================= publishing =================
   ok('before publishing, wa_template_name is empty for every language', await waName('en') === '—' && await waName('hi') === '—' && /empty until published/.test(await txt('.panel.edit[data-lang=en] .wa-name')));

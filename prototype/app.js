@@ -355,12 +355,6 @@
     updateSideTools();
   }
 
-  function headHtml(c) {
-    // no name heading and no description line (the name is in the list on the left; Rename is the pencil on its item there);
-    // the actions live in the editor toolbar below. Only the blocked banner stays here.
-    return c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '';
-  }
-
   function addLangHtml(c) {
     var missing = S.LANGUAGES.filter(function (l) { return !S.getTr(c, l.code); });
     return missing.length
@@ -1323,7 +1317,7 @@
 
   function flowsMainHtml(fi, c) {
     if (!fi) return '<div class="hint">No flows here yet. Use the + button in the left bar to create one. Templates that are not in a flow are listed here as flows by themselves.</div>';
-    if (fi.kind === 'template') return headHtml(fi.content) + editHtml(fi.content);
+    if (fi.kind === 'template') return editHtml(fi.content);
     return flowEditorHtml(fi.flow);
   }
 
@@ -1453,7 +1447,7 @@
     var main;
     if (ui.listTab === 'flows') main = flowsMainHtml(fi, c);
     else main = c
-      ? headHtml(c) + editHtml(c)
+      ? editHtml(c)
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
     var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
     var cmScope = ui.commentsOpen ? cmScopeNow() : null;
