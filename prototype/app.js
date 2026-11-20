@@ -844,6 +844,12 @@
     return head + body;
   }
 
+  // The language panel of the language the history is showing (the Content tab's dropdown) gets the same outline as a panel you are working in
+  function markHistLang() {
+    var c = S.get(ui.selectedId), pane = document.getElementById('history-pane'), lang = pane && ui.histTab === 'content' && !currentFlow() && c ? histLangNow(c) : null;
+    [].forEach.call(document.querySelectorAll('.panel.edit'), function (p) { p.classList.toggle('hist-sel', !!lang && p.getAttribute('data-lang') === lang); });
+  }
+
   // Re-render only the sidebar (and the highlighted panel); never touches the textarea or its caret
   function updateHistoryPane() {
     var c = S.get(ui.selectedId);
@@ -852,6 +858,7 @@
     if (pane) pane.innerHTML = historyPaneInner(c);
     var lay = document.querySelector('.layout');     // the wide column is only for the Content tree and only while the history pane is really shown
     if (lay) lay.classList.toggle('tree-on', !!pane && !!c && !currentFlow() && ui.histTab === 'content');
+    markHistLang();
   }
 
   // ---- Flows tab: selection, the flow editor, the card for a template that is a flow by itself ----------
@@ -1324,6 +1331,7 @@
     else if (ui.campBox) focusCampBox();
     drawEdges();
     autosizeAll();
+    markHistLang();
     if (ui.scrollLang) { var sp = panelOf(ui.scrollLang); if (sp) sp.scrollIntoView({ inline: 'center', block: 'nearest' }); ui.scrollLang = null; }
     scrollRestore(snap);
   }

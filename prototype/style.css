@@ -762,3 +762,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* the toolbar's own bottom border is the only horizontal line: its buttons have no top or bottom border (only the left / right lines between them) */
 .toolbar .btn, .toolbar .field-select, .toolbar .block-switch { border-top: 0; border-bottom: 0; }
+
+/* the language you are working in (focus inside its panel) and the language the history shows get the same outline */
+.panel.edit:focus-within, .panel.edit.hist-sel { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
