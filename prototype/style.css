@@ -167,8 +167,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* layout */
 #app { height: 100vh; display: flex; flex-direction: column; }   /* the layout takes what the top bar leaves: no page-level scrollbar, whatever the bar's height */
-.layout { --camp-w: 210px; display: grid; grid-template-columns: var(--camp-w) 260px minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
-.layout.hist-off { grid-template-columns: var(--camp-w) 260px minmax(0, 1fr); }
+.layout { --camp-w: 210px; --list-w: 260px; display: grid; grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
+.layout.hist-off { grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr); }
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; padding: 0; display: flex; flex-direction: column; }   /* only the list scrolls: the tabs, the search / add buttons and the title stay put */
 .sidebar > .list-tabs, .sidebar > .side-tools, .sidebar > .side-title { flex: none; }
 .main { overflow: auto; padding: 0; }
@@ -275,8 +275,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .timeline.compact .event::before { left: -22px; top: 13px; }
 .timeline.compact .event-head .when { margin-left: 0; flex-basis: 100%; font-size: 11px; }
 @media (max-width: 1180px) {
-  .layout { --camp-w: 180px; grid-template-columns: var(--camp-w) 220px minmax(0, 1fr) 300px; }
-  .layout.hist-off { grid-template-columns: var(--camp-w) 220px minmax(0, 1fr); }
+  .layout { --camp-w: 180px; --list-w: 220px; grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr) 300px; }
+  .layout.hist-off { grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr); }
 }
 
 
@@ -594,8 +594,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .wa-doc-name { color: inherit; font-weight: 600; overflow-wrap: anywhere; }
 
 /* the undo tree */
-.layout.tree-on { grid-template-columns: var(--camp-w) 260px minmax(0, 1fr) 520px; }
-@media (max-width: 1180px) { .layout.tree-on { grid-template-columns: var(--camp-w) 220px minmax(0, 1fr) 460px; } }
+.layout.tree-on { grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr) 520px; }
+@media (max-width: 1180px) { .layout.tree-on { grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr) 460px; } }
 @media (max-width: 900px) { .layout.tree-on { grid-template-columns: 1fr; } }
 .tree-note { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-size: 12px; }
 .tree { list-style: none; margin: 0; padding: 0; }
@@ -808,3 +808,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* the items of the flows list are square */
 .content-item.flow-item { border-radius: 0; }
+
+/* the Flows tab makes room: its list is as wide as its longest entry (up to a limit), so each entry is one line of flowing text */
+.layout.flows-wide { --list-w: fit-content(min(680px, 44vw)); }
+.flow-item.single-line { align-items: center; padding: 7px 10px 7px 6px; }
+.flow-item .ci-line { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.flow-item .ci-line .flow-ind { display: inline-flex; vertical-align: -2px; margin-right: 6px; padding: 0; border-radius: 0; background: none; }   /* a plain small icon, no text, no box */
+.flow-item .ci-timing { color: var(--muted); font-weight: 400; }
+.flow-item .ci-line .name { display: inline; font-weight: 600; }
+
+.content-item.flow-item { border: 0; }   /* the entries of the flows list have no border (the selected one is shown by its background) */

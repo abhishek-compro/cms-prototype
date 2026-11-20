@@ -160,7 +160,7 @@
     if (count.flow) parts.push(count.flow + (count.flow === 1 ? ' flow call' : ' flow calls'));
     return parts.join(' · ');
   }
-  var FLOW_IND = '<span class="flow-ind" title="This template is itself a flow" aria-label="This template is itself a flow">' + ICON_FLOW + '<span>Single template</span></span>';
+  var FLOW_IND = '<span class="flow-ind" title="This template is itself a flow" aria-label="This template is itself a flow">' + ICON_FLOW + '</span>';
 
   // The Flows tab: the flows you created (reorderable), then each template that no flow of this campaign includes,
   // listed as a flow by itself with an indicator.
@@ -173,10 +173,12 @@
     return items.map(function (it) {
       var isFlow = it.kind === 'flow', id = isFlow ? it.flow.id : it.content.id;
       var on = ui.flowSel && ui.flowSel.kind === it.kind && ui.flowSel.id === id;
-      return '<li class="content-item flow-item' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '">' +
+      var name = isFlow ? it.flow.name : it.content.name, timing = S.timingText(isFlow ? it.flow.timing : it.content.timing);
+      var tip = timing + ' ' + name + (isFlow ? ' (' + flowSummary(it.flow) + ')' : ' (a template that is itself a flow)');
+      // one line of flowing text:  <n> days <before/after> <reference date> <name>   (the grip is only for dragging; a flow made from one template has a small icon)
+      return '<li class="content-item flow-item single-line' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '" title="' + esc(tip) + '">' +
         '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + 'Drag to reorder, or onto a campaign to copy or move it' + '">' + ICON_GRIP + '</span>' +
-        '<div class="ci-body"><div class="name">' + esc(isFlow ? it.flow.name : it.content.name) + (isFlow ? '' : ' ' + FLOW_IND) + '</div>' +
-        '<div class="flow-meta">' + esc(isFlow ? S.timingText(it.flow.timing) + ' · ' + flowSummary(it.flow) : S.timingText(it.content.timing)) + '</div></div></li>';
+        '<div class="ci-line">' + (isFlow ? '' : FLOW_IND) + '<span class="ci-timing">' + esc(timing) + '</span> <span class="name">' + esc(name) + '</span></div></li>';
     }).join('');
   }
 
@@ -1350,7 +1352,7 @@
     var histShown = !cmScope && subject && ui.historyOpen;
     var pane = cmScope ? '<aside class="history-pane comments-pane" id="comments-pane">' + commentsPaneInner(cmScope) + '</aside>'
       : histShown ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.listTab === 'flows' ? ' flows-wide' : '') + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
