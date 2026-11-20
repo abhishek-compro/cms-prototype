@@ -44,9 +44,10 @@ uiSuite('new nodes land in the middle of the visible canvas, on top', async ({ b
 
   // ---- templates are placed the same way
   await scrollTo(60, 120);
-  await add('tpl:' + await b.ev(`Store.list().filter(function(c){return c.name==='Appointment reminder'})[0].id`));
+  await add('type:template');
   w = await where();
   ok('a template node is also placed in the middle of what is visible, on top', Math.abs(w.dx) <= 6 && Math.abs(w.dy) <= 60 && w.inside && await onTop(), JSON.stringify(w));
+  await b.click('.fnode.editing [data-action=node-save]');       // a new template node opens for editing: keep the template it got
 
   // ---- left to right too
   await b.click('.dir-toggle .btn:not(.on)');

@@ -1,4 +1,4 @@
-// The top of a flow (not a single template): ONE cohesive toolbar (the + Add node dropdown, the direction icons, the i button; comments and
+// The top of a flow (not a single template): ONE cohesive toolbar (the + Add node dropdown and the direction icons; comments and
 // History at the right). No name, no timing, no summary: those are edited with the pencil of the flow's row in the Flows list.
 'use strict';
 const { uiSuite } = require('../lib/harness');
@@ -17,12 +17,12 @@ uiSuite('flow top section: one cohesive toolbar', async ({ b, ok }) => {
   ok('the toolbar is directly followed by the canvas, so the section starts with it (about one control high)', await b.ev(`(function(){var tb=document.querySelector('.flow-bar').getBoundingClientRect(), cv=document.getElementById('canvas-wrap').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return tb.top - m.top <= 2 && cv.top - tb.bottom <= 2 && tb.height >= 44 && tb.height <= 50})()`));
 
   // ---- one line
-  ok('everything is on ONE line: + Add node, the two direction icons, the i button, then (right) comments and History', await (async () => {
-    const sels = ['[data-combo=addnode] .combo-btn', '.dir-toggle .btn:first-child', '.dir-toggle .btn:last-child', '.flow-bar .info-btn', '.flow-bar .cm-open', '.flow-bar [data-action=toggle-history-pane]'];
+  ok('everything is on ONE line: + Add node, the two direction icons, then (right) comments and History', await (async () => {
+    const sels = ['[data-combo=addnode] .combo-btn', '.dir-toggle .btn:first-child', '.dir-toggle .btn:last-child', '.flow-bar .cm-open', '.flow-bar [data-action=toggle-history-pane]'];
     const ys = []; for (const s of sels) ys.push(await midY(s));
     return ys.every(y => Math.abs(y - ys[0]) < 3);
   })());
-  ok('in that order from the left, with comments and History at the right edge', await b.ev(`(function(){var x=function(s){return document.querySelector(s).getBoundingClientRect()}, tb=x('.flow-bar'); var ord=['[data-combo=addnode] .combo-btn','.dir-toggle .btn:first-child','.dir-toggle .btn:last-child','.flow-bar .info-btn','.flow-bar .cm-open','.flow-bar [data-action=toggle-history-pane]'].map(function(s){return x(s).left}); return ord.every(function(v,i){return i === 0 || v > ord[i-1]}) && tb.right - x('.flow-bar [data-action=toggle-history-pane]').right < 3})()`));
+  ok('in that order from the left, with comments and History at the right edge', await b.ev(`(function(){var x=function(s){return document.querySelector(s).getBoundingClientRect()}, tb=x('.flow-bar'); var ord=['[data-combo=addnode] .combo-btn','.dir-toggle .btn:first-child','.dir-toggle .btn:last-child','.flow-bar .cm-open','.flow-bar [data-action=toggle-history-pane]'].map(function(s){return x(s).left}); return ord.every(function(v,i){return i === 0 || v > ord[i-1]}) && tb.right - x('.flow-bar [data-action=toggle-history-pane]').right < 3})()`));
 
   // ---- cohesive: the same strip as the template editor's toolbar
   ok('it is the same kind of bar as the template editor\'s toolbar: white, a bottom border, 46px controls, square corners', await b.ev(`(function(){var tb=getComputedStyle(document.querySelector('.flow-bar')); return tb.backgroundColor === 'rgb(255, 255, 255)' && tb.borderBottomWidth === '1px' && [].every.call(document.querySelectorAll('.flow-bar .btn, .flow-bar .combo-btn'), function(e){var s=getComputedStyle(e); return Math.round(e.getBoundingClientRect().height) === 46 && s.borderRadius === '0px'})})()`));
@@ -34,10 +34,8 @@ uiSuite('flow top section: one cohesive toolbar', async ({ b, ok }) => {
   await b.click('.dir-toggle .btn:not(.on)');
   ok('clicking the other one switches the flow to left to right (and back)', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Left to right' && (await b.click('.dir-toggle .btn:not(.on)'), await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Top down'));
 
-  // ---- the hint is behind the i button
-  ok('the hint about dragging is not on screen; an i button holds it', !await q('#flow-help') && await b.ev(`document.querySelector('.flow-bar .info-btn').getAttribute('aria-expanded')`) === 'false' && !/Drag a node/.test(await txt('.main')));
-  await b.click('.flow-bar .info-btn');
-  ok('clicking it shows the hint under the toolbar (and where the name and timing are edited); clicking again hides it', await q('#flow-help') && /Drag a node by its header/.test(await txt('#flow-help')) && /pencil/.test(await txt('#flow-help')) && (await b.click('.flow-bar .info-btn'), !await q('#flow-help')));
+  // ---- no i button, no hint
+  ok('there is no i button and no hint text on the flow toolbar', !await q('.flow-bar .info-btn') && !await q('#flow-help') && !await q('.flow-help') && !/Drag a node|Drag from the output/.test(await txt('.main')));
 
   // ---- everything still works
   const before = await b.ev(`document.querySelectorAll('.fnode').length`);

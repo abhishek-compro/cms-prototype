@@ -58,6 +58,7 @@
     flow_logic_renamed: 'Renamed a logic node',
     flow_action_defined: 'Changed an action\'s definition',
     flow_timing_edited: 'Changed timing',
+    flow_rewound: 'Rewound the flow',
     flow_reordered: 'Moved in the flow list',
     flow_list_moved: 'Moved in the flow list',
     flow_copied: 'Copied to campaign',          // older events; now flow_referred
@@ -162,6 +163,14 @@
       evs.forEach(function (e, i) { e.parent = i ? evs[i - 1].id : null; });
       c.head = evs.length ? evs[evs.length - 1].id : null;
       if (evs.length) evs[evs.length - 1].snap = snapshotOf(c);
+      changed = true;
+    });
+    state.flows.forEach(function (f) {          // data saved before flows could be rewound: chain the steps, the last one is current and gets a snapshot of the flow as it is now
+      if (f.head !== undefined || !f.nodes) return;
+      var evs = (state.history || []).filter(function (e) { return e.flowId === f.id; }).sort(function (a, b) { return a.id - b.id; });
+      evs.forEach(function (e, i) { e.parent = i ? evs[i - 1].id : null; });
+      f.head = evs.length ? evs[evs.length - 1].id : null;
+      if (evs.length) evs[evs.length - 1].snap = flowSnapshot(f);
       changed = true;
     });
     state.flows.forEach(function (f) {          // flows used to be an ordered list of steps: now a chain of connected template nodes
@@ -568,12 +577,10 @@
   }
   // The undo tree of the content steps. With `lang`: only that language's steps and the steps that apply to every language; the links
   // skip the steps left out, and the "current" marker sits on the nearest shown step at or above the current one.
-  function historyTree(contentId, lang) {
-    var c = get(contentId);
-    if (!c) return { rows: [], width: 0, head: null };
-    var events = state.history.filter(function (e) { return e.contentId === contentId && isContentStep(e) && inLang(e, lang); }).sort(function (a, b) { return b.id - a.id; });
-    var head = null, h = c.head;
-    while (h != null) { var he = eventOf(h); if (!he) break; if (isContentStep(he) && inLang(he, lang)) { head = he.id; break; } h = he.parent; }
+  // The lanes of a `git log --graph` for a list of steps: events (any order), the id of the current step, how to find a step's parent among
+  // the steps shown, and why a step cannot be rewound to (null = it can). Used by the template tree and the flow tree.
+  function treeRows(events, head, parentOf, problemOf) {
+    events = events.slice().sort(function (a, b) { return b.id - a.id; });
     var lanes = [], width = 0;
     var rows = events.map(function (e) {
       var before = lanes.slice(), mine = [];
@@ -581,13 +588,69 @@
       var lane = mine.length ? mine[0] : lanes.indexOf(null);
       if (lane === -1) { lane = lanes.length; lanes.push(null); }
       mine.forEach(function (k) { lanes[k] = null; });
-      lanes[lane] = contentParent(e, lang);
+      lanes[lane] = parentOf(e);
       while (lanes.length && lanes[lanes.length - 1] === null && lanes.length > lane + 1) lanes.pop();
-      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === head, problem: rewindProblem(contentId, e.id) };
+      var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === head, problem: problemOf(e) };
       width = Math.max(width, before.length, lanes.length, lane + 1);
       return row;
     });
     return { rows: rows, width: width, head: head };
+  }
+  function historyTree(contentId, lang) {
+    var c = get(contentId);
+    if (!c) return { rows: [], width: 0, head: null };
+    var events = state.history.filter(function (e) { return e.contentId === contentId && isContentStep(e) && inLang(e, lang); });
+    var head = null, h = c.head;
+    while (h != null) { var he = eventOf(h); if (!he) break; if (isContentStep(he) && inLang(he, lang)) { head = he.id; break; } h = he.parent; }
+    return treeRows(events, head, function (e) { return contentParent(e, lang); }, function (e) { return rewindProblem(contentId, e.id); });
+  }
+
+  // ---- Rewinding a FLOW: the same undo tree, over the steps that change what the flow is made of -----------------------------------------
+  // Every flow step has a `parent` (the step that was current), a `snap` (the nodes and edges right after it) and Flow.head is the current
+  // step. The tree and Rewind are for the steps that change the graph (nodes, edges, conditions, actions, placeholder values); renaming the
+  // flow, its timing, its place in the list and its campaigns are the plain "Other" list and are not restored. Positions of nodes are layout
+  // only: a rewind keeps where you put the nodes that still exist (a node that comes back gets the place it had).
+  var FLOW_ACTIONS = ['flow_created', 'flow_node_added', 'flow_node_removed', 'flow_node_changed', 'flow_call_changed', 'flow_values_edited', 'flow_edge_connected',
+    'flow_edge_disconnected', 'flow_out_added', 'flow_out_removed', 'flow_out_renamed', 'flow_logic_renamed', 'flow_input_renamed', 'flow_action_renamed', 'flow_action_defined', 'flow_rewound'];
+  function isFlowStep(e) { return FLOW_ACTIONS.indexOf(e.action) !== -1; }
+  function flowSnapshot(f) { return { nodes: JSON.parse(JSON.stringify(f.nodes)) }; }
+  function graphSig(nodes) {       // what the graph is made of, not where it is drawn
+    return JSON.stringify(nodes.slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; }).map(function (n) { var c = JSON.parse(JSON.stringify(n)); delete c.x; delete c.y; delete c.alt; return c; }));
+  }
+  function flowParent(e) {
+    var p = e.parent;
+    while (p != null) { var pe = eventOf(p); if (!pe) return null; if (isFlowStep(pe)) return pe.id; p = pe.parent; }
+    return null;
+  }
+  function flowRewindProblem(flowId, eventId) {
+    var f = getFlow(flowId), e = eventOf(eventId);
+    if (!f) return 'Flow not found';
+    if (!e || e.flowId !== flowId) return 'That step is not in this flow\'s history';
+    if (!isFlowStep(e)) return 'Only changes to what the flow is made of can be rewound to';
+    if (!e.snap || !e.snap.nodes) return 'This step was saved before rewinding existed, so it cannot be restored';
+    if (graphSig(f.nodes) === graphSig(e.snap.nodes)) return 'The flow already looks like this';
+    return null;
+  }
+  function rewindFlow(flowId, eventId) {
+    var why = flowRewindProblem(flowId, eventId);
+    if (why) return fail(why);
+    var f = getFlow(flowId), e = eventOf(eventId), from = f.head, now = {};
+    f.nodes.forEach(function (n) { now[n.id] = n; });
+    f.nodes = JSON.parse(JSON.stringify(e.snap.nodes)).map(function (n) {
+      var cur = now[n.id];
+      if (cur) { n.x = cur.x; n.y = cur.y; if (cur.alt) n.alt = cur.alt; else delete n.alt; }       // keep where the node is drawn now
+      return n;
+    });
+    logFlow(f, 'flow_rewound', { parent: e.id, from: from, to: e.id });
+    save();
+    return { ok: true };
+  }
+  function flowHistoryTree(flowId) {
+    var f = getFlow(flowId);
+    if (!f) return { rows: [], width: 0, head: null };
+    var head = null, h = f.head;
+    while (h != null) { var he = eventOf(h); if (!he) break; if (isFlowStep(he)) { head = he.id; break; } h = he.parent; }
+    return treeRows(state.history.filter(function (e) { return e.flowId === flowId && isFlowStep(e); }), head, flowParent, function (e) { return flowRewindProblem(flowId, e.id); });
   }
 
   // ---- Comments ---------------------------------------------------------------------------------------------------
@@ -1047,7 +1110,9 @@
     return null;
   }
   function templateNodes(f) { return f.nodes.filter(function (n) { return n.type === 'template'; }); }
-  function flowTemplateIds(f) { return templateNodes(f).map(function (n) { return n.templateId; }); }
+  function flowTemplateIds(f) {                 // the templates the flow uses, each listed once (a flow may have several nodes for the same template)
+    return templateNodes(f).map(function (n) { return n.templateId; }).filter(function (id, i, a) { return a.indexOf(id) === i; });
+  }
   function nodeTitle(n) {
     if (n.type === 'template') return tplName(n.templateId);
     if (n.type === 'flow') { var g = getFlow(n.flowId); return g ? g.name : n.flowId; }   // the called flow's name, so it follows a rename
@@ -1082,11 +1147,15 @@
 
   function logFlow(f, action, extra) {
     var e = { id: state.nextId++, ts: clock().toISOString(), actor: CURRENT_USER, flowId: f.id, contentId: null, contentName: f.name, lang: null, action: action, before: null, after: null, detail: null };
+    var step = isFlowStep(e);
+    if (step) { e.parent = f.head === undefined ? null : f.head; e.snap = flowSnapshot(f); }   // every graph step is a node of an undo tree, like a template's
     for (var k in extra) e[k] = extra[k];
     state.history.push(e);
+    if (step) f.head = e.id;
   }
-  function historyForFlow(flowId) {
-    return state.history.filter(function (e) { return e.flowId === flowId; })
+  // historyForFlow(id [, 'activity']): 'activity' = everything that is not a graph step (renamed, timing, list order, campaigns)
+  function historyForFlow(flowId, mode) {
+    return state.history.filter(function (e) { return e.flowId === flowId && (mode !== 'activity' || !isFlowStep(e)); })
       .sort(function (a, b) { return a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : b.id - a.id; });
   }
   function tplName(id) { var c = get(id); return c ? c.name : id; }
@@ -1150,7 +1219,6 @@
     var f = getFlow(flowId), c = get(templateId);
     if (!f) return fail('Flow not found');
     if (!c) return fail('Template not found');
-    if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
     var p = nextPosition(f);
     var node = { id: 'n' + state.nextId++, type: 'template', templateId: templateId, values: {}, next: null, x: p.x, y: p.y };
     f.nodes.push(node);
@@ -1159,14 +1227,13 @@
     return { ok: true, node: node };
   }
 
-  // Point a template node at a different template. Its edges stay; a template can still only be in a flow once.
+  // Point a template node at a different template. Its edges stay; a template can be in a flow more than once (duplicate nodes are allowed).
   // The old template is no longer used by this flow (so it may become a flow by itself in its campaign again).
   function changeNodeTemplate(flowId, nodeId, templateId) {
     var f = getFlow(flowId), node = f && getNode(f, nodeId), c = get(templateId);
     if (!node || node.type !== 'template') return fail('Template node not found');
     if (!c) return fail('Template not found');
     if (node.templateId === templateId) return fail('No change');
-    if (flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
     var before = tplName(node.templateId);
     node.templateId = templateId;
     node.values = {};                    // values were for the old template's placeholders
@@ -1218,18 +1285,15 @@
     var templateId = change.templateId || node.templateId, c = get(templateId);
     if (!c) return fail('Template not found');
     var tplChanged = templateId !== node.templateId;
-    if (tplChanged && flowTemplateIds(f).indexOf(templateId) !== -1) return fail('"' + c.name + '" is already in this flow');
     var cleaned = cleanValues(templateId, change.values === undefined ? (tplChanged ? {} : node.values) : change.values);
     if (!cleaned.ok) return fail(cleaned.error);
     var oldValues = {}; nodeValues(node).forEach(function (v) { if (v.overridden) oldValues[v.name] = v.value; });
     var valuesChanged = JSON.stringify(sortedObj(oldValues)) !== JSON.stringify(sortedObj(cleaned.values));
     if (!tplChanged && !valuesChanged) return fail('No change');
-    if (tplChanged) {
-      var before = tplName(node.templateId);
-      node.templateId = templateId;
-      logFlow(f, 'flow_node_changed', { before: before, after: c.name });
-    }
-    node.values = cleaned.values;
+    var before = tplName(node.templateId);
+    node.templateId = templateId;
+    node.values = cleaned.values;                       // everything is applied before logging, so each step's snapshot is the finished node
+    if (tplChanged) logFlow(f, 'flow_node_changed', { before: before, after: c.name });
     if (valuesChanged && !(tplChanged && !Object.keys(cleaned.values).length)) {     // (a template switch alone already says so)
       logFlow(f, 'flow_values_edited', { before: tplChanged ? '(new template)' : valuesText(node, oldValues), after: valuesText(node, cleaned.values), detail: c.name });
     }
@@ -1540,15 +1604,17 @@
     var added = wanted.filter(function (w) { return !w.id; });
     var retitled = newTitle !== node.title;
     if (!removed.length && !renamed.length && !added.length && !retitled) return fail('No change');
-    if (retitled) { logFlow(f, 'flow_logic_renamed', { before: node.title, after: newTitle }); node.title = newTitle; }
+    var oldTitle = node.title, evs = [];
+    if (retitled) evs.push(['flow_logic_renamed', { before: oldTitle, after: newTitle }]);
     var next = wanted.map(function (w) {
       if (w.id) { var o = findOut(node, w.id); return { id: o.id, label: w.label, to: o.to }; }
       return { id: 'o' + state.nextId++, label: w.label, to: null };
     });
-    removed.forEach(function (o) { logFlow(f, 'flow_out_removed', { before: o.label, detail: node.title + (o.to ? ' (was → ' + tplOrNode(f, o.to) + ')' : '') }); });
-    renamed.forEach(function (w) { logFlow(f, 'flow_out_renamed', { before: findOut(node, w.id).label, after: w.label, detail: node.title }); });
-    added.forEach(function (w) { logFlow(f, 'flow_out_added', { after: w.label, detail: node.title }); });
-    node.outs = next;
+    removed.forEach(function (o) { evs.push(['flow_out_removed', { before: o.label, detail: oldTitle + (o.to ? ' (was → ' + tplOrNode(f, o.to) + ')' : '') }]); });
+    renamed.forEach(function (w) { evs.push(['flow_out_renamed', { before: findOut(node, w.id).label, after: w.label, detail: oldTitle }]); });
+    added.forEach(function (w) { evs.push(['flow_out_added', { after: w.label, detail: oldTitle }]); });
+    node.title = newTitle; node.outs = next;             // apply first, then log: each step's snapshot is the finished node
+    evs.forEach(function (x) { logFlow(f, x[0], x[1]); });
     save();
     return { ok: true };
   }
@@ -1977,6 +2043,10 @@
     blockProblem: blockProblem,
     historyFor: historyFor,
     historyTree: historyTree,
+    isFlowStep: isFlowStep,
+    flowHistoryTree: flowHistoryTree,
+    flowRewindProblem: flowRewindProblem,
+    rewindFlow: rewindFlow,
     addComment: addComment,
     setCommentResolved: setCommentResolved,
     commentsFor: commentsFor,

@@ -6,7 +6,6 @@
 
   var ui = {
     listTab: 'templates', // content sidebar tab: 'templates' | 'flows'
-    flowInfo: false,     // the hint under the flow toolbar is open (under its i button)
     flowEdit: null,      // the Flows list row being edited: {kind, id, name, days, when, ref}
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
@@ -612,7 +611,7 @@
     else if (e.action === 'flow_duplicated') body = 'Duplicated as <strong>' + esc(e.after) + '</strong> <span class="muted">in ' + esc(e.detail) + '</span>';
     else if (e.action === 'flow_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'header_type_changed') body = esc(e.before || 'None') + ' → <strong>' + esc(e.after) + '</strong>';
-    else if (e.action === 'rewound') body = 'Back to <strong>' + esc(eventTitle(S.eventOf(e.to))) + '</strong> <span class="muted">· from ' + esc(eventTitle(S.eventOf(e.from))) + '</span>';
+    else if ((e.action === 'rewound' || e.action === 'flow_rewound')) body = 'Back to <strong>' + esc(eventTitle(S.eventOf(e.to))) + '</strong> <span class="muted">· from ' + esc(eventTitle(S.eventOf(e.from))) + '</span>';
     else if (e.action === 'campaign_copied') body = 'Also in <strong>' + esc(e.after) + '</strong>';
     else if (e.action === 'campaign_moved') body = (e.before ? esc(e.before) + ' → ' : 'Into ') + '<strong>' + esc(e.after) + '</strong>';
     return body;
@@ -807,6 +806,20 @@
       case 'stage_moved': return 'Moved to ' + stageLabel(e.after);
       case 'rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
       case 'flow_list_moved': return 'Moved in the flow list';
+      case 'flow_rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
+      case 'flow_created': return 'Created' + (e.detail ? ' (' + e.detail.toLowerCase() + ')' : '');
+      case 'flow_node_added': return 'Added ' + e.after + ' (' + String(e.detail).toLowerCase() + ')';
+      case 'flow_node_removed': return 'Removed ' + e.before;
+      case 'flow_node_changed': return 'Template: ' + e.before + ' → ' + e.after;
+      case 'flow_call_changed': return 'Flow called: ' + e.before + ' → ' + e.after;
+      case 'flow_values_edited': return e.detail + ' · placeholder values';
+      case 'flow_edge_connected': return 'Connected ' + e.detail;
+      case 'flow_edge_disconnected': return 'Disconnected ' + e.before;
+      case 'flow_out_added': return 'Added condition “' + e.after + '” on ' + e.detail;
+      case 'flow_out_removed': return 'Removed condition “' + e.before + '” on ' + e.detail;
+      case 'flow_out_renamed': return 'Condition “' + e.before + '” → “' + e.after + '” on ' + e.detail;
+      case 'flow_input_renamed': case 'flow_logic_renamed': case 'flow_action_renamed': return 'Renamed ' + e.before + ' → ' + e.after;
+      case 'flow_action_defined': return e.detail + ' · definition';
       default: return S.ACTION_LABELS[e.action] || e.action;
     }
   }
@@ -824,7 +837,7 @@
       }
     });
     if (row.after[lane] != null) parts.push('<line class="l' + (lane % 6) + '" x1="' + x(lane) + '" y1="' + TREE_MID + '" x2="' + x(lane) + '" y2="' + TREE_H + '"/>');
-    var cls = 'node l' + (lane % 6) + (row.isHead ? ' head' : '') + (row.event.action === 'rewound' ? ' rw' : '');
+    var cls = 'node l' + (lane % 6) + (row.isHead ? ' head' : '') + (row.event.action === 'rewound' || row.event.action === 'flow_rewound' ? ' rw' : '');
     parts.push('<circle class="' + cls + '" cx="' + x(lane) + '" cy="' + TREE_MID + '" r="' + (row.isHead ? 6 : 4.5) + '"/>');
     return '<svg class="tree-graph" width="' + (x(width - 1) + 9) + '" height="' + TREE_H + '" aria-hidden="true">' + parts.join('') + '</svg>';
   }
@@ -857,33 +870,33 @@
     return '<button class="info-btn' + (ui.histInfo ? ' on' : '') + '" data-action="hist-info" aria-expanded="' + !!ui.histInfo + '" aria-controls="hist-info" aria-label="About this list" title="About this list">' + ICON_INFO + '</button>';
   }
   function histInfoBox(html) { return ui.histInfo ? '<div class="muted small hist-info" id="hist-info">' + html + '</div>' : ''; }
+  // The tree for a template (one language at a time) or for a flow: the same rows, Details and Rewind
   function treeHtml(c) {
-    var tree = S.historyTree(c.id, histLangNow(c)), dirty = c.translations.some(function (t) { return isDirty(c, t); });
-    var help = histInfoBox('Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.');
-    if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
-    return histLangPickHtml(c) + help + '<ol class="tree" aria-label="Content history tree, newest first">' + tree.rows.map(function (row) {
+    var fl = currentFlow(), tree, dirty, pick, help, what0 = fl ? 'flow' : 'content';
+    if (fl) {
+      tree = S.flowHistoryTree(fl.id); dirty = false; pick = '<div class="hp-lang"><span class="grow"></span>' + histInfoBtn() + '</div>';
+      help = histInfoBox('Changes to what the flow is made of, as a tree: nodes added or removed, template or flow changed, placeholder values, connections, conditions and actions. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the nodes and connections back as they were after a step (where you drew them stays). It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and changing the flow from here starts a new one. Renaming the flow, its timing, its place in the list and its campaigns are under <strong>Other</strong>.');
+    } else {
+      tree = S.historyTree(c.id, histLangNow(c)); dirty = c.translations.some(function (t) { return isDirty(c, t); }); pick = histLangPickHtml(c);
+      help = histInfoBox('Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.');
+      if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
+    }
+    return pick + help + '<ol class="tree" aria-label="' + (fl ? 'Flow' : 'Content') + ' history tree, newest first">' + tree.rows.map(function (row) {
       var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
       var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts), open = !!ui.treeDetails[e.id];
       return '<li class="tree-item' + (open ? ' open' : '') + '" data-event="' + e.id + '"><div class="tree-row' + (row.isHead ? ' current' : '') + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
         '<span class="tree-what">' + esc(what) + '</span>' +
-        (row.isHead ? '<span class="tree-cur" title="The content is as it was after this step">current</span>' : '') +
+        (row.isHead ? '<span class="tree-cur" title="The ' + what0 + ' is as it was after this step">current</span>' : '') +
         '<span class="tree-meta">' + esc(e.actor) + ' · ' + esc(shortTime(e.ts)) + '</span>' +
         '<button class="btn link tree-details" data-action="tree-detail" data-event="' + e.id + '" aria-expanded="' + open + '" aria-controls="tree-detail-' + e.id + '" aria-label="Details of: ' + esc(what) + '">Details</button>' +
-        (row.isHead ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the content back as it was after this step') + '">Rewind</button>') +
+        (row.isHead ? '' : '<button class="btn tree-rewind" data-action="rewind" data-event="' + e.id + '" aria-label="Rewind to: ' + esc(what) + '"' + (why ? ' disabled' : '') + ' title="' + esc(why || 'Put the ' + what0 + ' back as it was after this step') + '">Rewind</button>') +
         '</div>' + (open ? treeDetailsHtml(row, tree.width) : '') + '</li>';
     }).join('') + '</ol>';
   }
 
   function historyPaneInner(c) {
     var fl = currentFlow();
-    if (fl) {
-      var fev = S.historyForFlow(fl.id);
-      return '<div class="hp-head"><div class="hp-top"><h3>History</h3><span class="grow"></span>' +
-        '<button class="btn link" data-action="toggle-history-pane" title="Hide history">Hide</button></div>' +
-        '<div class="hp-tabs" role="tablist"><button class="hp-tab active" role="tab" aria-selected="true">Flow</button></div></div>' +
-        (fev.length ? '<ul class="timeline compact">' + fev.map(function (e) { return eventHtml(e, true); }).join('') + '</ul>' : '<div class="hint">No history yet.</div>');
-    }
-    var tabs = [{ id: 'content', label: 'Content' }, { id: 'other', label: 'Other' }];   // content changes as a tree; everything else as a list
+    var tabs = [{ id: 'content', label: fl ? 'Flow' : 'Content' }, { id: 'other', label: 'Other' }];   // content changes as a tree; everything else as a list
     var active = ui.histTab;
 
     var tabsHtml = '<div class="hp-tabs" role="tablist">' + tabs.map(function (t) {
@@ -898,10 +911,10 @@
     if (active === 'content') {
       body = treeHtml(c);
     } else {
-      var names = S.historyFor(c.id, 'activity');
+      var names = fl ? S.historyForFlow(fl.id, 'activity') : S.historyFor(c.id, 'activity');
       body = '<div class="hp-lang"><span class="grow"></span>' + histInfoBtn() + '</div>' +
-        histInfoBox('Other activity, one after the other: published, renamed, free text on or off, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Content</strong> tab.') +
-        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, false); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
+        histInfoBox(fl ? 'Other activity, one after the other: renamed, timing changed, moved in the list, shared with, duplicated to or moved to a campaign. Changes to the nodes and connections are in the <strong>Flow</strong> tab.' : 'Other activity, one after the other: published, renamed, free text on or off, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Content</strong> tab.') +
+        (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, !!fl); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     }
     return head + body;
   }
@@ -919,7 +932,7 @@
     var pane = document.getElementById('history-pane');
     if (pane) pane.innerHTML = historyPaneInner(c);
     var lay = document.querySelector('.layout');     // the wide column is only for the Content tree and only while the history pane is really shown
-    if (lay) lay.classList.toggle('tree-on', !!pane && !!c && !currentFlow() && ui.histTab === 'content');
+    if (lay) lay.classList.toggle('tree-on', !!pane && !!(c || currentFlow()) && ui.histTab === 'content');
     markHistLang();
   }
 
@@ -1009,14 +1022,19 @@
       render();
       return;
     }
-    if (kind === 'addnode') {                            // one dropdown for every kind of node: type:logic | type:action | type:input | tpl:<id> | flow:<id>
-      var what = id.split(':')[0], arg = id.slice(what.length + 1), r2;
-      if (what === 'type') r2 = arg === 'logic' ? S.addLogicNode(flow) : arg === 'action' ? S.addActionNode(flow) : S.addInputNode(flow);
-      else if (what === 'flow') r2 = S.addFlowNode(flow, arg);
-      else r2 = S.addTemplateNode(flow, arg);
-      result(r2, what === 'flow' ? 'Flow call added' : what === 'tpl' ? 'Added to the flow' : NODE_LABEL[arg] + ' node added');
+    if (kind === 'addnode') {                            // the dropdown lists the node types only: type:template | type:flow | type:logic | type:action | type:input
+      var arg = id.slice(5), r2, fl0 = S.getFlow(flow);
+      if (arg === 'template') {                          // starts with a template (one the flow does not have yet, if there is one) and opens the node so you can choose another
+        var inIt = S.flowTemplateIds(fl0), all = S.list(), pickT = all.filter(function (c) { return inIt.indexOf(c.id) === -1; })[0] || all[0];
+        r2 = pickT ? S.addTemplateNode(flow, pickT.id) : { ok: false, error: 'There are no templates yet' };
+      } else if (arg === 'flow') {                       // starts with the first flow it can call and opens the node so you can choose another
+        var callable = flowOptions(fl0, null).filter(function (o) { return !o.disabled; })[0];
+        r2 = callable ? S.addFlowNode(flow, callable.id) : { ok: false, error: 'There is no other flow this flow can call' };
+      } else r2 = arg === 'logic' ? S.addLogicNode(flow) : arg === 'action' ? S.addActionNode(flow) : S.addInputNode(flow);
+      result(r2, NODE_LABEL[arg] + ' node added');
       if (r2.ok && r2.node) { var pl = newNodePlace(flow, r2.node.type); if (pl) S.moveNode(flow, r2.node.id, pl.x, pl.y); }     // the middle of what you see, on top
       render();
+      if (r2.ok && r2.node && (arg === 'template' || arg === 'flow')) startNodeEdit(flow, r2.node.id);
       return;
     }
     var r = kind === 'addflow' ? S.addFlowNode(flow, id) : S.addTemplateNode(flow, id);
@@ -1091,12 +1109,10 @@
 
     if (n.type === 'template') {
       if (editing) {
-        var used = S.flowTemplateIds(f), others = used.filter(function (id) { return id !== n.templateId; });
         body = '<div class="fnode-body"><div class="fld"><span>Template</span>' + comboHtml({
           kind: 'node', attrs: attrs, first: true, label: S.nodeTitle({ type: 'template', templateId: d.templateId }), aria: 'Template of this node. Click to choose another.', search: 'Search templates…', empty: 'No template matches',
           options: S.list().map(function (c) {
-            var taken = others.indexOf(c.id) !== -1;
-            return { id: c.id, label: c.name, current: c.id === d.templateId, disabled: taken, note: taken ? 'already in this flow' : '' };
+            return { id: c.id, label: c.name, current: c.id === d.templateId };
           })
         }) + '</div>' + valuesEditHtml(d) + '</div>';
       } else {
@@ -1220,28 +1236,24 @@
   }
 
   function flowEditorHtml(f) {
-    // The top of a flow is ONE cohesive toolbar: the + Add node dropdown, the direction switch (icons, no labels) and the i button at the left,
+    // The top of a flow is ONE cohesive toolbar: the + Add node dropdown and the direction switch (icons, no labels) at the left,
     // the comments icon and History at the right. The flow's name and timing are not repeated here: they are edited in the Flows list (pencil).
     var inFlow = S.flowTemplateIds(f);
     var size = canvasSize(f);
     var td = S.flowDirection(f) === 'td';
     return '<div class="toolbar flow-bar"><span class="tb-left">' +
       comboHtml({
-        kind: 'addnode', attrs: 'data-flow="' + f.id + '"', label: '+ Add node', aria: 'Add a node to the flow', search: 'Search node types, templates and flows…', empty: 'Nothing matches',
-        options: [{ header: 'Node types' },
-          { id: 'type:logic', label: 'Logic', note: 'branch on conditions' }, { id: 'type:action', label: 'Action', note: 'something you define' }, { id: 'type:input', label: 'Input', note: 'where the flow starts' },
-          { header: 'Templates' }].concat(
-          S.list().map(function (c) { var inIt = inFlow.indexOf(c.id) !== -1; return { id: 'tpl:' + c.id, label: c.name, disabled: inIt, note: inIt ? 'already in this flow' : '' }; }),
-          [{ header: 'Flows' }],
-          flowOptions(f, null).map(function (o) { return { id: 'flow:' + o.id, label: o.label, disabled: o.disabled, note: o.note }; }))
+        kind: 'addnode', attrs: 'data-flow="' + f.id + '"', label: '+ Add node', aria: 'Add a node to the flow', search: 'Search node types…', empty: 'Nothing matches',
+        options: [{ id: 'type:template', label: 'Template' },
+          { id: 'type:flow', label: 'Flow', disabled: !flowOptions(f, null).some(function (o) { return !o.disabled; }) },
+          { id: 'type:logic', label: 'Logic' }, { id: 'type:action', label: 'Action' }, { id: 'type:input', label: 'Input' }]
       }) +
       '<span class="seg dir-toggle" role="group" aria-label="Direction of the edges">' + [['lr', 'Left to right', ICON_ARROW_R], ['td', 'Top down', ICON_ARROW_D]].map(function (d) {
         var on = S.flowDirection(f) === d[0];
         return '<button type="button" class="btn icon' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '" aria-label="' + d[1] + '" title="' + d[1] + '">' + d[2] + '</button>';
       }).join('') + '</span>' +
-      '<button class="info-btn' + (ui.flowInfo ? ' on' : '') + '" data-action="flow-info" aria-expanded="' + !!ui.flowInfo + '" aria-controls="flow-help" aria-label="How to use the canvas" title="How to use the canvas">' + ICON_INFO + '</button></span>' +
+      '</span>' +
       '<span class="tb-group">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</span></div>' +
-      (ui.flowInfo ? '<div class="muted small flow-help" id="flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect. The flow\'s name and timing are edited in the list on the left (the pencil on its row).</div>' : '') +
       '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas' + (S.flowDirection(f) === 'td' ? ' td' : '') + '" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
       '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
       f.nodes.map(function (n) { return nodeHtml(f, n); }).join('') +
@@ -1448,7 +1460,7 @@
     var histShown = !cmScope && subject && ui.historyOpen;
     var pane = cmScope ? '<aside class="history-pane comments-pane" id="comments-pane">' + commentsPaneInner(cmScope) + '</aside>'
       : histShown ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.listTab === 'flows' ? ' flows-wide' : '') + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '"' + (ui.listW[ui.listTab] ? ' style="--list-w:' + ui.listW[ui.listTab] + 'px"' : '') + '>' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.listTab === 'flows' ? ' flows-wide' : '') + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' ? ' tree-on' : '') + '"' + (ui.listW[ui.listTab] ? ' style="--list-w:' + ui.listW[ui.listTab] + 'px"' : '') + '>' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
@@ -2167,7 +2179,6 @@
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
       case 'camps-toggle': ui.campCollapsed = !ui.campCollapsed; ui.campBox = false; ui.campError = ''; ui.focusNext = '.campaigns .camp-toggle'; break;
-      case 'flow-info': ui.flowInfo = !ui.flowInfo; break;
       case 'fl-edit': startFlowEdit(el.getAttribute('data-kind'), el.getAttribute('data-id')); break;
       case 'fl-save': saveFlowEdit(); return;
       case 'fl-cancel': ui.flowEdit = null; break;
@@ -2201,7 +2212,8 @@
         return;
       }
       case 'rewind': {
-        var evId = parseInt(el.getAttribute('data-event'), 10);
+        var evId = parseInt(el.getAttribute('data-event'), 10), flw = currentFlow();
+        if (flw) { if (!result(S.rewindFlow(flw.id, evId), 'Rewound to: ' + eventTitle(S.eventOf(evId)))) return; break; }
         if (c.translations.some(function (t) { return isDirty(c, t); })) { toast('Save or revert your unsaved edits first', true); return; }
         var label = eventTitle(S.eventOf(evId));
         if (!result(S.rewind(c.id, evId), 'Rewound to: ' + label)) return;

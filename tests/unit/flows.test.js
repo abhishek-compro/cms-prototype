@@ -111,7 +111,7 @@ test('flow names: required, unique, and never the name of a template (templates 
 });
 
 // ---------------------------------------------------------------- adding nodes
-test('addTemplateNode: a plain node for the template (no timing), once per flow, leaves the template\'s campaigns as they are, logged', () => {
+test('addTemplateNode: a plain node for the template (no timing), duplicates allowed, leaves the template\'s campaigns as they are, logged', () => {
   const S = fresh();
   const f = S.createFlow('Reminders', 'k3').flow, a = tpl(S, 'Appointment reminder');
   const n = S.addTemplateNode(f.id, a.id).node;
@@ -120,7 +120,12 @@ test('addTemplateNode: a plain node for the template (no timing), once per flow,
   assert.deepEqual(a.campaignIds, ['k2'], 'using a template in a flow does not put it in the flow\'s campaign');
   assert.ok(!S.historyFor(a.id, 'content').some(e => e.action === 'campaign_copied'));
   assert.equal(last(S, f).action, 'flow_node_added');
-  assert.match(S.addTemplateNode(f.id, a.id).error, /already in this flow/);
+  const dup = S.addTemplateNode(f.id, a.id);
+  assert.equal(dup.ok, true, 'the same template can be in a flow more than once');
+  assert.notEqual(dup.node.id, n.id);
+  assert.deepEqual(f.nodes.filter(x => x.templateId === a.id).length, 2);
+  assert.deepEqual(S.flowTemplateIds(f), [a.id], 'but the flow still uses one template (it is listed once)');
+  assert.deepEqual(dup.node.values, {}, 'each node has its own values');
   assert.match(S.addTemplateNode(f.id, 'nope').error, /not found/);
   assert.match(S.addTemplateNode('nope', a.id).error, /not found/);
   const ev = last(S, f);
@@ -361,11 +366,13 @@ test('changeNodeTemplate: the old template falls back to being a flow by itself 
   assert.equal(S.isImplicit(a, 'k1'), false, 'the new template is inside the flow in Newborn care');
 });
 
-test('changeNodeTemplate refuses: the same template, one already in the flow, unknown ids, and nodes that are not template nodes', () => {
+test('changeNodeTemplate: refuses the same template, unknown ids and nodes that are not template nodes; a template already in the flow is allowed', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks'), n = node(S, f, 'Welcome message'), d = tpl(S, 'Daily health tip');
   assert.equal(S.changeNodeTemplate(f.id, n.id, n.templateId).error, 'No change');
-  assert.match(S.changeNodeTemplate(f.id, n.id, d.id).error, /"Daily health tip" is already in this flow/);
+  assert.equal(S.changeNodeTemplate(f.id, n.id, d.id).ok, true, 'a template the flow already has can be chosen again (duplicates are allowed)');
+  assert.equal(n.templateId, d.id);
+  assert.equal(S.changeNodeTemplate(f.id, n.id, tpl(S, 'Welcome message').id).ok, true, 'and back');
   assert.match(S.changeNodeTemplate(f.id, n.id, 'nope').error, /Template not found/);
   assert.match(S.changeNodeTemplate(f.id, 'nope', d.id).error, /Template node not found/);
   assert.match(S.changeNodeTemplate(f.id, node(S, f, 'Logic 1').id, tpl(S, 'Appointment reminder').id).error, /Template node not found/);
@@ -748,7 +755,7 @@ test('updateTemplateNode saves values for this node only (the template and other
   assert.deepEqual(n.values, {});
 });
 
-test('updateTemplateNode validates before changing anything: length, unknown names are ignored, one template per flow', () => {
+test('updateTemplateNode validates before changing anything: length, unknown names are ignored; a template already in the flow is allowed', () => {
   const S = fresh();
   const a = tpl(S, 'Appointment reminder'), w = tpl(S, 'Welcome message');
   const f = S.createFlow('One', null).flow, n = S.addTemplateNode(f.id, a.id).node;
@@ -757,8 +764,9 @@ test('updateTemplateNode validates before changing anything: length, unknown nam
   assert.deepEqual(n.values, {});
   assert.equal(S.updateTemplateNode(f.id, n.id, { values: { date: 'x'.repeat(200), bogus: 'y' } }).ok, true);
   assert.deepEqual(Object.keys(n.values), ['date'], 'a name the template does not have is dropped');
-  assert.match(S.updateTemplateNode(f.id, n.id, { templateId: w.id }).error, /already in this flow/);
-  assert.equal(n.templateId, a.id);
+  assert.equal(S.updateTemplateNode(f.id, n.id, { templateId: w.id }).ok, true, 'a template the flow already has is fine');
+  assert.equal(n.templateId, w.id);
+  assert.deepEqual(n.values, {}, 'the values of the old template do not carry over');
   assert.match(S.updateTemplateNode(f.id, n.id, { templateId: 'nope' }).error, /not found/);
 });
 
@@ -897,4 +905,118 @@ test('updateLogic with a title renames the node atomically with its edges: requi
   assert.equal(S.updateLogic(f.id, n.id, renamedEdge, 'Replied?').ok, true);
   assert.deepEqual([S.nodeTitle(n), n.outs[0].label], ['Replied?', 'Yes']);
   assert.equal(S.updateLogic(f.id, S.getFlow(f.id).nodes.find(x => x.type === 'input').id, outs(), 'x').error, 'Logic node not found');
+});
+
+// ---------------------------------------------------------------- duplicate template nodes
+test('a flow can have several nodes of the same template; the template is "in the flow" until the last of them goes', () => {
+  const S = fresh();
+  const f = S.createFlow('Twice', 'k2').flow, a = tpl(S, 'Appointment reminder');
+  assert.equal(S.isImplicit(a, 'k2'), true, 'alone in Postnatal check-ups: itself a flow there');
+  const n1 = S.addTemplateNode(f.id, a.id).node, n2 = S.addTemplateNode(f.id, a.id).node;
+  assert.equal(S.isImplicit(a, 'k2'), false, 'in the flow now, so no longer a flow by itself');
+  assert.deepEqual(S.flowTemplateIds(f), [a.id]);
+  S.updateTemplateNode(f.id, n1.id, { values: { date: 'Monday' } });
+  assert.deepEqual([n1.values, n2.values], [{ date: 'Monday' }, {}], 'each node has its own placeholder values');
+  assert.equal(S.removeNode(f.id, n1.id).ok, true);
+  assert.equal(S.isImplicit(a, 'k2'), false, 'one node is still there');
+  assert.equal(S.removeNode(f.id, n2.id).ok, true);
+  assert.equal(S.isImplicit(a, 'k2'), true, 'the last one is gone: it is a flow by itself again');
+  const p = S.planFlowDrop(f.id, 'k3');
+  assert.equal(p.templates, 0);
+  const g = S.createFlow('Twice again', 'k2').flow;
+  S.addTemplateNode(g.id, a.id); S.addTemplateNode(g.id, a.id);
+  assert.equal(S.planFlowDrop(g.id, 'k3').templates, 1, 'a template used by two nodes counts once when the flow is copied to a campaign');
+  const dup = S.duplicateFlow(g.id, 'k3').flow;
+  assert.equal(dup.nodes.filter(n => n.templateId === a.id).length, 2, 'a duplicated flow keeps both nodes');
+});
+
+// ---------------------------------------------------------------- the flow's undo tree and Rewind
+const tree = (S, f) => S.flowHistoryTree(f.id);
+const stepIds = (S, f) => tree(S, f).rows.map(r => r.event.id);
+
+test('every graph step of a flow is a node of a tree; renaming, timing and moving are not (they are the "Other" list)', () => {
+  const S = fresh();
+  const f = S.createFlow('Tree', 'k2').flow;
+  S.addLogicNode(f.id);
+  S.addInputNode(f.id);
+  const steps = stepIds(S, f).length;
+  assert.equal(steps, 3, 'created + two nodes');
+  S.renameFlow ? S.renameFlow(f.id, 'Tree 2') : null;
+  S.setFlowTiming(f.id, { days: 3, when: 'after', ref: 'baby_dob' });
+  assert.equal(stepIds(S, f).length, steps, 'rename and timing add no tree step');
+  const other = S.historyForFlow(f.id, 'activity').map(e => e.action);
+  assert.ok(other.includes('flow_timing_edited') && !other.includes('flow_node_added'), 'activity = everything that is not a graph step');
+  const rows = tree(S, f).rows;
+  assert.equal(rows[0].isHead, true, 'the newest step is the current one');
+  assert.equal(rows[0].event.parent, rows[1].event.id, 'each step hangs under the one that was current');
+  assert.equal(rows.at(-1).event.parent, null);
+  assert.ok(rows.slice(0, -1).every(r => r.event.snap && r.event.snap.nodes), 'every step has a snapshot');
+});
+
+test('Rewind puts the nodes and edges back, is logged as a new step, and nothing is deleted (a branch appears)', () => {
+  const S = fresh();
+  const f = S.createFlow('Rw', 'k2').flow;
+  const a = S.addTemplateNode(f.id, tpl(S, 'Appointment reminder').id).node;
+  const l = S.addLogicNode(f.id).node;
+  const afterTwo = stepIds(S, f)[0];
+  S.connect(f.id, a.id, null, l.id);
+  S.removeNode(f.id, a.id);
+  const n = S.getFlow(f.id).nodes.length;
+  assert.equal(n, 1);
+  const before = S.eventOf(afterTwo);
+  assert.equal(S.flowRewindProblem(f.id, afterTwo), null);
+  S.moveNode(f.id, l.id, 500, 400);
+  assert.equal(S.rewindFlow(f.id, afterTwo).ok, true);
+  const g = S.getFlow(f.id);
+  assert.deepEqual(g.nodes.map(x => x.id).sort(), [a.id, l.id].sort(), 'the removed node is back');
+  assert.equal(g.nodes.find(x => x.id === a.id).next, null, 'and the edge made after that step is gone');
+  assert.deepEqual([g.nodes.find(x => x.id === l.id).x, g.nodes.find(x => x.id === l.id).y], [500, 400], 'where a node is drawn is kept');
+  const top = S.historyForFlow(f.id)[0];
+  assert.equal(top.action, 'flow_rewound');
+  assert.equal(top.parent, afterTwo, 'the rewind hangs under the step you went back to');
+  assert.equal(S.eventOf(afterTwo), before, 'old steps are untouched');
+  const t = tree(S, f);
+  assert.equal(t.rows[0].event.id, top.id);
+  assert.equal(t.head, top.id);
+  assert.ok(t.width >= 2, 'the steps made after the one you went back to stay as another branch (a second lane)');
+  assert.equal(S.rewindFlow(f.id, afterTwo).error, 'The flow already looks like this');
+  assert.equal(S.rewindFlow(f.id, 99999).ok, false);
+  const afterConnect = stepIds(S, f).find(id => S.eventOf(id).action === 'flow_edge_connected');
+  assert.equal(S.rewindFlow(f.id, afterConnect).ok, true, 'the other branch can be rewound to as well');
+  assert.equal(S.getFlow(f.id).nodes.find(x => x.id === a.id).next, l.id);
+});
+
+test('Rewind refuses a step that is not a graph step, and a flow can only rewind to its own steps', () => {
+  const S = fresh();
+  const f = S.createFlow('R2', 'k2').flow, g = S.createFlow('R3', 'k2').flow;
+  S.addInputNode(f.id);
+  S.setFlowTiming(f.id, { days: 3, when: 'after', ref: 'baby_dob' });
+  const timing = S.historyForFlow(f.id, 'activity').find(e => e.action === 'flow_timing_edited');
+  assert.match(S.rewindFlow(f.id, timing.id).error, /Only changes to what the flow is made of/);
+  assert.match(S.rewindFlow(f.id, stepIds(S, g)[0]).error, /not in this flow/);
+  assert.match(S.rewindFlow('nope', 1).error, /Flow not found/);
+});
+
+test('one save that changes a logic node (rename + conditions) leaves steps that each hold the finished node', () => {
+  const S = fresh();
+  const f = S.createFlow('R4', 'k2').flow, l = S.addLogicNode(f.id).node;
+  const before = stepIds(S, f)[0];
+  S.updateLogic(f.id, l.id, [{ id: l.outs[0].id, label: 'Yes' }, { id: l.outs[1].id, label: 'No' }], 'Replied?');
+  const newest = S.historyForFlow(f.id).find(e => e.action === 'flow_logic_renamed');
+  const sn = newest.snap.nodes.find(x => x.id === l.id);
+  assert.deepEqual([sn.title, sn.outs.map(o => o.label)], ['Replied?', ['Yes', 'No']]);
+  assert.equal(S.rewindFlow(f.id, before).ok, true);
+  const back = S.getFlow(f.id).nodes.find(x => x.id === l.id);
+  assert.deepEqual([back.title, back.outs.map(o => o.label)], ['Logic 1', ['Condition 1', 'Condition 2']]);
+});
+
+test('flows saved before rewinding existed: the steps are chained, the newest is current and holds a snapshot', () => {
+  const nodes = [{ id: 'n1', type: 'input', title: 'Input 1', next: null, x: 1, y: 2 }];
+  const hist = [1, 2, 3].map(i => ({ id: i, ts: '2025-01-0' + i + 'T10:00:00Z', actor: 'x', flowId: 'f1', contentId: null, action: i === 1 ? 'flow_created' : 'flow_node_added', after: 'y' }));
+  const { S } = loadStore({ 'cms-prototype-v1': JSON.stringify({ nextId: 20, campaigns: [{ id: 'k1', name: 'A' }], contents: [], flows: [{ id: 'f1', name: 'Old', campaignIds: [], createdAt: 'x', nodes }], history: hist }) });
+  const t = S.flowHistoryTree('f1');
+  assert.deepEqual(t.rows.map(r => r.event.id), [3, 2, 1]);
+  assert.equal(t.head, 3);
+  assert.match(S.flowRewindProblem('f1', 2), /saved before rewinding existed/);
+  assert.match(S.flowRewindProblem('f1', 3), /already looks like this/);
 });
