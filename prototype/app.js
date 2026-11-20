@@ -309,16 +309,31 @@
       : '';
   }
 
+  // The workflow: which group the content sits with, as dots connected by lines with the group's name below each dot. Previous groups green,
+  // the current one yellow and blinking, the next ones white; the arrows at the two ends move the content to the previous / next group.
+  function stagesHtml(c) {
+    var idx = S.stageIndex(c), prev = S.STAGES[idx - 1], next = S.STAGES[idx + 1];
+    function arrow(dir, target, glyph) {
+      var why = dir < 0 ? (target ? 'Move back to ' + target.label : 'Already with the first group') : (target ? 'Move on to ' + target.label : 'Already with the last group');
+      return '<button class="btn stage-arrow" data-action="stage-' + (dir < 0 ? 'back' : 'next') + '"' + (target ? '' : ' disabled') + ' aria-label="' + esc(why) + '" title="' + esc(why) + '">' + glyph + '</button>';
+    }
+    return '<div class="stages" role="group" aria-label="Where this content is in the workflow">' + arrow(-1, prev, '‹') +
+      '<ol class="stage-list">' + S.STAGES.map(function (st, i) {
+        var state = i < idx ? 'done' : i === idx ? 'now' : 'todo';
+        return '<li class="stage ' + state + '" data-stage="' + st.id + '"' + (i === idx ? ' aria-current="step" title="This content is with ' + esc(st.label) + ' now"' : '') + '>' +
+          '<span class="stage-dot" aria-hidden="true"></span><span class="stage-label">' + esc(st.label) + '</span></li>';
+      }).join('') + '</ol>' + arrow(1, next, '›') + '</div>';
+  }
+
   function toolbarHtml(c) {
     var blockWhy = S.blockProblem(c);
-    var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="toolbar">' +
-      addLangHtml(c) + '<span class="tb-group">' +
-      (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
+      addLangHtml(c) + stagesHtml(c) + '<span class="tb-group">' +
+      (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, this content cannot be published"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
       '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '" title="' + (ui.historyOpen ? 'Hide' : 'Show') + ' the history sidebar">History</button>' +
-      '<button class="btn deploy" data-action="deploy-all"' + (deployable ? ' title="Publish ' + deployable + ' language' + (deployable === 1 ? '' : 's') + '"' : ' disabled') + '>Publish all</button></span></div>';
+      '</span></div>';
   }
 
   function waNameHtml(tr) {
@@ -505,6 +520,7 @@
     var body = '';
     if (e.action === 'text_edited') body = diffHtml(e.before, e.after);
     else if (e.action === 'renamed') body = esc(e.before) + ' → <strong>' + esc(e.after) + '</strong>';
+    else if (e.action === 'stage_moved') body = esc(stageLabel(e.before)) + ' → <strong>' + esc(stageLabel(e.after)) + '</strong>';
     else if (e.action === 'language_added') body = e.after ? '<div class="quote">' + esc(e.after) + '</div>' : '<span class="muted">Started empty</span>';
     else if (e.action === 'deployed') body = 'Template name <code>' + esc(e.detail) + '</code>';
     else if (e.action === 'content_created') body = esc(e.after);
@@ -542,7 +558,7 @@
   function eventHtml(e, compact) {
     var body = eventBody(e);
     return '<li class="event act-' + e.action + '"><div class="event-head">' +
-      '<strong>' + esc(e.action === 'part_edited' ? 'Edited ' + String(e.detail).toLowerCase() : (S.ACTION_LABELS[e.action] || e.action)) + '</strong>' +
+      '<strong>' + esc(e.action === 'part_edited' ? 'Edited ' + String(e.detail).toLowerCase() : e.action === 'stage_moved' ? 'Moved to ' + stageLabel(e.after) : (S.ACTION_LABELS[e.action] || e.action)) + '</strong>' +
       (e.lang && !compact ? '<span class="chip">' + esc(S.langName(e.lang)) + '</span>' : '') +
       '<span class="muted small">by ' + esc(e.actor) + '</span>' +
       '<span class="when">' + esc(fmtTime(e.ts)) + '</span></div>' +
@@ -711,6 +727,7 @@
   // ---- the undo tree (Tree tab): one line per step, drawn like `git log --graph` ---------------------------------
   // One line: what happened, who, when. The current step has a marker; "Rewind" puts the template back as it was after that step
   // (logged as a new step, nothing is deleted: the steps after it stay as another branch).
+  function stageLabel(id) { var st = S.STAGES.filter(function (x) { return x.id === id; })[0]; return st ? st.label : id; }
   function clip(t, n) { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
   function eventTitle(e) {
     if (!e) return 'an earlier step';
@@ -725,6 +742,7 @@
       case 'header_type_changed': return 'Header type: ' + (e.before || 'None') + ' → ' + e.after;
       case 'campaign_copied': return 'Copied to ' + e.after;
       case 'campaign_moved': return 'Moved to ' + e.after;
+      case 'stage_moved': return 'Moved to ' + stageLabel(e.after);
       case 'rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
       case 'flow_list_moved': return 'Moved in the flow list';
       default: return S.ACTION_LABELS[e.action] || e.action;
@@ -2044,13 +2062,9 @@
       case 'rename-save': saveRename(); return;
       case 'save': doSave(lang); return;
       case 'revert': delete ui.drafts[draftKey(c.id, lang)]; delete ui.shown[draftKey(c.id, lang)]; break;
-      case 'deploy-all': {
-        var dirtyLangs = c.translations.filter(function (t) { return isDirty(c, t); });
-        var withProblems = c.translations.filter(function (t) { return problemCount(c, t) > 0; }).length;
-        var ra = S.deployAll(c.id);
-        result(ra, ra.ok ? 'Published ' + ra.count + ' translation' + (ra.count === 1 ? '' : 's') + ' as ' + ra.waName +
-          (withProblems ? ' (' + withProblems + ' skipped: has problems)' : '') +
-          (dirtyLangs.length ? ' (unsaved edits were not included)' : '') : '');
+      case 'stage-back': case 'stage-next': {
+        var rs = S.moveStage(c.id, action === 'stage-back' ? -1 : 1);
+        result(rs, rs.ok ? 'Moved to ' + rs.to.label : '');
         break;
       }
       case 'btn-remove': {

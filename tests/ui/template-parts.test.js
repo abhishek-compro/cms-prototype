@@ -234,10 +234,11 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await fill(E('[data-input=text]'), 'Visit on {{date}} at {{time}} with {{doctor}}');
   await b.click(E('.save'));
   ok('overview flags the language with problems', /1 problem/.test(await rowBadge('en')), await rowBadge('en'));
-  await b.click('[data-action=deploy-all]');
-  ok('Publish all skips the translation with problems, publishes the valid one, and says so', /Published 1 translation/.test(await txt('#toast')) && /1 skipped: has problems/.test(await txt('#toast')), await txt('#toast'));
+  const pubR = await b.ev(`Store.deployAll(Store.list()[1].id)`);
+  await b.click('.content-item.active');          // there is no Publish button any more: publish through the store, then redraw
+  ok('publishing skips the translation with problems and publishes the valid one', pubR.ok === true && pubR.count === 1, JSON.stringify(pubR));
   ok('the skipped one stays unpublished', /^Not published/.test(await rowBadge('en')) && /^Published/.test(await rowBadge('hi')));
-  ok('"Publish all" is disabled when nothing publishable is left', await b.ev(`document.querySelector('[data-action=deploy-all]').disabled`));
+  ok('and nothing publishable is left', (await b.ev(`Store.deployAll(Store.list()[1].id)`)).ok === false);
 
   // ================= export =================
   await fresh();

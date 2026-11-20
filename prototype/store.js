@@ -35,6 +35,7 @@
     header_type_changed: 'Changed header type',
     campaign_copied: 'Copied to campaign',
     campaign_moved: 'Moved to campaign',
+    stage_moved: 'Moved to a group',
     rewound: 'Rewound',
     timing_edited: 'Changed timing',
     flow_created: 'Created flow',
@@ -75,7 +76,8 @@
   //        | { id, type: 'input', title, next: nodeId|null, x, y }   a plain numbered node with nothing to fill in; edges can end at it and leave it like any other
   //   A template that is in no flow of a campaign is itself a flow there (implicit, not stored); its own timing is Content.timing: { days, when: 'before'|'after', ref }.
   // Campaign = { id, name, createdAt?, createdBy? }   (a content name can be in several campaigns via Content.campaignIds)
-  // Content = { id, name, campaignIds: [campaignId], timing, headerType: 'none'|'image'|'video'|'document', blocked, deployCounter, createdAt, translations: [Translation] }
+  // Content = { id, name, campaignIds: [campaignId], stage, timing, headerType: 'none'|'image'|'video'|'document', blocked, deployCounter, createdAt, translations: [Translation] }
+  //   stage = which group the content sits with: one of STAGES' ids (the workflow product -> medical -> content -> translation -> deploy)
   // Translation = { lang, text, waName, deployedText, deployedSig, footer, header, defaults, buttons }
   //   text      = the body as authored, with NAMED placeholders {{name}}. This is a layer on top of WhatsApp's
   //               numbered placeholders: the WhatsApp body ({{1}} {{2}} ...) and the name -> positions map are derived.
@@ -133,6 +135,7 @@
       if (!Array.isArray(c.campaignIds)) { c.campaignIds = c.campaignId ? [c.campaignId] : []; changed = true; }
       if ('campaignId' in c) { delete c.campaignId; changed = true; }
     });
+    state.contents.forEach(function (c) { if (!STAGES.some(function (s) { return s.id === c.stage; })) { c.stage = STAGES[0].id; changed = true; } });   // older data: every content starts with the first group
     if (!state.flows) { state.flows = []; changed = true; }
     if (!state.comments) { state.comments = []; changed = true; }
     // Data saved before rewinding existed: chain each template's events in order and make the last one the current step, with a
@@ -680,6 +683,7 @@
       headerType: 'none',
       timing: cloneTiming(DEFAULT_TIMING),
       blocked: false,
+      stage: STAGES[0].id,
       deployCounter: 0,
       head: null,
       createdAt: clock().toISOString(),
@@ -780,6 +784,32 @@
     return !content.blocked && isDeployed(content)
       ? 'Cannot block template approval: this name is already published as a template'
       : null;
+  }
+
+  // ---- Workflow: the group a content sits with --------------------------------------------------------------------
+  // Static steps (no editing of steps, users or groups in the prototype): product -> medical -> content -> translation -> deploy. A content
+  // sits with one group at a time; the arrows in the toolbar move it to the previous / next group "to take a look". A user can be in
+  // several groups (USER_GROUPS: the single demo user is in all of them) and can only hand on content that sits with a group they are in.
+  // The last step's id is `deploy` (internal names keep the old word); the UI calls it Publish.
+  var STAGES = [
+    { id: 'product', label: 'Product' }, { id: 'medical', label: 'Medical' }, { id: 'content', label: 'Content' },
+    { id: 'translation', label: 'Translation' }, { id: 'deploy', label: 'Publish' }
+  ];
+  var USER_GROUPS = ['product', 'medical', 'content', 'translation', 'deploy'];
+  function stageIndex(c) { var i = STAGES.map(function (s) { return s.id; }).indexOf(c && c.stage); return i === -1 ? 0 : i; }
+  function stageOf(c) { return STAGES[stageIndex(c)]; }
+  // dir: -1 = back to the previous group, +1 = on to the next one
+  function moveStage(id, dir) {
+    var c = get(id);
+    if (!c) return fail('Content not found');
+    var from = stageIndex(c), to = from + (dir < 0 ? -1 : 1);
+    if (to < 0) return fail('It is already with the first group (' + STAGES[0].label + ')');
+    if (to >= STAGES.length) return fail('It is already with the last group (' + STAGES[STAGES.length - 1].label + ')');
+    if (USER_GROUPS.indexOf(STAGES[from].id) === -1) return fail('You are not in the ' + STAGES[from].label + ' group, so you cannot move content that sits with it');
+    c.stage = STAGES[to].id;
+    log(c, null, 'stage_moved', { before: STAGES[from].id, after: STAGES[to].id });
+    save();
+    return { ok: true, from: STAGES[from], to: STAGES[to] };
   }
 
   function setBlocked(id, blocked) {
@@ -1687,6 +1717,7 @@
     var site = 'https://www.noorahealth.org/{{page}}';
 
     var w = createContent('Welcome message', 'en', 'k1').content;
+    w.stage = 'content';
     setHeaderType(w.id, 'image');
     patch(w.id, 'en', {
       text: 'Hello {{name}}, welcome to Noora Health. We will share tips to help you care for your newborn.',
@@ -1712,6 +1743,7 @@
     patch(w.id, 'en', { text: 'Hello {{name}}, welcome to Noora Health. We will share simple tips to help you care for your newborn baby.' });
 
     var a = createContent('Appointment reminder', 'en', 'k2').content;
+    a.stage = 'medical';
     patch(a.id, 'en', {
       text: 'Reminder: your appointment is on {{date}} at {{time}}. Please bring your health card.',
       defaults: { date: 'Monday 12 December', time: '10:30 AM' },
@@ -1762,6 +1794,11 @@
     CURRENT_USER: CURRENT_USER,
     LANGUAGES: LANGUAGES,
     ACTION_LABELS: ACTION_LABELS,
+    STAGES: STAGES,
+    USER_GROUPS: USER_GROUPS,
+    stageIndex: stageIndex,
+    stageOf: stageOf,
+    moveStage: moveStage,
     langName: langName,
     slugify: slugify,
     load: load,

@@ -531,7 +531,7 @@ test('migration: data from before template parts -> empty header/footer/defaults
 
 test('migration: current-shape data is left exactly as it is', () => {
   const timing = { days: 3, when: 'after', ref: 'date_of_birth' };
-  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image', timing, head: null })], history: [] };
+  const state = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], contents: [content0('One', { campaignIds: ['k1'], headerType: 'image', timing, head: null, stage: 'product' })], history: [] };
   state.contents[0].translations[0] = Object.assign({ footer: 'f', header: 'h', defaults: { a: 'b' }, buttons: [] }, state.contents[0].translations[0]);
   const { S, saved } = load(JSON.parse(JSON.stringify(state)));
   assert.deepEqual(JSON.parse(JSON.stringify({ campaigns: S.listCampaigns(), flows: S.listFlows(), contents: S.list() })), { campaigns: state.campaigns, flows: [], contents: state.contents });
@@ -1070,4 +1070,62 @@ test('historyTree(lang): a language\'s steps plus the steps for every language; 
   const rw = S.historyFor(c.id, 'all').find(e => e.action === 'rewound').id;
   assert.ok(ids(S.historyTree(c.id, 'en')).includes(rw) && ids(S.historyTree(c.id, 'hi')).includes(rw));
   assert.equal(S.historyTree(c.id, 'hi').head, rw);
+});
+
+// ---------------------------------------------------------------- workflow: the group a content sits with
+test('workflow: static steps product -> medical -> content -> translation -> deploy (the last is called Publish in the UI)', () => {
+  const S = fresh();
+  assert.deepEqual(S.STAGES.map(s => s.id), ['product', 'medical', 'content', 'translation', 'deploy']);
+  assert.deepEqual(S.STAGES.map(s => s.label), ['Product', 'Medical', 'Content', 'Translation', 'Publish']);
+  assert.deepEqual(S.USER_GROUPS, S.STAGES.map(s => s.id), 'the demo user is in every group (a user can be in several)');
+  const c = S.createContent('Stage test', 'en').content;
+  assert.equal(c.stage, 'product', 'new content starts with the first group');
+  assert.deepEqual(S.list().map(x => x.stage), ['content', 'medical', 'product', 'product'], 'the sample content sits with different groups');
+  assert.equal(S.stageOf(c).label, 'Product');
+  assert.equal(S.stageIndex(c), 0);
+});
+
+test('workflow: moveStage goes one group back or on; the ends refuse; each move is logged under Other (not a content step)', () => {
+  const S = fresh();
+  const c = S.createContent('Move me', 'en').content;
+  assert.match(S.moveStage(c.id, -1).error, /already with the first group \(Product\)/);
+  const r = S.moveStage(c.id, 1);
+  assert.ok(r.ok);
+  assert.equal(r.from.id, 'product'); assert.equal(r.to.id, 'medical');
+  assert.equal(S.get(c.id).stage, 'medical');
+  S.moveStage(c.id, 1); S.moveStage(c.id, 1); S.moveStage(c.id, 1);
+  assert.equal(S.get(c.id).stage, 'deploy');
+  assert.match(S.moveStage(c.id, 1).error, /already with the last group \(Publish\)/);
+  assert.equal(S.moveStage(c.id, -1).to.id, 'translation');
+  const ev = S.historyFor(c.id, 'activity').filter(e => e.action === 'stage_moved');
+  assert.equal(ev.length, 5, 'every successful move is an event, failed ones are not');
+  assert.ok(ev.every(e => e.lang === null && e.actor === 'Demo user'));
+  assert.deepEqual([ev[ev.length - 1].before, ev[ev.length - 1].after], ['product', 'medical']);
+  assert.equal(S.isContentStep(ev[0]), false, 'a move is not a content step: it is not in the Content tree and cannot be rewound to');
+  assert.equal(S.historyTree(c.id).rows.every(r => r.event.action !== 'stage_moved'), true);
+  assert.equal(S.moveStage('nope', 1).ok, false);
+});
+
+test('workflow: you can only hand on content that sits with a group you are in', () => {
+  const S = fresh();
+  const c = S.createContent('Not mine', 'en').content;
+  const before = S.USER_GROUPS.slice();
+  S.USER_GROUPS.splice(S.USER_GROUPS.indexOf('product'), 1);
+  assert.match(S.moveStage(c.id, 1).error, /not in the Product group/);
+  assert.equal(S.get(c.id).stage, 'product');
+  S.USER_GROUPS.push('product');
+  assert.ok(S.moveStage(c.id, 1).ok);
+  S.USER_GROUPS.length = 0; before.forEach(g => S.USER_GROUPS.push(g));
+});
+
+test('workflow: the group is saved; older saved data without one starts with the first group', () => {
+  const { S, mem } = loadStore();
+  const c = S.createContent('Saved stage', 'en').content;
+  S.moveStage(c.id, 1);
+  assert.equal(loadStore(mem).S.get(c.id).stage, 'medical', 'it survives a reload');
+  const old = JSON.parse(mem['cms-prototype-v1']);
+  old.contents.forEach(x => { delete x.stage; });
+  const { S: S2 } = loadStore({ 'cms-prototype-v1': JSON.stringify(old) });
+  assert.ok(S2.list().every(x => x.stage === 'product'));
+  assert.ok(S2.moveStage(S2.list()[0].id, 1).ok);
 });

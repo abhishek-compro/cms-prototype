@@ -9,12 +9,13 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   const cur = { lang: 'en' };               // the language panel the steps below work in (all languages are editable panels now)
   const L = () => cur.lang;
   const E = s => '.panel.edit[data-lang=' + cur.lang + '] ' + s;
-  const publishBtn = () => b.ev(`(function(){var x=document.querySelector('[data-action=deploy-all]'); return x.textContent.trim()+(x.disabled?' (disabled)':'')})()`);
+  // there is no Publish button any more: "can it be published" is the store's own rule (some language of the first template can be published)
+  const canPublish = () => b.ev(`(function(){var c=Store.list()[0]; return c.translations.some(function(t){ return Store.canDeploy(c, t) === null })})()`);
   const badge = lang => b.ev(`(function(){var r=document.querySelectorAll('.panel.edit[data-lang=${lang}] .panel-head .badge'); return r.length > 1 ? r[1].textContent.replace(/\\s+/g,' ').trim() : ''})()`);   // the "n problems" badge of a panel (empty when none)
   const probs = () => txt(E('[data-sec=problems] .probs'));
   const warns = () => txt(E('[data-sec=problems] .warns'));
 
-  ok('the sample template is consistent: no problems, no warnings, Publish all available', !await q(E('[data-sec=problems] .probs')) && !await q(E('[data-sec=problems] .warns')) && /^Publish all$/.test(await publishBtn()));
+  ok('the sample template is consistent: no problems, no warnings, publishable', !await q(E('[data-sec=problems] .probs')) && !await q(E('[data-sec=problems] .warns')) && await canPublish());
 
   // ---- number of buttons
   cur.lang = 'hi';
@@ -24,7 +25,7 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   await b.click(E('.save'));
   ok('saving is allowed: the change is saved (Save is disabled again, no unsaved dot) although the template has a mismatch', await b.ev(`document.querySelector('.panel.edit[data-lang=${L()}] .save').disabled`) && await b.ev(`Store.consistency(Store.list()[0]).errors.length`) === 1 && await b.ev(`Store.partsOf(Store.list()[0].translations[1]).buttons.length`) === 1);
   ok('both panels show the problem badge in their head', /1 problem/.test(await badge('hi')) && /1 problem/.test(await badge('en')), await badge('en'));
-  ok('Publish all is disabled while there is a mismatch', /disabled/.test(await publishBtn()), await publishBtn());
+  ok('nothing can be published while there is a mismatch', !await canPublish());
   cur.lang = 'en';
   ok('the same error shows when editing the other language', /number of buttons differs/.test(await probs()));
   cur.lang = 'hi';
@@ -38,7 +39,7 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   await b.fill(E('[data-input=btn-param]'), 'about');
   ok('with the URL button complete the language has no problems at all', !await q(E('[data-sec=problems] .probs')), await probs());
   await b.click(E('.save'));
-  ok('saved: Publish all is available again', /^Publish all$/.test(await publishBtn()), await publishBtn());
+  ok('saved: publishing is possible again', await canPublish());
 
   // swap the order of types: change the first button to a URL button is not possible in the UI, so remove + re-add in the other order
   await b.click(E('[data-action=btn-remove][data-idx="0"]'));
@@ -60,16 +61,16 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   ok('a placeholder name used in one language and not in another is only a warning', await q(E('[data-sec=problems] .warns')) && !await q(E('[data-sec=problems] .probs')) && /Warnings \(1\)/.test(await warns()) && /\{\{name\}\} is used in English but not in Hindi/.test(await warns()), await warns());
   ok('the warning says it does not block publishing', /do not block publishing/.test(await warns()));
   await b.click(E('.save'));
-  ok('saved with the warning: no problem badge, Publish all still available', !/problem/.test(await badge('hi')) && !/disabled/.test(await publishBtn()), await badge('hi') + ' / ' + await publishBtn());
+  ok('saved with the warning: no problem badge, publishing still possible', !/problem/.test(await badge('hi')) && await canPublish(), await badge('hi'));
   cur.lang = 'en';
   ok('the warning also shows in the other language\'s editor', /\{\{name\}\} is used in English but not in Hindi/.test(await warns()));
-  await b.click('[data-action=deploy-all]');
-  ok('publishing goes ahead despite the warning', /Published/.test(await txt('#toast')), await txt('#toast'));
+  const pubR = await b.ev(`Store.deployAll(Store.list()[0].id)`);
+  ok('publishing goes ahead despite the warning', pubR.ok === true && pubR.count >= 1, JSON.stringify(pubR));
 
   // ---- the full-block message
   cur.lang = 'hi';
   await b.click(E('[data-action=remove-footer]')); await b.click(E('.save'));
   cur.lang = 'en';
   await b.fill(E('[data-input=text]'), 'Hello {{name}}, we changed this text.'); await b.click(E('.save'));
-  ok('with a mismatch nothing can be published, even the edited language (Publish all disabled)', /disabled/.test(await publishBtn()), await publishBtn());
+  ok('with a mismatch nothing can be published, even the edited language', !await canPublish() && (await b.ev(`Store.deployAll(Store.list()[0].id)`)).ok === false);
 });
