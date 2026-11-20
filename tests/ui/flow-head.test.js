@@ -22,8 +22,8 @@ uiSuite('flow top section: simplified header row and toolbar row', async ({ b, o
   ok('the timing is not repeated with the name', !await q('.flow-head .tl-name') && (await txt('.flow-head h2')) === 'Newborn first weeks');
 
   // ---- the toolbar row
-  ok('the toolbar is ONE row: + Template…, + Flow…, + Logic, + Action, + Input, the direction switch and an i button, all on one line', await (async () => {
-    const sels = ['[data-combo=add] .combo-btn', '[data-combo=addflow] .combo-btn', '[data-action=add-node][data-type=logic]', '[data-action=add-node][data-type=action]', '[data-action=add-node][data-type=input]', '.dir-toggle', '.flow-toolbar .info-btn'];
+  ok('the toolbar is ONE row: the + Add node dropdown, the direction switch and an i button, all on one line', await (async () => {
+    const sels = ['[data-combo=addnode] .combo-btn', '.dir-toggle', '.flow-toolbar .info-btn'];
     const ys = []; for (const s of sels) ys.push(await midY(s));
     return ys.every(y => Math.abs(y - ys[0]) < 8);
   })());
@@ -43,8 +43,8 @@ uiSuite('flow top section: simplified header row and toolbar row', async ({ b, o
   await b.click('.flow-head [data-action=rename-start]'); await b.fill('#rename-input', 'Nope'); await b.key('Escape', 'Escape', 27);
   ok('Escape cancels it', await txt('.flow-head h2') === 'First weeks' && !await q('#rename-input'));
   const before = await b.ev(`document.querySelectorAll('.fnode').length`);
-  await b.click('[data-action=add-node][data-type=logic]');
-  ok('+ Logic still adds a node', await b.ev(`document.querySelectorAll('.fnode').length`) === before + 1);
+  await b.click('[data-combo=addnode] .combo-btn'); await b.click('[data-combo=addnode] .combo-opt[data-id="type:logic"]');
+  ok('+ Add node → Logic still adds a node', await b.ev(`document.querySelectorAll('.fnode').length`) === before + 1);
   await b.click('.dir-toggle .btn:not(.on)');
   ok('the direction switch still works', await b.ev(`document.querySelector('.dir-toggle .btn.on').textContent.trim()`) === '→ Left to right');
   await b.click('.flow-head .cm-open');

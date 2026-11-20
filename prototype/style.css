@@ -854,3 +854,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 .flow-toolbar .seg { margin-left: 6px; }
 .flow-toolbar .info-btn { margin-left: auto; }
 .flow-help { padding: 0 14px 6px; }
+
+.combo-group { padding: 8px 8px 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.combo-group:first-child { padding-top: 2px; }
+.flow-toolbar .combo[data-combo=addnode] .combo-pop { width: 320px; }
+.flow-toolbar .combo[data-combo=addnode] .combo-list { max-height: 320px; }

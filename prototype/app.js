@@ -925,6 +925,7 @@
       '<button type="button" class="combo-btn" data-action="combo-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="' + esc(o.aria) + '"' + (o.first ? ' data-first' : '') + (o.disabled ? ' disabled' : '') + '>' + esc(o.label) + '</button>' +
       '<div class="combo-pop"><input type="text" class="field combo-search" placeholder="' + esc(o.search) + '" aria-label="' + esc(o.search) + '" autocomplete="off" spellcheck="false">' +
       '<ul class="combo-list" role="listbox">' + o.options.map(function (opt) {
+        if (opt.header) return '<li class="combo-group" role="presentation">' + esc(opt.header) + '</li>';
         return '<li role="option" class="combo-opt' + (opt.current ? ' current' : '') + (opt.disabled ? ' disabled' : '') + '" data-action="combo-pick" data-id="' + opt.id + '" aria-selected="' + !!opt.current + '"' + (opt.disabled ? ' aria-disabled="true"' : '') + '>' +
           '<span class="combo-name">' + esc(opt.label) + '</span>' + (opt.note ? ' <span class="muted small">' + esc(opt.note) + '</span>' : '') + '</li>';
       }).join('') + '</ul><div class="combo-empty muted small">' + esc(o.empty) + '</div></div></div>';
@@ -944,6 +945,11 @@
       if (show) shown++;
     });
     combo.querySelector('.combo-empty').style.display = shown ? 'none' : 'block';
+    [].forEach.call(combo.querySelectorAll('.combo-group'), function (g) {          // a group heading shows only while something under it shows
+      var n = g.nextElementSibling, any = false;
+      while (n && !n.classList.contains('combo-group')) { if (n.style.display !== 'none') any = true; n = n.nextElementSibling; }
+      g.style.display = any ? '' : 'none';
+    });
     var first = comboVisible(combo)[0];
     if (first) first.classList.add('active');       // Enter picks this one
   }
@@ -979,6 +985,15 @@
         } else ui.nodeEdit.draft.flowId = id;
       }
       ui.focusNext = '.fnode.editing .node-save';
+      render();
+      return;
+    }
+    if (kind === 'addnode') {                            // one dropdown for every kind of node: type:logic | type:action | type:input | tpl:<id> | flow:<id>
+      var what = id.split(':')[0], arg = id.slice(what.length + 1), r2;
+      if (what === 'type') r2 = arg === 'logic' ? S.addLogicNode(flow) : arg === 'action' ? S.addActionNode(flow) : S.addInputNode(flow);
+      else if (what === 'flow') r2 = S.addFlowNode(flow, arg);
+      else r2 = S.addTemplateNode(flow, arg);
+      result(r2, what === 'flow' ? 'Flow call added' : what === 'tpl' ? 'Added to the flow' : NODE_LABEL[arg] + ' node added');
       render();
       return;
     }
@@ -1186,14 +1201,14 @@
       '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</div></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
-        kind: 'add', attrs: 'data-flow="' + f.id + '"', label: '+ Template…', aria: 'Add a template node', search: 'Search templates…', empty: 'No template matches', disabled: !addable.length,
-        options: S.list().map(function (c) { var inIt = inFlow.indexOf(c.id) !== -1; return { id: c.id, label: c.name, disabled: inIt, note: inIt ? 'already in this flow' : '' }; })
+        kind: 'addnode', attrs: 'data-flow="' + f.id + '"', label: '+ Add node', aria: 'Add a node to the flow', search: 'Search node types, templates and flows…', empty: 'Nothing matches',
+        options: [{ header: 'Node types' },
+          { id: 'type:logic', label: 'Logic', note: 'branch on conditions' }, { id: 'type:action', label: 'Action', note: 'something you define' }, { id: 'type:input', label: 'Input', note: 'where the flow starts' },
+          { header: 'Templates' }].concat(
+          S.list().map(function (c) { var inIt = inFlow.indexOf(c.id) !== -1; return { id: 'tpl:' + c.id, label: c.name, disabled: inIt, note: inIt ? 'already in this flow' : '' }; }),
+          [{ header: 'Flows' }],
+          flowOptions(f, null).map(function (o) { return { id: 'flow:' + o.id, label: o.label, disabled: o.disabled, note: o.note }; }))
       }) +
-      comboHtml({
-        kind: 'addflow', attrs: 'data-flow="' + f.id + '"', label: '+ Flow…', aria: 'Add a node that calls another flow', search: 'Search flows…', empty: 'No flow matches', disabled: !flowOptions(f, null).length,
-        options: flowOptions(f, null)
-      }) +
-      ['logic', 'action', 'input'].map(function (t) { return '<button class="btn" data-action="add-node" data-type="' + t + '">+ ' + NODE_LABEL[t] + '</button>'; }).join('') +
       '<span class="seg dir-toggle" role="group" aria-label="Direction of the edges">' + [['lr', '→ Left to right'], ['td', '↓ Top down']].map(function (d) {
         var on = S.flowDirection(f) === d[0];
         return '<button type="button" class="btn' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '">' + d[1] + '</button>';
