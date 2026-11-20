@@ -558,7 +558,7 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .modal-phone { width: min(380px, 100%); }
 .dlg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .dlg-head h2 { margin: 0; flex: 1; }
-.phone { --phone-h: 520px; height: var(--phone-h); box-sizing: border-box; display: flex; flex-direction: column; margin: 0 auto; width: 300px; border: 8px solid var(--phone-frame); border-radius: 30px; overflow: hidden; background: var(--wa-chat-bg); box-shadow: 0 6px 18px var(--shadow); }
+.phone { --phone-h: 580px; height: var(--phone-h); box-sizing: border-box; display: flex; flex-direction: column; margin: 0 auto; width: 300px; border: 8px solid var(--phone-frame); border-radius: 30px; overflow: hidden; background: var(--wa-chat-bg); box-shadow: 0 6px 18px var(--shadow); }
 .phone-bar { display: flex; justify-content: space-between; padding: 5px 16px 3px; font-size: 11px; font-weight: 600; background: var(--wa-head-bg); color: var(--wa-head-text); }
 .wa-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; background: var(--wa-head-bg); color: var(--wa-head-text); }
 .wa-avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; background: var(--wa-chat-bg); color: var(--wa-text); }
@@ -708,8 +708,9 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .sec-row .wa-hint { color: var(--muted); }
 
 /* the pencil on the header picture: appears on hover / keyboard focus, top right corner of the picture */
-.wa-edit { position: absolute; top: 6px; right: 6px; z-index: 3; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; opacity: 0; box-shadow: 0 1px 4px var(--shadow); }
-.wa-part-header:hover .wa-edit, .wa-edit:focus-visible { opacity: 1; }
+.wa-hbtns { position: absolute; top: 6px; right: 6px; z-index: 3; display: flex; gap: 6px; opacity: 0; }
+.wa-part-header:hover .wa-hbtns, .wa-hbtns:focus-within { opacity: 1; }
+.wa-edit { position: static; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; box-shadow: 0 1px 4px var(--shadow); }
 .wa-edit:hover { color: var(--accent); }
 .wa-part-header .cm-badge { right: auto; left: -4px; }
 
@@ -718,3 +719,5 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .wa-btn-edit.bcard { margin: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: var(--wa-bubble); }
 .bdet-label { font-weight: 600; color: var(--text); }
 .bdet { padding: 4px 0 2px; }
+.wa-remove { font-size: 16px; line-height: 1; }
+.wa-remove:hover { color: var(--danger, #c0392b); }

@@ -35,18 +35,18 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   ok('the English header is the sample (dummy) CDN link: the bubble shows a tile with the file name, the link as its tooltip', await q(E('.wa-bubble .wa-media-image.linked')) && /welcome-en\.png/.test(await txt(E('.wa-media-image .wa-media-name'))) && await attr(E('.wa-media-image'), 'title') === EN && /welcome-en\.png/.test(await txt(E('.wa-hnote'))));
   ok('nothing is fetched: no image, video, frame or external resource is in the page, and no request left it', await cnt('img, video, audio, iframe, source, embed, object') === 0 && await noNetwork());
   ok('the link is edited below the phone, labelled as a CDN link, not inside the bubble', await val(E('[data-input=header]')) === EN && /Media link/.test(await txt(E('[data-sec=header-url]'))) && !await q(E('.phone [data-input=header]')));
-  ok('the header type dropdown, its limits and Remove header are below the phone, not in the bubble', await q(E('[data-sec=header-url] [data-change=set-header-type]')) && /JPEG or PNG, up to 5 MB/.test(await txt(E('[data-sec=header-url]'))) && await q(E('[data-sec=header-url] [data-action=remove-header]')) && !await q(E('.phone [data-change=set-header-type]')) && !await q(E('.phone [data-action=remove-header]')));
-  ok('there is no "Replace image" button: the only way to upload is the pencil on the picture', !/Replace|Upload/i.test(await b.ev(`document.querySelector('.panel.edit').innerText`)) && await cnt(E('.wa-edit')) === 1);
+  ok('the header type dropdown, its limits and the Remove header button are below the phone (the only control in the bubble is the cross on the picture)', await q(E('[data-sec=header-url] [data-change=set-header-type]')) && /JPEG or PNG, up to 5 MB/.test(await txt(E('[data-sec=header-url]'))) && await q(E('[data-sec=header-url] [data-action=remove-header]')) && !await q(E('.phone [data-change=set-header-type]')) && await cnt(E('.phone [data-action=remove-header]')) === 1 && await q(E('.wa-hbtns .wa-remove')));
+  ok('there is no "Replace image" button: the only way to upload is the pencil on the picture', !/Replace|Upload/i.test(await b.ev(`document.querySelector('.panel.edit').innerText`)) && await cnt(E('.wa-edit:not(.wa-remove)')) === 1);
 
   // ---- the pencil
-  ok('the pencil is hidden until you hover the picture', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-edit')).opacity`) === '0');
+  ok('the pencil and the cross are hidden until you hover the picture', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-hbtns')).opacity`) === '0');
   await b.hover(E('.wa-part-header .wa-media'));
-  ok('hovering the picture shows a pencil in its top right corner', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-edit')).opacity`) === '1' && await b.ev(`(function(){var p=document.querySelector('.panel.edit .wa-edit').getBoundingClientRect(), m=document.querySelector('.panel.edit .wa-part-header .wa-media').getBoundingClientRect(); return p.top >= m.top - 2 && p.top - m.top < 24 && m.right - p.right < 24 && p.right <= m.right + 2})()`));
+  ok('hovering the picture shows a pencil and, beside it, a cross in its top right corner (cross in the corner)', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-hbtns')).opacity`) === '1' && await b.ev(`(function(){var p=document.querySelector('.panel.edit .wa-edit:not(.wa-remove)').getBoundingClientRect(), x=document.querySelector('.panel.edit .wa-remove').getBoundingClientRect(), m=document.querySelector('.panel.edit .wa-part-header .wa-media').getBoundingClientRect(); return x.top >= m.top - 2 && x.top - m.top < 24 && m.right - x.right < 24 && x.right <= m.right + 2 && p.right <= x.left && x.left - p.right < 12 && Math.abs(p.top - x.top) < 2})()`));
   await b.ev(`window.__fileClicks = 0; HTMLInputElement.prototype.click = (function(orig){ return function(){ if (this.type === 'file') { window.__fileClicks++; return; } return orig.call(this); }; })(HTMLInputElement.prototype.click); 0`);
   await b.click(E('.wa-edit'));
   ok('clicking the pencil opens the file dialog (a file input that only offers what WhatsApp accepts for an image)', await b.ev(`window.__fileClicks`) === 1 && /image\/jpeg/.test(await attr(E('.file-input'), 'accept')) && /\.png/.test(await attr(E('.file-input'), 'accept')) && !/video|pdf/.test(await attr(E('.file-input'), 'accept')));
   await b.key('Tab', 'Tab', 9);
-  ok('the pencil is reachable from the keyboard (only transparent, not hidden)', await b.ev(`document.querySelector('.panel.edit .wa-edit').tabIndex`) === 0 && await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-edit')).visibility`) === 'visible');
+  ok('the pencil and the cross are reachable from the keyboard (only transparent, not hidden)', await b.ev(`document.querySelector('.panel.edit .wa-edit:not(.wa-remove)').tabIndex`) === 0 && await b.ev(`document.querySelector('.panel.edit .wa-remove').tabIndex`) === 0 && await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-remove')).visibility`) === 'visible');
 
   // ---- typing a link by hand
   await b.fill(E('[data-input=header]'), 'https://cdn.example.org/new/baby.png');
@@ -111,6 +111,11 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   await b.click('[data-change=toggle-side]');
   ok('in side by side, the reference phone shows its language\'s header, read-only (no pencil)', await q('.panel.ref .phone .wa-bubble .wa-media, .panel.ref .phone .wa-bubble .wa-doc') && !await q('.panel.ref input, .panel.ref textarea') && !await q('.panel.ref .wa-edit'));
   await b.click('[data-change=toggle-side]');
+
+  // ---- the cross on the picture removes the header
+  await b.hover(E('.wa-part-header .wa-media, .wa-part-header .wa-doc'));
+  await b.click(E('.wa-remove'));
+  ok('the cross removes the header from every language (the same as "Remove header" below the phone)', !await q(E('[data-sec=header]')) && !await q(E('[data-sec=header-url] [data-input=header]')) && await b.ev(`Store.list()[0].headerType`) === 'none' && /Header removed from every language/.test(await txt('#toast')));
 
   // ---- reset forgets uploaded files
   await b.ev(`window.confirm = function(){return true}; 0`);

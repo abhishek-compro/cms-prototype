@@ -51,7 +51,7 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   // ---- the phone has a constant height, a bit shorter than an average phone; a long message scrolls inside the chat
   const phoneH = () => b.ev(`Math.round(document.querySelector('.panel.edit .phone').getBoundingClientRect().height)`);
   const h0 = await phoneH();
-  ok('the phone is a constant, shortish height (shorter than an average phone, about 520 px)', h0 >= 450 && h0 <= 600, h0);
+  ok('the phone is a constant, shortish height (shorter than an average phone, about 580 px)', h0 >= 540 && h0 <= 620, h0);
   await b.fill(E('[data-input=text]'), 'line\n'.repeat(60));
   ok('a very long message does not stretch the phone: it keeps its height and the chat scrolls inside it', await phoneH() === h0 && await b.ev(`(function(){var c=document.querySelector('.panel.edit .wa-chat'); return c.scrollHeight > c.clientHeight && getComputedStyle(c).overflowY === 'auto'})()`), await phoneH());
   await b.fill(E('[data-input=text]'), 'Hi');

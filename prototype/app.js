@@ -380,7 +380,8 @@
     if (c.headerType === 'none') return '';
     return '<div class="wa-part wa-part-header" data-sec="header">' + cmBadge(c, tr.lang, 'header') +
       '<div class="wa-hvis" data-media="' + tr.lang + '">' + headerVisualHtml(c, p) + '</div>' +
-      '<button class="wa-edit" data-action="edit-header" data-lang="' + tr.lang + '" aria-label="Upload a different ' + c.headerType + '" title="Upload a different ' + c.headerType + ' (' + esc(S.headerHint(c.headerType)) + ')">' + ICON_PENCIL + '</button>' +
+      '<div class="wa-hbtns"><button class="wa-edit" data-action="edit-header" data-lang="' + tr.lang + '" aria-label="Upload a different ' + c.headerType + '" title="Upload a different ' + c.headerType + ' (' + esc(S.headerHint(c.headerType)) + ')">' + ICON_PENCIL + '</button>' +
+      '<button class="wa-edit wa-remove" data-action="remove-header" aria-label="Remove the header" title="Remove the header from every language">×</button></div>' +
       '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div>';
   }
   // below the phone: the header type (applies to every language), its limits, and the link to the file on the static CDN
