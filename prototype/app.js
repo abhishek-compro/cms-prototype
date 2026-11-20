@@ -416,21 +416,21 @@
     var rows = names.map(function (n) {
       var d = (p.defaults || {})[n] || '';
       return '<tr><td>' + (ro ? '<code>{{' + esc(n) + '}}</code>' : nameInput('ph-rename', tr, n, '')) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
-        (ro ? esc(d) : '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default value" autocomplete="off">') + '</td></tr>';
+        (ro ? esc(d) : '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">') + '</td></tr>';
     }).join('');
     return '<div class="sec" data-sec="placeholders">' + lbl('Body placeholders') +
-      '<table class="ph-table"><thead><tr><th>Name</th><th>WhatsApp position</th><th>Default value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<table class="ph-table"><thead><tr><th>Name</th><th>Position</th><th>Default</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       (ro ? '' : '<div class="muted small ph-help">Edit a name to rename it everywhere. One name can fill several WhatsApp positions: use it more than once, or rename another placeholder to it.</div>') + '</div>';
   }
 
   function btnParams(tr, b, i, ro) {
     var pos = S.positionsOf(b.url), names = Object.keys(pos);
     if (!names.length) return '<div class="btn-params" data-params="' + i + '"></div>';
-    return '<div class="btn-params" data-params="' + i + '"><table class="ph-table"><thead><tr><th>URL placeholder</th><th>Position</th><th>Default value</th></tr></thead><tbody>' +
+    return '<div class="btn-params" data-params="' + i + '"><table class="ph-table"><thead><tr><th>URL placeholder</th><th>Position</th><th>Default</th></tr></thead><tbody>' +
       names.map(function (n) {
         var d = (b.default_parameters || {})[n] || '';
         return '<tr><td>' + (ro ? '<code>{{' + esc(n) + '}}</code>' : nameInput('btn-ph-rename', tr, n, i)) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
-          (ro ? esc(d) : '<input class="field" data-input="btn-param" data-lang="' + tr.lang + '" data-idx="' + i + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default value" autocomplete="off">') + '</td></tr>';
+          (ro ? esc(d) : '<input class="field" data-input="btn-param" data-lang="' + tr.lang + '" data-idx="' + i + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 
