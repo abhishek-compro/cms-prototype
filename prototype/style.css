@@ -717,3 +717,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .panel-head { flex-wrap: wrap; }
 .panel-head .head-actions { margin-left: auto; display: flex; gap: 6px; }
 .panel-head .head-actions .btn { padding: 3px 12px; }
+
+/* the content action buttons in the editor toolbar are square */
+.toolbar .btn { border-radius: 0; }
