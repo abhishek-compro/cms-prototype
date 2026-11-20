@@ -41,7 +41,7 @@ run here is reported as **skipped** with the reason, never as a pass.
 | `ui/preview.test.js` | The phone editor: no Preview button or dialog; the editing panel is the phone (header, body, footer, time, buttons under the bubble, typed in place); placeholders, button payloads / URLs and the media id below the phone; the body grows; the read-only reference phone with defaults filled; light / dark. |
 | `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, CSV export. |
 | `flows/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
-| `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV downloads, rename, reset. |
+| `ui/core.test.js` | Themes, the strip of language panels (all editable, + Add language), history sidebar, block/publish, CSV downloads, rename, reset. |
 
 ## How the browser tests work
 

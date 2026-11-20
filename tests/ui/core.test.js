@@ -9,9 +9,9 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   const bg = () => b.ev(`getComputedStyle(document.body).backgroundColor`);
   const theme = () => b.ev(`document.documentElement.getAttribute('data-theme')`);
   const checkedTheme = () => b.ev(`[].filter.call(document.querySelectorAll('.theme-btn'), function(x){return x.getAttribute('aria-checked')==='true'}).map(function(x){return x.dataset.theme}).join()`);
-  const editLang = () => b.ev(`document.querySelector('.panel.edit').dataset.lang`);
-  const badge = lang => b.ev(`(function(){var r=document.querySelector('tr.clickable[data-lang=${lang}]'); return r ? r.cells[2].textContent.replace(/\\s+/g,' ').trim() : null})()`);
-  const waName = lang => b.ev(`(function(){var r=document.querySelector('tr.clickable[data-lang=${lang}]'); return r ? r.cells[1].textContent.trim() : null})()`);
+  const panelHead = lang => `.panel.edit[data-lang=${lang}] .panel-head`;
+  const badge = lang => b.ev(`(function(){var r=document.querySelector('.panel.edit[data-lang=${lang}] .panel-head .badge'); return r ? r.textContent.replace(/\\s+/g,' ').trim() : null})()`);
+  const waName = lang => b.ev(`(function(){var r=document.querySelector('.panel.edit[data-lang=${lang}] .wa-name code'); return r ? (/empty until published/.test(r.textContent) ? '—' : r.textContent.trim()) : null})()`);
   const tabs = () => b.ev(`[].map.call(document.querySelectorAll('#history-pane .hp-tab'), function(t){return t.dataset.tab + ':' + t.textContent.trim()}).join(' | ')`);
   const events = () => cnt('#history-pane .event');
   const idOf = n => b.ev(`Store.list().filter(function(c){return c.name===${JSON.stringify(n)}})[0].id`);
@@ -20,9 +20,9 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
 
   // ================= first look =================
   ok('four columns: campaigns | content names | editor, history hidden by default', await q('.campaigns') && await q('.sidebar') && await q('.main') && !await q('#history-pane') && await q('.layout.hist-off'));
-  ok('side by side is off by default: one editing panel, no reference panel', await cnt('.panel') === 1 && !await q('.panel.ref'));
+  ok('every language is an editing panel, in one horizontal strip (English, then Hindi), same top and size; no reference panel, no table below, no side-by-side switch', await cnt('.panel') === 2 && await cnt('.panel.edit') === 2 && await b.ev(`(function(){var a=document.querySelector('.panel.edit[data-lang=en]').getBoundingClientRect(), h=document.querySelector('.panel.edit[data-lang=hi]').getBoundingClientRect(); return a.left < h.left && Math.abs(a.top - h.top) < 2 && Math.abs(a.width - h.width) < 2})()`) && !await q('.panel.ref') && !await q('table.overview') && !await q('[data-change=toggle-side]') && !await q('tr.clickable'));
   ok('the first content opens, with no name heading above the editor', await txt('.content-item.active .name') === 'Welcome message' && !await q('.main h2'));
-  ok('one toolbar holds Side by side, the comments icon, CSV, Show history and Publish all; Publish all has no count in its label', await b.ev(`(function(){var t=document.querySelector('.toolbar'); return ['[data-change=toggle-side]','.cm-open','[data-action=csv-one]','[data-action=toggle-history-pane]','[data-action=deploy-all]'].every(function(s){return !!t.querySelector(s)}) && t.querySelector('[data-action=deploy-all]').textContent.trim()==='Publish all'})()`));
+  ok('one toolbar holds the + Add language dropdown, the comments icon, CSV, Show history and Publish all; Publish all has no count in its label', await b.ev(`(function(){var t=document.querySelector('.toolbar'); return ['[data-change=add-lang]','.cm-open','[data-action=csv-one]','[data-action=toggle-history-pane]','[data-action=deploy-all]'].every(function(s){return !!t.querySelector(s)}) && t.querySelector('[data-action=deploy-all]').textContent.trim()==='Publish all'})()`));
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
@@ -43,42 +43,26 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   await b.setScheme('light'); await b.click('[data-theme=system]');
   ok('System on a light device -> light page', await bg() === lightBg);
   const draftText = 'typed before switching theme';
-  await b.fill('.panel.edit [data-input=footer]', draftText);
+  await b.fill('.panel.edit[data-lang=en] [data-input=footer]', draftText);
   await b.click('[data-theme=dark]');
-  ok('switching theme does not re-render the page (unsaved text stays)', await b.ev(`document.querySelector('.panel.edit [data-input=footer]').value`) === draftText);
+  ok('switching theme does not re-render the page (unsaved text stays)', await b.ev(`document.querySelector('.panel.edit[data-lang=en] [data-input=footer]').value`) === draftText);
   await b.click('[data-theme=system]');
-  await b.click('.panel.edit .revert');
+  await b.click('.panel.edit[data-lang=en] .revert');
 
-  // ================= language rows =================
-  ok('the table lists every language; the one being edited is selected', await cnt('tr.clickable') === 2 && await b.ev(`document.querySelector('tr.clickable.selected').dataset.lang`) === 'en');
-  ok('there are no language tabs', !await q('.lang-tabs') && !await q('.lang-tab'));
-  await b.click('tr.clickable[data-lang=hi]');
-  ok('clicking a row edits that language', await editLang() === 'hi' && await b.ev(`document.querySelector('tr.clickable.selected').dataset.lang`) === 'hi' && /Hindi/.test(await txt('.panel.edit .panel-head')));
-  await b.fill('.panel.edit [data-input=footer]', 'अस्थायी');
-  await b.click('tr.clickable[data-lang=en]');
-  ok('switching away keeps the unsaved edit, marked with a dot on its row', await editLang() === 'en' && await q('tr.clickable[data-lang=hi] .dot'));
-  await b.click('tr.clickable[data-lang=hi]');
-  ok('coming back restores the unsaved text', await b.ev(`document.querySelector('.panel.edit [data-input=footer]').value`) === 'अस्थायी');
-  await b.click('.panel.edit .revert');
-  await b.ev(`document.querySelector('tr.clickable[data-lang=en]').focus(); 0`); await b.key('Enter', 'Enter', 13);
-  ok('a focused row can be chosen with the keyboard (Enter)', await editLang() === 'en');
+  // ================= languages =================
+  ok('each panel says which language it is and its publish status; there are no language tabs', /English/.test(await txt(panelHead('en'))) && /Hindi/.test(await txt(panelHead('hi'))) && /^Edited since publish/.test(await badge('en')) && /^Published/.test(await badge('hi')) && !await q('.lang-tabs') && !await q('.lang-tab'));
+  await b.fill('.panel.edit[data-lang=en] [data-input=footer]', 'अस्थायी');
+  ok('an unsaved edit is marked on its own panel only (note + Save enabled), the other language is untouched', /Unsaved/.test(await txt('.panel.edit[data-lang=en] .dirty-note')) && !await b.ev(`document.querySelector('.panel.edit[data-lang=en] .save').disabled`) && !/Unsaved/.test(await txt('.panel.edit[data-lang=hi] .dirty-note')) && await b.ev(`document.querySelector('.panel.edit[data-lang=hi] .save').disabled`));
+  await b.fill('.panel.edit[data-lang=hi] [data-input=text]', 'नमस्ते {{name}}, नया');
+  ok('both languages can have unsaved edits at the same time, each kept in its own panel', /Unsaved/.test(await txt('.panel.edit[data-lang=hi] .dirty-note')) && await b.ev(`document.querySelector('.panel.edit[data-lang=en] [data-input=footer]').value`) === 'अस्थायी');
+  await b.click('.panel.edit[data-lang=en] .revert'); await b.click('.panel.edit[data-lang=hi] .revert');
 
-  // ================= add a language (control in the table header) =================
-  ok('the "+ Add language" dropdown is in the table header, not in the toolbar', await q('.table-head [data-change=add-lang]') && !await q('.toolbar [data-change=add-lang]'));
-  ok('it only offers languages the name does not have yet', !await q('.table-head [data-change=add-lang] option[value=en]') && await q('.table-head [data-change=add-lang] option[value=ta]'));
+  // ================= add a language (the dropdown is in the toolbar) =================
+  ok('the "+ Add language" dropdown is in the toolbar', await q('.toolbar [data-change=add-lang]'));
+  ok('it only offers languages the name does not have yet', !await q('[data-change=add-lang] option[value=en]') && await q('[data-change=add-lang] option[value=ta]'));
   await b.ev(`(function(){var s=document.querySelector('[data-change=add-lang]'); s.value='ta'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
-  ok('adding Tamil adds a row and opens it for editing, empty and not published', await cnt('tr.clickable') === 3 && await editLang() === 'ta' && /^Not published/.test(await badge('ta')));
-
-  // ================= side by side =================
-  await b.click('[data-change=toggle-side]');
-  ok('side by side: reference on the left, editing on the right', await cnt('.panel') === 2 && await b.ev(`document.querySelector('.panels .panel:first-child').classList.contains('ref') && document.querySelector('.panels .panel:last-child').classList.contains('edit')`));
-  ok('the reference panel is read-only', !await q('.panel.ref input') && !await q('.panel.ref textarea') && /read-only/i.test(await txt('.panel.ref .panel-head')));
-  await b.ev(`(function(){var s=document.querySelector('[data-change=set-edit]'); s.value='hi'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
-  ok('choosing the editing language changes the editor', await editLang() === 'hi');
-  const ref = await b.ev(`document.querySelector('.panel.ref').dataset.lang`);
-  await b.ev(`(function(){var s=document.querySelector('[data-change=set-edit]'); s.value='${ref}'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
-  ok('choosing the reference language for editing swaps the reference to another one', await editLang() === ref && await b.ev(`document.querySelector('.panel.ref').dataset.lang`) !== ref);
-  await b.click('[data-change=toggle-side]');
+  ok('adding Tamil adds a third panel after the others, empty and not published', await cnt('.panel.edit') === 3 && await b.ev(`document.querySelector('.panels .panel:last-child').dataset.lang`) === 'ta' && /^Not published/.test(await badge('ta')) && await b.ev(`document.querySelector('.panel.edit[data-lang=ta] [data-input=text]').value`) === '');
+  ok('and the strip scrolls it into view', await b.ev(`(function(){var r=document.querySelector('.panel.edit[data-lang=ta]').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return r.left >= m.left - 1 && r.left < m.right})()`));
 
   // ================= history sidebar =================
   await b.click('[data-action=toggle-history-pane]');
@@ -87,17 +71,14 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('there is no language filter dropdown and no History page tab', !await q('[data-change=history-lang]') && !await q('.tab[data-mode]'));
   await b.click('.hp-tab[data-tab=other]');
   ok('the Other tab is a plain list of the activity that is not a content change (published, …), with the language, and no tree', /Published as template/.test(await txt('#history-pane')) && !/Created content|Edited text/.test(await txt('#history-pane')) && await events() >= 1 && await q('#history-pane .event .chip') && !await q('#history-pane .tree'));
-  await b.click('tr.clickable[data-lang=en]');
-  ok('choosing a language row does not change the tabs: the same two, Other still selected', await tabs() === 'content:Content | other:Other' && await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'other');
+  await b.click('.panel.edit[data-lang=en] [data-input=text]');
+  ok('working in a language panel does not change the tabs: the same two, Other still selected', await tabs() === 'content:Content | other:Other' && await b.ev(`document.querySelector('#history-pane .hp-tab.active').dataset.tab`) === 'other');
   await b.click('.hp-tab[data-tab=content]');
   const before = await cnt('#history-pane .tree-row');
-  await b.fill('.panel.edit [data-input=footer]', 'Noora Health Team');
-  await b.click('.panel.edit .save');
+  await b.fill('.panel.edit[data-lang=en] [data-input=footer]', 'Noora Health Team');
+  await b.click('.panel.edit[data-lang=en] .save');
   ok('saving adds a line to the Content tree live: the language and part, who and when', await cnt('#history-pane .tree-row') === before + 1 && /^English · footer/.test(await txt('#history-pane .tree-item:first-child .tree-what')) && /Demo user/.test(await txt('#history-pane .tree-item:first-child .tree-meta')));
-  await b.click('[data-change=toggle-side]');
-  ok('side by side: still just Content | Other, and the languages are named on the lines', await tabs() === 'content:Content | other:Other' && /Hindi · /.test(await txt('#history-pane')) && /English · /.test(await txt('#history-pane')) && !await q('.panel.subject'));
-  await b.click('[data-change=toggle-side]');
-  await b.click('[data-change=toggle-side]');
+  ok('still just Content | Other, and the languages are named on the lines', await tabs() === 'content:Content | other:Other' && /Hindi · /.test(await txt('#history-pane')) && /English · /.test(await txt('#history-pane')) && !await q('.panel.subject'));
   await b.click('[data-action=toggle-history-pane]');
   ok('"Hide" closes the sidebar', !await q('#history-pane'));
 
@@ -110,13 +91,13 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('unblocking restores publishing', !await q('.banner') && await b.ev(`!document.querySelector('[data-action=deploy-all]').disabled`));
 
   // ================= publishing =================
-  ok('before publishing, wa_template_name is empty for every language', await waName('en') === '—' && await waName('hi') === '—' && /empty until published/.test(await txt('.panel.edit .wa-name')));
+  ok('before publishing, wa_template_name is empty for every language', await waName('en') === '—' && await waName('hi') === '—' && /empty until published/.test(await txt('.panel.edit[data-lang=en] .wa-name')));
   await b.click('[data-action=deploy-all]');
   ok('Publish all gives each non-empty language the same fake name, suffixed _v1', await waName('en') === 'appointment_reminder_v1' && await waName('hi') === 'appointment_reminder_v1' && await waName('kn') === '—', await waName('en') + ' / ' + await waName('kn'));
   ok('they are marked Published, the empty one is not; toast says what happened', /^Published/.test(await badge('en')) && /^Not published/.test(await badge('kn')) && /Published 2 translations as appointment_reminder_v1/.test(await txt('#toast')));
   ok('once published, the block checkbox is gone (removed, not disabled)', !await q('[data-change=toggle-block]') && !await q('.block-switch'));
-  await b.fill('.panel.edit [data-input=text]', 'Reminder: see you on {{date}} at {{time}}.');
-  await b.click('.panel.edit .save');
+  await b.fill('.panel.edit[data-lang=en] [data-input=text]', 'Reminder: see you on {{date}} at {{time}}.');
+  await b.click('.panel.edit[data-lang=en] .save');
   ok('editing a published translation marks it "Edited since publish"', /Edited since publish/.test(await badge('en')));
   await b.click('[data-action=deploy-all]');
   ok('publishing again assigns the next version, only to what changed', await waName('en') === 'appointment_reminder_v2' && await waName('hi') === 'appointment_reminder_v1', await waName('en') + ' / ' + await waName('hi'));

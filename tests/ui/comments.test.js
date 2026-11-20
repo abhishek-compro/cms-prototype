@@ -47,27 +47,27 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   // ---- a selected piece of text in the body
   const body = await b.ev(`Store.list()[0].translations[0].text`);
   const at = body.indexOf('newborn');
-  await select('.panel.edit [data-input=text]', at, at + 'newborn'.length);
+  await select('.panel.edit[data-lang=en] [data-input=text]', at, at + 'newborn'.length);
   ok('selecting text in the body picks it up as the quote and sets the dropdown to Body', await b.ev(`document.getElementById('cm-target-sel').value`) === 'en|body|' && /“newborn”/.test(await txt('.cm-quote')));
   await b.fill('#cm-text', 'Use "baby" here');
   await b.click('[data-action=cm-add]');
-  ok('the comment is on that text: quote and part are shown, and the Body label gets a 💬 count', /^English · Body \| “newborn” \| Use "baby" here/.test((await items())[0]) && /💬 2/.test(await txt('.panel.edit [data-sec=body] .cm-badge')), (await items())[0]);
+  ok('the comment is on that text: quote and part are shown, and the Body label gets a 💬 count', /^English · Body \| “newborn” \| Use "baby" here/.test((await items())[0]) && /💬 2/.test(await txt('.panel.edit[data-lang=en] [data-sec=body] .cm-badge')), (await items())[0]);
   ok('the quote chip is cleared after adding', !await q('.cm-quote') && await b.ev(`document.getElementById('cm-target-sel').value`) === 'general');
 
   // ---- clearing the quote comments on the whole part
-  await select('.panel.edit [data-input=text]', 0, 5);
+  await select('.panel.edit[data-lang=en] [data-input=text]', 0, 5);
   await b.click('[data-action=cm-clear-quote]');
   ok('× on the quote chip keeps the part but drops the selected text', !await q('.cm-quote') && await b.ev(`document.getElementById('cm-target-sel').value`) === 'en|body|');
   await say('Body as a whole');
   ok('so the comment is on the whole Body, without a quote', /^English · Body \|  \| Body as a whole/.test((await items())[0]), (await items())[0]);
 
   // ---- footer text, button text, header, other language
-  await b.ev(`(function(){var s=document.querySelector('.panel.edit [data-change=add-part]'); s.value='footer'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`).catch(() => {});
-  const footer = await b.ev(`document.querySelector('.panel.edit [data-input=footer]').value`);
-  await select('.panel.edit [data-input=footer]', 0, 4);
+  await b.ev(`(function(){var s=document.querySelector('.panel.edit[data-lang=en] [data-change=add-part]'); s.value='footer'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`).catch(() => {});
+  const footer = await b.ev(`document.querySelector('.panel.edit[data-lang=en] [data-input=footer]').value`);
+  await select('.panel.edit[data-lang=en] [data-input=footer]', 0, 4);
   ok('selecting text in the footer targets the footer', await b.ev(`document.getElementById('cm-target-sel').value`) === 'en|footer|' && new RegExp('“' + footer.slice(0, 4) + '”').test(await txt('.cm-quote')), footer);
   await say('Footer remark');
-  await select('.panel.edit [data-input=btn-text][data-idx="1"]', 0, 5);
+  await select('.panel.edit[data-lang=en] [data-input=btn-text][data-idx="1"]', 0, 5);
   ok('selecting text in a button\'s text targets that button', await b.ev(`document.getElementById('cm-target-sel').value`) === 'en|button|1' && /“Visit”/.test(await txt('.cm-quote')));
   await say('Button remark');
   await pickTarget('en|header|');
@@ -76,7 +76,7 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   await say('Hindi body remark');
   const all = await items();
   ok('footer, button, header and a part of another language each get their own comment with the right label', /^English · Footer \| “/.test(all[3]) && /^English · Button 2 \| “Visit” \| Button remark/.test(all[2]) && /^English · Header \|  \| Header remark/.test(all[1]) && /^Hindi · Body \|  \| Hindi body remark/.test(all[0]), JSON.stringify(all));
-  ok('the header, footer and button labels carry a 💬 badge', await q('.panel.edit [data-sec=header] .cm-badge') && await q('.panel.edit [data-sec=footer] .cm-badge') && await q('.panel.edit .bcard[data-idx="1"] .cm-badge'));
+  ok('the header, footer and button labels carry a 💬 badge', await q('.panel.edit[data-lang=en] [data-sec=header] .cm-badge') && await q('.panel.edit[data-lang=en] [data-sec=footer] .cm-badge') && await q('.panel.edit[data-lang=en] .bcard[data-idx="1"] .cm-badge'));
 
   // ---- the draft survives the list being toggled; Ctrl+Enter adds
   await b.fill('#cm-text', 'half written');
@@ -93,22 +93,22 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   ok('Go to focuses the field and selects the quoted text', await b.ev(`document.activeElement.getAttribute('data-input')`) === 'text' && await b.ev(`(function(){var t=document.activeElement; return t.value.slice(t.selectionStart, t.selectionEnd)})()`) === 'welcome to Noora Health');
 
   // ---- text changed since
-  await b.fill('.panel.edit [data-input=text]', 'Completely different words');
+  await b.fill('.panel.edit[data-lang=en] [data-input=text]', 'Completely different words');
   await b.click('.cm-open'); await b.click('.cm-open');
   ok('when the quoted text is no longer in the field, the comment says so (the comment stays)', /changed or been removed/.test(await txt('.cm-item .cm-q.gone')), await txt('.cm-list'));
-  await b.click('.panel.edit .revert');
+  await b.click('.panel.edit[data-lang=en] .revert');
 
   // ---- resolve / reopen
   const nOpen = await cnt('.cm-item');
   const bodyIdx = (await items()).findIndex(i => /Body as a whole/.test(i));
-  ok('the Body label counts its open comments (the sample one, the "newborn" one, the whole-body one)', /💬 3/.test(await txt('.panel.edit [data-sec=body] .cm-badge')));
+  ok('the Body label counts its open comments (the sample one, the "newborn" one, the whole-body one)', /💬 3/.test(await txt('.panel.edit[data-lang=en] [data-sec=body] .cm-badge')));
   await b.click(`.cm-item:nth-child(${bodyIdx + 1}) [data-action=cm-resolve]`);
   ok('Resolve takes it out of the Open list, the counts follow, the toast says so', /Comment resolved/.test(await txt('#toast')) && await cnt('.cm-item') === nOpen - 1 && new RegExp('Open \\(' + (nOpen - 1) + '\\)').test(await txt('.cm-list .hp-tab.active')) && /Resolved \(2\)/.test(await txt('.cm-list .hp-tab:not(.active)')) && !(await items()).some(i => /Body as a whole/.test(i)));
-  ok('the badge on the part goes down when its comment is resolved', /💬 2/.test(await txt('.panel.edit [data-sec=body] .cm-badge')));
+  ok('the badge on the part goes down when its comment is resolved', /💬 2/.test(await txt('.panel.edit[data-lang=en] [data-sec=body] .cm-badge')));
   await b.click('[data-action=cm-tab][data-tab=resolved]');
   ok('it is in the Resolved tab now', /Body as a whole/.test((await items())[0]));
   await b.click('.cm-item:first-child [data-action=cm-reopen]');
-  ok('Reopen brings it back to Open', await cnt('.cm-item') === nOpen && (await items()).some(i => /Body as a whole/.test(i)) && /Open \(/.test(await txt('.cm-list .hp-tab.active')) && /💬 3/.test(await txt('.panel.edit [data-sec=body] .cm-badge')));
+  ok('Reopen brings it back to Open', await cnt('.cm-item') === nOpen && (await items()).some(i => /Body as a whole/.test(i)) && /Open \(/.test(await txt('.cm-list .hp-tab.active')) && /💬 3/.test(await txt('.panel.edit[data-lang=en] [data-sec=body] .cm-badge')));
 
   // ---- comments are not history; they are saved
   const h0 = await histCount();

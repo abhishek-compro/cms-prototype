@@ -11,8 +11,8 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
   const attr = (s, a) => b.ev(`(document.querySelector(${JSON.stringify(s)})||document.body).getAttribute(${JSON.stringify(a)}) || ''`);
   const val = s => b.ev(`document.querySelector(${JSON.stringify(s)}).value`);
-  const E = s => '.panel.edit ' + s;
-  const setType = v => b.ev(`(function(){var s=document.querySelector('.panel.edit [data-change=set-header-type]'); s.value=${JSON.stringify(v)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
+  const E = s => '.panel.edit[data-lang=en] ' + s;
+  const setType = v => b.ev(`(function(){var s=document.querySelector('.panel.edit[data-lang=en] [data-change=set-header-type]'); s.value=${JSON.stringify(v)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
   const probs = () => txt(E('[data-sec=problems]'));
   const saved = () => b.ev(`Store.partsOf(Store.list()[0].translations[0]).header`);
   const EN = 'https://cdn.noorahealth.org/templates/welcome-en.png';
@@ -26,7 +26,7 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
       var bytes = ${opts.png ? `Uint8Array.from(atob('${PNG}'), function(c){return c.charCodeAt(0)})` : `new Uint8Array(${opts.size === undefined ? 64 : opts.size})`};
       var f = new File([bytes], ${JSON.stringify(name)}, {type: ${JSON.stringify(type)}});
       var dt = new DataTransfer(); dt.items.add(f);
-      var i = document.querySelector('.panel.edit .file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', {bubbles:true})); return 1})()`);
+      var i = document.querySelector('.panel.edit[data-lang=${opts.lang || 'en'}] .file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', {bubbles:true})); return 1})()`);
     await b.sleep(150);
   };
   const waitFor = async (fn, ms = 3000) => { for (let t = 0; t < ms; t += 50) { if (await fn()) return true; await b.sleep(50); } return false; };
@@ -39,14 +39,14 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   ok('there is no "Replace image" button: the only way to upload is the pencil on the picture', !/Replace|Upload/i.test(await b.ev(`document.querySelector('.panel.edit').innerText`)) && await cnt(E('.wa-edit:not(.wa-remove)')) === 1);
 
   // ---- the pencil
-  ok('the pencil and the cross are hidden until you hover the picture', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-hbtns')).opacity`) === '0');
+  ok('the pencil and the cross are hidden until you hover the picture', await b.ev(`getComputedStyle(document.querySelector('.panel.edit[data-lang=en] .wa-hbtns')).opacity`) === '0');
   await b.hover(E('.wa-part-header .wa-media'));
-  ok('hovering the picture shows a pencil and, beside it, a cross in its top right corner (cross in the corner)', await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-hbtns')).opacity`) === '1' && await b.ev(`(function(){var p=document.querySelector('.panel.edit .wa-edit:not(.wa-remove)').getBoundingClientRect(), x=document.querySelector('.panel.edit .wa-remove').getBoundingClientRect(), m=document.querySelector('.panel.edit .wa-part-header .wa-media').getBoundingClientRect(); return x.top >= m.top - 2 && x.top - m.top < 24 && m.right - x.right < 24 && x.right <= m.right + 2 && p.right <= x.left && x.left - p.right < 12 && Math.abs(p.top - x.top) < 2})()`));
+  ok('hovering the picture shows a pencil and, beside it, a cross in its top right corner (cross in the corner)', await b.ev(`getComputedStyle(document.querySelector('.panel.edit[data-lang=en] .wa-hbtns')).opacity`) === '1' && await b.ev(`(function(){var p=document.querySelector('.panel.edit[data-lang=en] .wa-edit:not(.wa-remove)').getBoundingClientRect(), x=document.querySelector('.panel.edit[data-lang=en] .wa-remove').getBoundingClientRect(), m=document.querySelector('.panel.edit[data-lang=en] .wa-part-header .wa-media').getBoundingClientRect(); return x.top >= m.top - 2 && x.top - m.top < 24 && m.right - x.right < 24 && x.right <= m.right + 2 && p.right <= x.left && x.left - p.right < 12 && Math.abs(p.top - x.top) < 2})()`));
   await b.ev(`window.__fileClicks = 0; HTMLInputElement.prototype.click = (function(orig){ return function(){ if (this.type === 'file') { window.__fileClicks++; return; } return orig.call(this); }; })(HTMLInputElement.prototype.click); 0`);
   await b.click(E('.wa-edit'));
   ok('clicking the pencil opens the file dialog (a file input that only offers what WhatsApp accepts for an image)', await b.ev(`window.__fileClicks`) === 1 && /image\/jpeg/.test(await attr(E('.file-input'), 'accept')) && /\.png/.test(await attr(E('.file-input'), 'accept')) && !/video|pdf/.test(await attr(E('.file-input'), 'accept')));
   await b.key('Tab', 'Tab', 9);
-  ok('the pencil and the cross are reachable from the keyboard (only transparent, not hidden)', await b.ev(`document.querySelector('.panel.edit .wa-edit:not(.wa-remove)').tabIndex`) === 0 && await b.ev(`document.querySelector('.panel.edit .wa-remove').tabIndex`) === 0 && await b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-remove')).visibility`) === 'visible');
+  ok('the pencil and the cross are reachable from the keyboard (only transparent, not hidden)', await b.ev(`document.querySelector('.panel.edit[data-lang=en] .wa-edit:not(.wa-remove)').tabIndex`) === 0 && await b.ev(`document.querySelector('.panel.edit[data-lang=en] .wa-remove').tabIndex`) === 0 && await b.ev(`getComputedStyle(document.querySelector('.panel.edit[data-lang=en] .wa-remove')).visibility`) === 'visible');
 
   // ---- typing a link by hand
   await b.fill(E('[data-input=header]'), 'https://cdn.example.org/new/baby.png');
@@ -59,10 +59,10 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   await upload('baby.png', 'image/png', { png: true });
   const link = await val(E('[data-input=header]'));
   ok('an uploaded image gets a randomly generated dummy CDN link that keeps the extension, and the link field shows it', LINK.test(link) && /\.png$/.test(link) && link !== EN, link);
-  ok('the bubble shows the real picture (from local data, not from the link), with no tile', await q(E('.wa-bubble .wa-media-file img.wa-img')) && /^blob:/.test(await attr(E('.wa-img'), 'src')) && await b.ev(`document.querySelector('.panel.edit .wa-img').naturalWidth`) === 1 && !await q(E('.wa-media.linked')));
+  ok('the bubble shows the real picture (from local data, not from the link), with no tile', await q(E('.wa-bubble .wa-media-file img.wa-img')) && /^blob:/.test(await attr(E('.wa-img'), 'src')) && await b.ev(`document.querySelector('.panel.edit[data-lang=en] .wa-img').naturalWidth`) === 1 && !await q(E('.wa-media.linked')));
   ok('under the picture: the file name and size', /baby\.png · 1 KB/.test(await txt(E('.wa-hnote'))), await txt(E('.wa-hnote')));
   ok('the file is stored as data in IndexedDB under that link', JSON.stringify(await idbKeys()) === JSON.stringify([link]));
-  ok('the language is marked edited (Save enabled); nothing is saved yet', !await b.ev(`document.querySelector('.panel.edit .save').disabled`) && await saved() === EN);
+  ok('the language is marked edited (Save enabled); nothing is saved yet', !await b.ev(`document.querySelector('.panel.edit[data-lang=en] .save').disabled`) && await saved() === EN);
   ok('still nothing was requested from the network', await noNetwork());
   await b.click(E('.save'));
   ok('saving stores the link as the language\'s header', await saved() === link);
@@ -84,7 +84,7 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
 
   // ---- not a link / the wrong kind of file
   await b.fill(E('[data-input=header]'), '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40');
-  ok('an old-style id is a problem (saving still allowed); the bubble falls back to the plain image box without a file name', /link to the file on the CDN, starting with https/.test(await probs()) && await q(E('.wa-media-image')) && !await q(E('.wa-media-image.linked')) && !await b.ev(`document.querySelector('.panel.edit .save').disabled`));
+  ok('an old-style id is a problem (saving still allowed); the bubble falls back to the plain image box without a file name', /link to the file on the CDN, starting with https/.test(await probs()) && await q(E('.wa-media-image')) && !await q(E('.wa-media-image.linked')) && !await b.ev(`document.querySelector('.panel.edit[data-lang=en] .save').disabled`));
   await b.fill(E('[data-input=header]'), 'https://cdn.example.org/guide.pdf');
   ok('a PDF link for an image header is a problem that names the file and the header type', /a document \(guide\.pdf\), but the header type is image/.test(await probs()), await probs());
   await b.fill(E('[data-input=header]'), 'https://cdn.example.org/media/abc123');
@@ -107,10 +107,12 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   await b.click(E('.save'));
   ok('still nothing was requested from the network', await noNetwork());
 
-  // ---- the read-only reference panel shows the other language's header too
-  await b.click('[data-change=toggle-side]');
-  ok('in side by side, the reference phone shows its language\'s header, read-only (no pencil)', await q('.panel.ref .phone .wa-bubble .wa-media, .panel.ref .phone .wa-bubble .wa-doc') && !await q('.panel.ref input, .panel.ref textarea') && !await q('.panel.ref .wa-edit'));
-  await b.click('[data-change=toggle-side]');
+  // ---- every language has its own header picture, pencil and link
+  ok('the Hindi panel has its own header tile, pencil, cross and link field (all languages are editable)', await q('.panel.edit[data-lang=hi] .wa-bubble .wa-media, .panel.edit[data-lang=hi] .wa-bubble .wa-doc') && await q('.panel.edit[data-lang=hi] .wa-edit') && await q('.panel.edit[data-lang=hi] .wa-remove') && /welcome-hi\.png/.test(await val('.panel.edit[data-lang=hi] [data-input=header]')));
+  await upload('hindi.pdf', 'application/pdf', { size: 2048, lang: 'hi' });
+  const hiLink = await val('.panel.edit[data-lang=hi] [data-input=header]');
+  ok('uploading in the Hindi panel gives Hindi its own random link and leaves English alone', LINK.test(hiLink) && /\.pdf$/.test(hiLink) && /hindi\.pdf/.test(await txt('.panel.edit[data-lang=hi] .wa-doc-name')) && await val(E('[data-input=header]')) !== hiLink);
+  await b.click('.panel.edit[data-lang=hi] .revert');
 
   // ---- the cross on the picture removes the header
   await b.hover(E('.wa-part-header .wa-media, .wa-part-header .wa-doc'));
@@ -123,7 +125,7 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   ok('Reset demo data forgets the uploaded files (IndexedDB is emptied) and brings back the sample link', JSON.stringify(await idbKeys()) === '[]' && await val(E('[data-input=header]')) === EN);
 
   // ---- dark theme
-  const bubbleBg = () => b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-bubble')).backgroundColor`);
+  const bubbleBg = () => b.ev(`getComputedStyle(document.querySelector('.panel.edit[data-lang=en] .wa-bubble')).backgroundColor`);
   await b.setScheme('light'); const lightBg = await bubbleBg();
   await b.setScheme('dark'); const darkBg = await bubbleBg();
   ok('the phone you edit in uses theme colours (the bubble differs in dark mode)', lightBg !== darkBg, lightBg + ' / ' + darkBg);

@@ -9,9 +9,7 @@
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
-    side: false,         // side-by-side view (off by default)
-    refLang: null,       // read-only reference language (side-by-side)
-    editLang: null,      // language being edited (also the active tab when side-by-side is off)
+    scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
     commentsOpen: false, // the right sidebar shows comments (instead of history)
     commentsTab: 'open', // 'open' | 'resolved'
@@ -119,7 +117,6 @@
   }
   function today() { return new Date().toISOString().slice(0, 10); }
 
-  // Keep ui.editLang / ui.refLang pointing at languages that exist on the selected content
   function visibleContent() { return S.contentsIn(ui.campaignId); }
 
   function normalize() {
@@ -130,13 +127,7 @@
       c = visible.length ? visible[0] : null;
       ui.selectedId = c ? c.id : null;
     }
-    if (!c) return null;
-    var langs = c.translations.map(function (t) { return t.lang; });
-    if (langs.indexOf(ui.editLang) === -1) ui.editLang = langs[0];
-    if (langs.indexOf(ui.refLang) === -1 || ui.refLang === ui.editLang) {
-      ui.refLang = langs.filter(function (l) { return l !== ui.editLang; })[0] || ui.editLang;
-    }
-    return c;
+    return c || null;
   }
 
   // ---- views -----------------------------------------------------------------
@@ -307,12 +298,6 @@
     return c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '';
   }
 
-  function langOptions(c, selected, exclude) {
-    return c.translations.filter(function (t) { return t.lang !== exclude; }).map(function (t) {
-      return '<option value="' + t.lang + '"' + (t.lang === selected ? ' selected' : '') + '>' + esc(S.langName(t.lang)) + ' (' + t.lang + ')</option>';
-    }).join('');
-  }
-
   function addLangHtml(c) {
     var missing = S.LANGUAGES.filter(function (l) { return !S.getTr(c, l.code); });
     return missing.length
@@ -322,16 +307,10 @@
   }
 
   function toolbarHtml(c) {
-    var left = '';
-    if (ui.side) {
-      left = '<label>Reference <select data-change="set-ref">' + langOptions(c, ui.refLang) + '</select></label>' +
-        '<label>Editing <select data-change="set-edit">' + langOptions(c, ui.editLang) + '</select></label>';
-    }
     var blockWhy = S.blockProblem(c);
     var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="toolbar">' +
-      '<label><input type="checkbox" data-change="toggle-side"' + (ui.side ? ' checked' : '') + '> Side by side</label>' +
-      left + '<span style="flex:1"></span>' +
+      addLangHtml(c) + '<span style="flex:1"></span>' +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Block template approval</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
@@ -410,27 +389,27 @@
 
   // The layer on top of WhatsApp's numbered placeholders: named in the body, numbered for WhatsApp.
   // Only shown when the body has placeholders; the (empty) container stays so it can appear while typing.
-  function secPlaceholders(c, tr, p, ro) {
+  function secPlaceholders(c, tr, p) {
     var pos = S.positionsOf(p.text), names = Object.keys(pos);
-    if (!names.length) return ro ? '' : '<div data-sec="placeholders"></div>';
+    if (!names.length) return '<div data-sec="placeholders"></div>';
     var rows = names.map(function (n) {
       var d = (p.defaults || {})[n] || '';
-      return '<tr><td>' + (ro ? '<code>{{' + esc(n) + '}}</code>' : nameInput('ph-rename', tr, n, '')) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
-        (ro ? esc(d) : '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">') + '</td></tr>';
+      return '<tr><td>' + nameInput('ph-rename', tr, n, '') + '</td><td>' + posChips(pos[n]) + '</td><td>' +
+        '<input class="field" data-input="default" data-lang="' + tr.lang + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">' + '</td></tr>';
     }).join('');
     return '<div class="sec" data-sec="placeholders">' + lbl('Body placeholders') +
       '<table class="ph-table"><thead><tr><th>Name</th><th>Position</th><th>Default</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-      (ro ? '' : '<div class="muted small ph-help">Edit a name to rename it everywhere. One name can fill several WhatsApp positions: use it more than once, or rename another placeholder to it.</div>') + '</div>';
+      '<div class="muted small ph-help">Edit a name to rename it everywhere. One name can fill several WhatsApp positions: use it more than once, or rename another placeholder to it.</div></div>';
   }
 
-  function btnParams(tr, b, i, ro) {
+  function btnParams(tr, b, i) {
     var pos = S.positionsOf(b.url), names = Object.keys(pos);
     if (!names.length) return '<div class="btn-params" data-params="' + i + '"></div>';
     return '<div class="btn-params" data-params="' + i + '"><table class="ph-table"><thead><tr><th>URL placeholder</th><th>Position</th><th>Default</th></tr></thead><tbody>' +
       names.map(function (n) {
         var d = (b.default_parameters || {})[n] || '';
-        return '<tr><td>' + (ro ? '<code>{{' + esc(n) + '}}</code>' : nameInput('btn-ph-rename', tr, n, i)) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
-          (ro ? esc(d) : '<input class="field" data-input="btn-param" data-lang="' + tr.lang + '" data-idx="' + i + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">') + '</td></tr>';
+        return '<tr><td>' + nameInput('btn-ph-rename', tr, n, i) + '</td><td>' + posChips(pos[n]) + '</td><td>' +
+          '<input class="field" data-input="btn-param" data-lang="' + tr.lang + '" data-idx="' + i + '" data-name="' + esc(n) + '" value="' + esc(d) + '" placeholder="Default" autocomplete="off">' + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 
@@ -448,20 +427,16 @@
     }).join('') + '</div>';
   }
   // below the phone: what each button does. The button's own text is the label of its field (quick reply payload, or the URL and its variables).
-  function secButtonDetails(c, tr, p, ro) {
+  function secButtonDetails(c, tr, p) {
     var bs = p.buttons || [];
-    if (!bs.length) return ro ? '' : '<div data-sec="button-details"></div>';
+    if (!bs.length) return '<div data-sec="button-details"></div>';
     return '<div class="sec" data-sec="button-details">' + lbl('Buttons') +
       bs.map(function (b, i) {
         var url = b.type === 'URL', label = '<span class="bdet-label" data-label="' + i + '">' + esc(b.text || 'Button ' + (i + 1)) + '</span>';
-        if (ro) {
-          return '<div class="bro"><span class="bdet-label">' + esc(b.text || 'Button ' + (i + 1)) + '</span> <span class="muted">→</span> ' +
-            (url ? esc(b.url) : esc(b.default_payload)) + (url ? btnParams(tr, b, i, true) : '') + '</div>';
-        }
         return '<div class="bdet" data-idx="' + i + '">' +
           (url
             ? '<label class="fld"><span>' + label + ' <span class="muted small">URL · use {{name}} for a variable part</span></span>' +
-              '<input class="field" data-input="btn-url" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.url) + '" placeholder="https://" autocomplete="off" spellcheck="false"></label>' + btnParams(tr, b, i, false)
+              '<input class="field" data-input="btn-url" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.url) + '" placeholder="https://" autocomplete="off" spellcheck="false"></label>' + btnParams(tr, b, i)
             : '<label class="fld"><span>' + label + ' <span class="muted small">default payload</span></span><input class="field" data-input="btn-payload" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.default_payload) + '" autocomplete="off" spellcheck="false"></label>') +
           '</div>';
       }).join('') + '</div>';
@@ -503,25 +478,16 @@
       (warns.length ? '<div class="warns"><div class="sec-label">Warnings (' + warns.length + ') <span class="muted">· these do not block publishing</span></div><ul>' + items(warns) + '</ul></div>' : '') + '</div>';
   }
 
-  // The reference panel (side by side): the saved message as the same phone, read-only, and the details under it
-  function refPanelHtml(c, tr) {
-    var p = S.partsOf(tr);
-    return '<section class="panel ref" data-role="ref" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Reference (read-only)</span></div>' +
-      '<div class="wa-editor">' + phoneHtml(c, p) + '</div>' +
-      '<div class="wa-details">' + secPlaceholders(c, tr, p, true) + secButtonDetails(c, tr, p, true) + '</div>' +
-      '<div class="panel-foot">' + waNameHtml(tr) + '</div></section>';
-  }
-
   function editPanelHtml(c, tr) {
     var p = currentParts(c, tr);
     var dirty = isDirty(c, tr);
     var bubble = '<div class="wa-bubble" data-preview="bubble">' + secHeader(c, tr, p) + secBody(c, tr, p) + secFooter(c, tr, p) +
       '<div class="wa-meta"><span class="wa-count small">' + counter('text', p.text.length, S.LIMITS.body) + '</span><span class="wa-time">9:41</span></div></div>';
     return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Editing</span></div>' +
+      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span>' +
+      (problemCount(c, tr) ? '<span class="badge blocked" title="Problems block publishing">' + problemCount(c, tr) + ' problem' + (problemCount(c, tr) === 1 ? '' : 's') + '</span>' : '') + '</div>' +
       '<div class="wa-editor">' + phoneShell(bubble + secButtons(c, tr, p), ' editable') + secAdd(c, tr, p) + '</div>' +
-      '<div class="wa-details">' + secHeaderUrl(c, tr, p) + secPlaceholders(c, tr, p, false) + secButtonDetails(c, tr, p, false) + secProblems(c, tr, p) + '</div>' +
+      '<div class="wa-details">' + secHeaderUrl(c, tr, p) + secPlaceholders(c, tr, p) + secButtonDetails(c, tr, p) + secProblems(c, tr, p) + '</div>' +
       '<div class="panel-foot">' +
       '<span class="dirty-note small" style="color:var(--warn)">' + (dirty ? 'Unsaved changes' : '') + '</span>' +
       '<span class="grow"></span>' + waNameHtml(tr) +
@@ -530,35 +496,9 @@
       '</div></section>';
   }
 
-  function overviewHtml(c) {
-    var rows = c.translations.map(function (t) {
-      var sel = t.lang === ui.editLang;
-      return '<tr class="clickable' + (sel ? ' selected' : '') + '" data-action="pick-lang" data-lang="' + t.lang + '" tabindex="0"' +
-        (sel ? ' aria-current="true"' : '') + ' title="Edit ' + esc(S.langName(t.lang)) + '">' +
-        '<td>' + langLabel(t.lang) + (isDirty(c, t) ? '<span class="dot" title="Unsaved changes"></span>' : '') + '</td>' +
-        '<td>' + (t.waName ? '<code>' + esc(t.waName) + '</code>' : '<span class="muted">—</span>') + '</td>' +
-        '<td><span class="badge ' + S.statusOf(t, c) + '">' + STATUS_LABEL[S.statusOf(t, c)] + '</span>' +
-          (problemCount(c, t) ? ' <span class="badge blocked" title="Problems block publishing">' + problemCount(c, t) + ' problem' + (problemCount(c, t) === 1 ? '' : 's') + '</span>' : '') + '</td>' +
-        '<td class="snippet">' + (t.text ? esc(t.text) : '<span class="muted">(empty)</span>') + '</td></tr>';
-    }).join('');
-    return '<div class="table-head"><h3 class="section-title">All languages <span class="muted" style="text-transform:none;letter-spacing:0">· click a row to edit that language</span></h3>' + addLangHtml(c) + '</div>' +
-      '<table class="overview"><thead><tr><th>Language</th><th>wa_template_name</th><th>Status</th><th>Text (saved)</th></tr></thead><tbody>' + rows + '</tbody></table>';
-  }
-
+  // every language is an editing panel (a phone with its details below), side by side in one horizontal strip
   function editHtml(c) {
-    var editTr = S.getTr(c, ui.editLang);
-    var body;
-    if (ui.side) {
-      var refTr = S.getTr(c, ui.refLang);
-      if (c.translations.length < 2) {
-        body = '<div class="hint">Add a second language (in the table below) to see two languages side by side.</div><div class="panels single" style="margin-top:16px">' + editPanelHtml(c, editTr) + '</div>';
-      } else {
-        body = '<div class="panels">' + refPanelHtml(c, refTr) + editPanelHtml(c, editTr) + '</div>';
-      }
-    } else {
-      body = '<div class="panels single">' + editPanelHtml(c, editTr) + '</div>';
-    }
-    return toolbarHtml(c) + body + overviewHtml(c);
+    return toolbarHtml(c) + '<div class="panels">' + c.translations.map(function (tr) { return editPanelHtml(c, tr); }).join('') + '</div>';
   }
 
   function diffHtml(before, after) {
@@ -764,11 +704,10 @@
       el.classList.add('flash'); setTimeout(function () { el.classList.remove('flash'); }, 1600);
       return;
     }
-    if (m.lang && ui.editLang !== m.lang) { ui.editLang = m.lang; render(); }
     var sel = m.part === 'body' ? '[data-input="text"]' : m.part === 'footer' ? '[data-input="footer"]' : m.part === 'button' ? '[data-input="btn-text"][data-idx="' + m.idx + '"]' : m.part === 'header' ? '[data-input="header"]' : null;
-    var field = sel && document.querySelector('.panel.edit ' + sel);
+    var field = sel && document.querySelector('.panel.edit[data-lang="' + m.lang + '"] ' + sel);
     if (!field) { toast('That part is not in the editor any more', true); return; }
-    field.scrollIntoView({ block: 'center' });
+    field.scrollIntoView({ block: 'center', inline: 'center' });
     field.focus({ preventScroll: true });
     var loc = m.quote ? S.locateComment(m, field.value) : null;
     if (loc && loc.start !== undefined) field.setSelectionRange(loc.start, loc.end);
@@ -1358,6 +1297,7 @@
     else if (ui.campBox) focusCampBox();
     drawEdges();
     autosizeAll();
+    if (ui.scrollLang) { var sp = panelOf(ui.scrollLang); if (sp) sp.scrollIntoView({ inline: 'center', block: 'nearest' }); ui.scrollLang = null; }
     scrollRestore(snap);
   }
 
@@ -1389,7 +1329,7 @@
 
   // Re-render one section of the editing panel. Only sections that do not contain the field being typed in
   var SEC_HTML = {
-    placeholders: function (c, tr, p) { return secPlaceholders(c, tr, p, false); }, buttons: secButtons, 'button-details': function (c, tr, p) { return secButtonDetails(c, tr, p, false); },
+    placeholders: secPlaceholders, buttons: secButtons, 'button-details': secButtonDetails,
     problems: secProblems, add: secAdd, header: secHeader, 'header-url': secHeaderUrl
   };
   function refreshSec(lang, sec) {
@@ -1404,7 +1344,7 @@
   function refreshParams(lang, idx) {
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang), panel = panelOf(lang);
     var el = panel && panel.querySelector('[data-params="' + idx + '"]');
-    if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx, false);
+    if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx);
   }
   // The timing row of a flow, or of a template that is a flow by itself (days / before-after / reference date) changed. The reference
   // date is normalised to a variable-style name (lowercase, spaces become _). Invalid input is refused with a message
@@ -1513,19 +1453,16 @@
       return;
     }
     var c = S.get(ui.selectedId);
-    if (what === 'toggle-side') { ui.side = t.checked; }
-    else if (what === 'set-ref') { ui.refLang = t.value; }
-    else if (what === 'set-edit') { ui.editLang = t.value; }
-    else if (what === 'set-header-type') { result(S.setHeaderType(c.id, t.value), 'Header type: ' + t.options[t.selectedIndex].text); }
+    if (what === 'set-header-type') { result(S.setHeaderType(c.id, t.value), 'Header type: ' + t.options[t.selectedIndex].text); }
     else if (what === 'add-part') {
       var v = t.value, lang0 = t.getAttribute('data-lang'), tr0 = S.getTr(c, lang0);
       if (!v) return;
-      if (v.indexOf('header:') === 0) { result(S.setHeaderType(c.id, v.slice(7)), 'Header added to every language'); ui.focusNext = '.panel.edit [data-input="header"]'; }
-      else if (v === 'footer') { shownFor(c, tr0).footer = true; ui.focusNext = '.panel.edit [data-input="footer"]'; }
+      if (v.indexOf('header:') === 0) { result(S.setHeaderType(c.id, v.slice(7)), 'Header added to every language'); ui.focusNext = '.panel.edit[data-lang="' + lang0 + '"] [data-input="header"]'; }
+      else if (v === 'footer') { shownFor(c, tr0).footer = true; ui.focusNext = '.panel.edit[data-lang="' + lang0 + '"] [data-input="footer"]'; }
       else if (v.indexOf('button:') === 0) {
         var d0 = editableDraft(c, tr0), type0 = v.slice(7);
         if (S.canAddButton(d0.buttons, type0)) d0.buttons.push(S.newButton(type0));
-        ui.focusNext = '.panel.edit [data-input="btn-text"]';
+        ui.focusNext = '.panel.edit[data-lang="' + lang0 + '"] .wa-btn-edit:last-child [data-input="btn-text"]';
       }
     }
     else if (what === 'toggle-block') {
@@ -1533,8 +1470,7 @@
     } else if (what === 'add-lang') {
       if (!t.value) return;
       if (result(S.addTranslation(c.id, t.value), S.langName(t.value) + ' added')) {
-        ui.editLang = t.value;
-        if (ui.refLang === t.value) ui.refLang = null;
+        ui.scrollLang = t.value;
       }
     }
     render();
@@ -1604,9 +1540,7 @@
     ui.sideBox = null;
     ui.selectedId = r.content.id;
     ui.renaming = false;
-    ui.editLang = null;
-    ui.refLang = null;
-    render();
+        render();
     toast('Created "' + r.content.name + '"' + (r.content.campaignIds.length ? ' in ' + S.campaignName(r.content.campaignIds[0]) : ''));
   }
 
@@ -1988,7 +1922,7 @@
     switch (action) {
       case 'select':
         if (ev.target.closest && ev.target.closest('.ci-rename')) return;   // clicking inside the rename box is not selecting
-        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null;
+        ui.selectedId = el.getAttribute('data-id'); ui.renaming = false;
         break;
       case 'dialog-copy': applyDialog('copy'); return;
       case 'dialog-refer': applyDialog('refer'); return;
@@ -2013,12 +1947,12 @@
       case 'set-list-tab': ui.listTab = el.getAttribute('data-tab'); ui.sideBox = null; ui.renaming = false; break;
       case 'select-flow':
         ui.flowSel = { kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') };
-        if (ui.flowSel.kind === 'template') { ui.selectedId = ui.flowSel.id; ui.editLang = null; ui.refLang = null; }
+        if (ui.flowSel.kind === 'template') { ui.selectedId = ui.flowSel.id; }
         ui.renaming = false;
         break;
       case 'open-template': {          // jump from a flow step to the template itself
         var tid = el.getAttribute('data-id'), tpl = S.get(tid);
-        ui.listTab = 'templates'; ui.selectedId = tid; ui.editLang = null; ui.refLang = null; ui.renaming = false;
+        ui.listTab = 'templates'; ui.selectedId = tid; ui.renaming = false;
         if (ui.campaignId && tpl && tpl.campaignIds.indexOf(ui.campaignId) === -1) ui.campaignId = null;   // keep it visible
         break;
       }
@@ -2053,7 +1987,6 @@
         if (ui.sideBox) focusSideBox();
         return;
       case 'new-content': addContent(); return;
-      case 'pick-lang': ui.editLang = lang; break;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
       case 'hist-tab': {
@@ -2093,7 +2026,7 @@
       }
       case 'rename-start': {
         var rid = el.getAttribute('data-id');
-        if (rid && rid !== ui.selectedId) { ui.selectedId = rid; ui.editLang = null; ui.refLang = null; }   // the pencil on a list item selects it, then renames it
+        if (rid && rid !== ui.selectedId) { ui.selectedId = rid; }   // the pencil on a list item selects it, then renames it
         ui.renaming = true; break;
       }
       case 'rename-cancel': ui.renaming = false; break;
@@ -2127,7 +2060,7 @@
       case 'csv-one': download(S.slugOf(c) + '-' + today() + '.csv', S.toCsv([c.id])); return;
       case 'reset':
         if (!window.confirm('Discard all changes and reload the sample data?')) return;
-        S.reset(); mediaClear(); ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.editLang = null; ui.refLang = null; ui.renaming = false;
+        S.reset(); mediaClear(); ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.renaming = false;
         break;
     }
     render();

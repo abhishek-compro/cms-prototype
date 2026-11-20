@@ -7,9 +7,9 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   const cnt = s => b.ev(`document.querySelectorAll(${JSON.stringify(s)}).length`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
   const rows = () => b.ev(`[].map.call(document.querySelectorAll('.tree-row'), function(r){return r.querySelector('.tree-what').textContent})`);
-  const body = () => b.ev(`document.querySelector('.panel.edit [data-input=text]').value`);
+  const body = () => b.ev(`document.querySelector('.panel.edit[data-lang=en] [data-input=text]').value`);
   const eventsCount = () => b.ev(`Store.historyFor(Store.list()[0].id,'all').length`);
-  const saveText = async t => { await b.fill('.panel.edit [data-input=text]', t); await b.click('.panel.edit .save'); };
+  const saveText = async t => { await b.fill('.panel.edit[data-lang=en] [data-input=text]', t); await b.click('.panel.edit[data-lang=en] .save'); };
   const rewindBtn = i => `.tree-item:nth-child(${i}) [data-action=rewind]`;
 
   await b.click('[data-action=toggle-history-pane]');
@@ -62,7 +62,7 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('rewinding puts the text back: the editor shows version A, a toast says where to', await body() === 'Version A {{name}}' && /Rewound to: English · text → “Version A/.test(await txt('#toast')), await body());
   ok('it is a NEW step at the top: "Rewound to: …", marked current; nothing was removed', await cnt('.tree-row') === n0 + 4 && /^Rewound to: English · text → “Version A/.test((await rows())[0]) && await q('.tree-item:first-child .tree-row .tree-cur') && await cnt('.tree-cur') === 1);
   ok('the steps after A (B and C) are still listed, as another branch: the graph now has a second lane', (await rows()).slice(1, 3).join('|') === 'English · text → “Version C {{name}}”|English · text → “Version B {{name}}”' && await q('.tree-graph .l1') && await cnt('.tree-item:first-child .tree-row .tree-graph circle.rw') === 1);
-  ok('the saved status follows the rule: the English text now differs from what was published', /Edited since publish/.test(await txt('.panel.edit .panel-head')));
+  ok('the saved status follows the rule: the English text now differs from what was published', /Edited since publish/.test(await txt('.panel.edit[data-lang=en] .panel-head')));
   ok('the Rewound step is a content step: it is in the Content tree, not in Other', await (async () => { await b.click('.hp-tab[data-tab=other]'); const o = /Rewound/.test(await txt('#history-pane')); await b.click('.hp-tab[data-tab=content]'); return !o && /Rewound/.test(await txt('#history-pane')); })());
 
   // ---- editing from here grows a new branch; the abandoned one can still be rewound to
@@ -73,9 +73,9 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('the abandoned branch can be rewound to: version C comes back', await body() === 'Version C {{name}}' && /^Rewound to: English · text → “Version C/.test((await rows())[0]), await body() + ' | ' + (await rows())[0]);
 
   // ---- unsaved edits block it
-  await b.fill('.panel.edit [data-input=text]', 'half typed');
+  await b.fill('.panel.edit[data-lang=en] [data-input=text]', 'half typed');
   ok('with unsaved edits every Rewind button is disabled (updates while typing) and a note says why', await b.ev(`[].every.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`) && /Save or revert/.test(await txt('.tree-note')));
-  await b.click('.panel.edit .revert');
+  await b.click('.panel.edit[data-lang=en] .revert');
   ok('reverting enables them again (except steps that look exactly like now) and removes the note', !await b.ev(`document.querySelector('${rewindBtn(5)}').disabled`) && await b.ev(`document.querySelector('${rewindBtn(4)}').disabled`) && /already looks like this/.test(await b.ev(`document.querySelector('${rewindBtn(4)}').title`)) && !await q('.tree-note'));
 
   // ---- keyboard
@@ -83,8 +83,8 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('a Rewind button can be focused by keyboard, then it is visible, and its label names the step', await b.ev(`document.activeElement.getAttribute('data-action')`) === 'rewind' && await b.ev(`getComputedStyle(document.activeElement).opacity`) === '1' && /^Rewind to: /.test(await b.ev(`document.activeElement.getAttribute('aria-label')`)));
 
   // ---- the tab stays
-  await b.click('tr.clickable[data-lang=hi]');
-  ok('picking a language row keeps the Content tab and its tree (languages are named on the lines)', await q('.tree') && /Content/.test(await txt('.hp-tab.active')));
+  await b.click('.panel.edit[data-lang=hi] [data-input=text]');
+  ok('working in another language panel keeps the Content tab and its tree (languages are named on the lines)', await q('.tree') && /Content/.test(await txt('.hp-tab.active')));
   await b.click('.item[data-id]:nth-child(2), [data-action=select]:nth-of-type(2)');
   ok('picking another template shows that template\'s tree in the same tab', await q('.tree') && await cnt('.tree-row') > 0);
 
