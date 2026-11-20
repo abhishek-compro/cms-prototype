@@ -765,3 +765,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* the language you are working in (focus inside its panel) and the language the history shows get the same outline */
 .panel.edit:focus-within, .panel.edit.hist-sel { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
+
+/* a small lock in the toolbar while a language is in focus: other users cannot edit it meanwhile */
+.toolbar .lang-lock { display: inline-flex; align-items: center; gap: 5px; height: var(--tb-h); box-sizing: border-box; padding: 0 10px; border-left: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text); background: var(--toolbar-bg); }
+.toolbar .lang-lock[hidden] { display: none; }
+.toolbar .lang-lock svg { color: var(--accent); flex: none; }

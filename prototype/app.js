@@ -66,6 +66,7 @@
   function langLabel(code) { return esc(S.langName(code)) + ' <code>' + esc(code) + '</code>'; }
   var ICON_PENCIL = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var ICON_INFO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>';
+  var ICON_LOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   var ICON_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_SEARCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
@@ -329,6 +330,7 @@
     var blockWhy = S.blockProblem(c);
     return '<div class="toolbar">' +
       addLangHtml(c) + stagesHtml(c) + '<span class="tb-group">' +
+      '<span class="lang-lock" id="lang-lock" role="status" hidden>' + ICON_LOCK + '<span class="lock-name"></span></span>' +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, this content cannot be published"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
@@ -1295,6 +1297,21 @@
     }).catch(function () { return 0; });
   }
 
+  // A small lock in the toolbar while a language panel is in focus: it denotes that other users cannot edit that language while you are in it
+  // (one user in the prototype, so it only shows). Updated from the focus events: nothing is re-rendered.
+  function updateLangLock() {
+    var el = document.getElementById('lang-lock');
+    if (!el) return;
+    var a = document.activeElement, p = a && a.closest ? a.closest('.panel.edit') : null;
+    if (!p) { el.hidden = true; return; }
+    var name = S.langName(p.getAttribute('data-lang')), why = name + ' is locked while you are in it: other users cannot edit it';
+    el.querySelector('.lock-name').textContent = name;
+    el.title = why; el.setAttribute('aria-label', why);
+    el.hidden = false;
+  }
+  document.addEventListener('focusin', updateLangLock);
+  document.addEventListener('focusout', function () { setTimeout(updateLangLock, 0); });
+
   function autosize(el) { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }   // the body grows with its text, like the bubble
   function autosizeAll() { [].forEach.call(document.querySelectorAll('.wa-text-in'), autosize); }
 
@@ -1332,6 +1349,7 @@
     drawEdges();
     autosizeAll();
     markHistLang();
+    updateLangLock();
     if (ui.scrollLang) { var sp = panelOf(ui.scrollLang); if (sp) sp.scrollIntoView({ inline: 'center', block: 'nearest' }); ui.scrollLang = null; }
     scrollRestore(snap);
   }

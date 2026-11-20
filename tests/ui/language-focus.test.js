@@ -46,3 +46,29 @@ uiSuite('language outline: the focused language panel and the language selected 
   ok('the outline colour is a theme variable (it follows the dark accent)', light !== dark && /^solid 2px/.test(dark), light + ' / ' + dark);
   await b.setScheme('light');
 });
+
+uiSuite('language lock: a small lock in the toolbar while a language is in focus', async ({ b, ok }) => {
+  const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
+  const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
+  const lockVisible = () => b.ev(`(function(){var e=document.getElementById('lang-lock'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0})()`);
+  const tbH = () => b.ev(`Math.round(document.querySelector('.toolbar').getBoundingClientRect().height)`);
+
+  ok('the lock is in the toolbar but not shown while no language is in focus', await q('.toolbar #lang-lock') && !await lockVisible());
+  const h0 = await tbH();
+  await b.click('.panel.edit[data-lang=hi] [data-input=text]');
+  ok('focusing the Hindi panel shows a small lock in the toolbar, naming Hindi', await lockVisible() && /Hindi/.test(await txt('#lang-lock .lock-name')) && await q('#lang-lock svg'));
+  ok('it says what it means: other users cannot edit that language meanwhile (tooltip and accessible name)', /Hindi is locked while you are in it: other users cannot edit it/.test(await b.ev(`document.getElementById('lang-lock').title`)) && await b.ev(`document.getElementById('lang-lock').getAttribute('aria-label')`) === await b.ev(`document.getElementById('lang-lock').title`) && await b.ev(`document.getElementById('lang-lock').getAttribute('role')`) === 'status');
+  ok('it is small and sits in the toolbar strip: same height as the controls, the icon is 14px, and the toolbar does not grow', await b.ev(`(function(){var l=document.getElementById('lang-lock').getBoundingClientRect(), c=document.querySelector('.toolbar [data-action=csv-one]').getBoundingClientRect(), i=document.querySelector('#lang-lock svg').getBoundingClientRect(); return Math.abs(l.height - c.height) < 1.5 && i.width === 14 && l.width < 140 && l.left > document.querySelector('.stages').getBoundingClientRect().right})()`) && await tbH() === h0);
+  await b.type('x');
+  ok('typing keeps it (nothing is re-rendered)', await lockVisible() && /Hindi/.test(await txt('#lang-lock .lock-name')));
+  await b.click('.panel.edit[data-lang=en] [data-input=footer]');
+  ok('moving to the English panel changes the lock to English', await lockVisible() && /English/.test(await txt('#lang-lock .lock-name')) && !/Hindi/.test(await txt('#lang-lock .lock-name')));
+  await b.key('Tab', 'Tab', 9);
+  ok('tabbing between fields of the same language keeps it', await lockVisible() && /English/.test(await txt('#lang-lock .lock-name')));
+  await b.click('[data-action=toggle-history-pane]');
+  ok('moving the focus out of the language panels (to the History button / sidebar) removes the lock', !await lockVisible());
+  await b.click('.panel.edit[data-lang=hi] [data-input=text]');
+  ok('and it comes back when a panel is focused again', await lockVisible());
+  await b.ev(`document.activeElement.blur(); document.body.focus(); 0`); await b.settle();
+  ok('blurring everything hides it', !await lockVisible());
+});
