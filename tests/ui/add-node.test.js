@@ -16,7 +16,7 @@ uiSuite('flow toolbar: one searchable + Add node dropdown for all node types', a
   await b.click('.camp-item[data-id=k1]');
 
   // ---- one control, no separate node buttons
-  ok('the toolbar has ONE "+ Add node" dropdown and no separate + Template / + Flow / + Logic / + Action / + Input buttons', await cnt('.flow-toolbar [data-combo]') === 1 && /\+ Add node/.test(await txt('[data-combo=addnode] .combo-btn')) && !await q('[data-action=add-node]') && !await q('[data-combo=add]') && !await q('[data-combo=addflow]'));
+  ok('the toolbar has ONE "+ Add node" dropdown and no separate + Template / + Flow / + Logic / + Action / + Input buttons', await cnt('.flow-bar [data-combo]') === 1 && /\+ Add node/.test(await txt('[data-combo=addnode] .combo-btn')) && !await q('[data-action=add-node]') && !await q('[data-combo=add]') && !await q('[data-combo=addflow]'));
   await open();
   ok('it opens a list with a search box on top', await q('[data-combo=addnode].open .combo-search') && await b.ev(`document.activeElement.classList.contains('combo-search')`));
   ok('the list has every kind of node, in groups: Node types (Logic, Action, Input), Templates (every template), Flows (the other flows)', await heads() === 'Node types|Templates' && /^Logic\|Action\|Input\|Welcome message\|Appointment reminder\|Daily health tip\|ANC welcome and registration/.test(await visible()), await visible());

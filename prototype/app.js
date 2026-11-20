@@ -7,6 +7,7 @@
   var ui = {
     listTab: 'templates', // content sidebar tab: 'templates' | 'flows'
     flowInfo: false,     // the hint under the flow toolbar is open (under its i button)
+    flowEdit: null,      // the Flows list row being edited: {kind, id, name, days, when, ref}
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
@@ -73,6 +74,8 @@
   var CHEVRON_L = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
   var CHEVRON_R = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
   var ICON_LOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  var ICON_ARROW_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16"/><path d="m14 6 6 6-6 6"/></svg>';
+  var ICON_ARROW_D = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16"/><path d="m6 14 6 6 6-6"/></svg>';
   var ICON_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_SEARCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
@@ -177,16 +180,54 @@
       var isFlow = it.kind === 'flow', id = isFlow ? it.flow.id : it.content.id;
       var on = ui.flowSel && ui.flowSel.kind === it.kind && ui.flowSel.id === id;
       var name = isFlow ? it.flow.name : it.content.name, t = isFlow ? it.flow.timing : it.content.timing, timing = S.timingText(t);
+      if (ui.flowEdit && ui.flowEdit.kind === it.kind && ui.flowEdit.id === id) return flowEditRowHtml(it.kind, id);
       var tip = timing + ' ' + name + (isFlow ? ' (' + flowSummary(it.flow) + ')' : ' (a template that is itself a flow)');
-      // a row of a table (the columns line up across all rows): grip | icon | n days | before/after | reference date | name
+      // a row of a table (the columns line up across all rows): grip | pencil | icon | n days | before/after | reference date | name
       return '<li class="content-item flow-item single-line' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '" title="' + esc(tip) + '">' +
         '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + 'Drag to reorder, or onto a campaign to copy or move it' + '">' + ICON_GRIP + '</span>' +
+        '<span class="fi-edit"><button class="ci-edit" data-action="fl-edit" data-kind="' + it.kind + '" data-id="' + id + '" title="Edit the name and the timing" aria-label="Edit ' + esc(name) + '">' + ICON_PENCIL + '</button></span>' +
         '<span class="fi-ind">' + (isFlow ? '' : FLOW_IND) + '</span> ' +
         '<span class="fi-days">' + (t.days === 0 ? '' : t.days + (t.days === 1 ? ' day' : ' days')) + '</span> ' +
         '<span class="fi-when">' + (t.days === 0 ? 'on' : esc(t.when)) + '</span> ' +
         '<span class="fi-ref">' + esc(t.ref) + '</span> ' +
         '<span class="name">' + esc(name) + '</span></li>';
     }).join('');
+  }
+
+  // The row of the Flows list while its details are edited: the name and the timing, with visible fields, dropdowns and Save / Cancel buttons
+  function flowEditRowHtml(kind, id) {
+    var e = ui.flowEdit;
+    function opt(v, cur) { return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + v + '</option>'; }
+    return '<li class="content-item flow-item flow-edit-row" data-kind="' + kind + '" data-id="' + id + '"><div class="fe-form" role="group" aria-label="Edit the name and the timing">' +
+      '<label class="fe-name"><span>Name</span><input class="field" id="fe-name" data-fe="name" value="' + esc(e.name) + '" autocomplete="off" spellcheck="false"></label>' +
+      '<div class="fe-timing"><span>Sent</span>' +
+      '<input class="field num" type="number" min="0" max="999" step="1" data-fe="days" value="' + esc(e.days) + '" aria-label="Number of days"><span>days</span>' +
+      '<select class="field-select" data-fe="when" aria-label="Before or after">' + opt('before', e.when) + opt('after', e.when) + '</select>' +
+      '<select class="field-select ref" data-fe="ref" aria-label="Reference date">' +
+        (S.REF_DATES.indexOf(e.ref) === -1 ? '<option value="' + esc(e.ref) + '" selected>' + esc(e.ref) + '</option>' : '') +
+        S.REF_DATES.map(function (d) { return opt(d, e.ref); }).join('') + '</select></div>' +
+      '<div class="fe-actions"><button class="btn primary" data-action="fl-save">Save</button><button class="btn" data-action="fl-cancel">Cancel</button></div></div></li>';
+  }
+  function startFlowEdit(kind, id) {
+    var it = S.flowItems(ui.campaignId).filter(function (x) { return x.kind === kind && (kind === 'flow' ? x.flow.id : x.content.id) === id; })[0];
+    if (!it) return;
+    var src = kind === 'flow' ? it.flow : it.content;
+    ui.flowEdit = { kind: kind, id: id, name: src.name, days: src.timing.days, when: src.timing.when, ref: src.timing.ref };
+    ui.focusNext = '#fe-name';
+  }
+  function saveFlowEdit() {
+    var e = ui.flowEdit; if (!e) return;
+    var daysText = String(e.days).trim();
+    var timing = { days: daysText === '' ? NaN : Number(daysText), when: e.when, ref: String(e.ref).trim().toLowerCase().replace(/\s+/g, '_') };
+    var terr = S.checkTiming(timing);
+    if (terr) { toast(terr, true); return; }                                   // nothing is changed unless both parts are fine
+    var rn = e.kind === 'flow' ? S.renameFlow(e.id, e.name) : S.renameContent(e.id, e.name);
+    if (!rn.ok && rn.error !== 'Name unchanged') { toast(rn.error, true); return; }
+    var rt = e.kind === 'flow' ? S.setFlowTiming(e.id, timing) : S.setTemplateTiming(e.id, timing);
+    if (!rt.ok && rt.error !== 'No change') { toast(rt.error, true); return; }
+    ui.flowEdit = null;
+    render();
+    toast(rn.ok || rt.ok ? 'Saved' : 'Nothing changed');
   }
 
   function templatesListHtml() {
@@ -897,26 +938,6 @@
   }
 
   // "<n> days [before|after] <reference date>": committed on change (Enter / blur), one history event per edit
-  // The timing as one line of flowing text:  <n> days <before/after> <reference date> <name>.  No borders, no boxes, no dropdown arrows: the
-  // number, "before / after" and the date are still the editable parts (click one and change it), they just look like text.
-  function timingEditor(t, attrs) {
-    function sel(v, label) { return '<option value="' + v + '"' + (t.when === v ? ' selected' : '') + '>' + label + '</option>'; }
-    function wch(text, extra, k) { return ' style="width:' + (Math.round((String(text).length * (k || 1) + extra) * 10) / 10) + 'ch"'; }      // each part is about as wide as its text (letters are narrower than the 0 that ch measures)
-    return '<span class="timing" ' + attrs + '>' +
-      '<input class="field num" type="number" min="0" max="999" step="1" data-t="days" data-change="timing" value="' + esc(t.days) + '" aria-label="Number of days"' + wch(t.days, 0.4) + '>' +
-      '<span class="tl-word">days</span>' +
-      '<select class="field-select" data-t="when" data-change="timing" aria-label="Before or after"' + wch(t.when, 0.6, 0.92) + '>' + sel('before', 'before') + sel('after', 'after') + '</select>' +
-      '<select class="field-select ref" data-t="ref" data-change="timing" aria-label="Reference date"' + wch(t.ref, 0.6, 0.92) + '>' +
-        (S.REF_DATES.indexOf(t.ref) === -1 ? '<option value="' + esc(t.ref) + '" selected>' + esc(t.ref) + '</option>' : '') +   // a value saved earlier that is not in the list stays selectable
-        S.REF_DATES.map(function (d) { return '<option value="' + d + '"' + (t.ref === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select>' +
-      '</span>';
-  }
-
-  // the line above a flow, or above a template that is a flow by itself: its timing and its name, as one line of text
-  function flowCardHtml(c) {
-    return '<div class="flow-card timing-line">' + timingEditor(c.timing, 'data-tpl="' + c.id + '"') + '<span class="tl-name">' + esc(c.name) + '</span></div>';
-  }
-
   // ---- a searchable picker (templates, flows): used by template nodes, flow nodes and the "+ Template…" / "+ Flow…" buttons ---
   // A button showing the current choice opens a list with a search box. Typing filters by name (any part of it);
   // ArrowUp/Down move, Enter picks, Escape or a click elsewhere closes. Options that cannot be chosen are shown disabled with why.
@@ -1199,21 +1220,12 @@
   }
 
   function flowEditorHtml(f) {
-    // one quiet header row: the name (with a small pencil to rename it), its timing as plain text, and the comments / history buttons at the right.
-    // What the flow holds and its campaigns are in the name's tooltip; the hint about dragging is behind the i button of the toolbar.
-    var tip = 'Flow · ' + flowSummary(f) + (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + f.campaignIds.map(S.campaignName).join(', ') : '');
-    var title = ui.renaming
-      ? '<span class="rename-row"><input type="text" id="rename-input" value="' + esc(f.name) + '" aria-label="Flow name">' +
-        '<button class="icon-btn sm" data-action="rename-save" aria-label="Save the new name" title="Save the new name">✓</button><button class="icon-btn sm" data-action="rename-cancel" aria-label="Cancel renaming" title="Cancel (Esc)">✕</button></span>'
-      : '<h2 title="' + esc(tip) + '">' + esc(f.name) + '</h2>' +
-        '<button class="icon-btn sm" data-action="rename-start" aria-label="Rename the flow" title="Rename">' + ICON_PENCIL + '</button>';
+    // The top of a flow is ONE cohesive toolbar: the + Add node dropdown, the direction switch (icons, no labels) and the i button at the left,
+    // the comments icon and History at the right. The flow's name and timing are not repeated here: they are edited in the Flows list (pencil).
     var inFlow = S.flowTemplateIds(f);
-    var addable = S.list().filter(function (c) { return inFlow.indexOf(c.id) === -1; });
     var size = canvasSize(f);
-    return '<div class="flow-head">' + title +
-      '<div class="flow-card timing-line">' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div>' +
-      '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</div></div>' +
-      '<div class="flow-toolbar">' +
+    var td = S.flowDirection(f) === 'td';
+    return '<div class="toolbar flow-bar"><span class="tb-left">' +
       comboHtml({
         kind: 'addnode', attrs: 'data-flow="' + f.id + '"', label: '+ Add node', aria: 'Add a node to the flow', search: 'Search node types, templates and flows…', empty: 'Nothing matches',
         options: [{ header: 'Node types' },
@@ -1223,12 +1235,13 @@
           [{ header: 'Flows' }],
           flowOptions(f, null).map(function (o) { return { id: 'flow:' + o.id, label: o.label, disabled: o.disabled, note: o.note }; }))
       }) +
-      '<span class="seg dir-toggle" role="group" aria-label="Direction of the edges">' + [['lr', '→ Left to right'], ['td', '↓ Top down']].map(function (d) {
+      '<span class="seg dir-toggle" role="group" aria-label="Direction of the edges">' + [['lr', 'Left to right', ICON_ARROW_R], ['td', 'Top down', ICON_ARROW_D]].map(function (d) {
         var on = S.flowDirection(f) === d[0];
-        return '<button type="button" class="btn' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '">' + d[1] + '</button>';
+        return '<button type="button" class="btn icon' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '" aria-label="' + d[1] + '" title="' + d[1] + '">' + d[2] + '</button>';
       }).join('') + '</span>' +
-      '<button class="info-btn' + (ui.flowInfo ? ' on' : '') + '" data-action="flow-info" aria-expanded="' + !!ui.flowInfo + '" aria-controls="flow-help" aria-label="How to use the canvas" title="How to use the canvas">' + ICON_INFO + '</button></div>' +
-      (ui.flowInfo ? '<div class="muted small flow-help" id="flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect.</div>' : '') +
+      '<button class="info-btn' + (ui.flowInfo ? ' on' : '') + '" data-action="flow-info" aria-expanded="' + !!ui.flowInfo + '" aria-controls="flow-help" aria-label="How to use the canvas" title="How to use the canvas">' + ICON_INFO + '</button></span>' +
+      '<span class="tb-group">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</span></div>' +
+      (ui.flowInfo ? '<div class="muted small flow-help" id="flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect. The flow\'s name and timing are edited in the list on the left (the pencil on its row).</div>' : '') +
       '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas' + (S.flowDirection(f) === 'td' ? ' td' : '') + '" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
       '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
       f.nodes.map(function (n) { return nodeHtml(f, n); }).join('') +
@@ -1298,7 +1311,7 @@
 
   function flowsMainHtml(fi, c) {
     if (!fi) return '<div class="hint">No flows here yet. Use the + button in the left bar to create one. Templates that are not in a flow are listed here as flows by themselves.</div>';
-    if (fi.kind === 'template') return flowCardHtml(fi.content) + headHtml(fi.content) + editHtml(fi.content);
+    if (fi.kind === 'template') return headHtml(fi.content) + editHtml(fi.content);
     return flowEditorHtml(fi.flow);
   }
 
@@ -1497,23 +1510,6 @@
     var el = panel && panel.querySelector('[data-params="' + idx + '"]');
     if (el) el.outerHTML = btnParams(tr, currentParts(c, tr).buttons[idx], idx);
   }
-  // The timing row of a flow, or of a template that is a flow by itself (days / before-after / reference date) changed. The reference
-  // date is normalised to a variable-style name (lowercase, spaces become _). Invalid input is refused with a message
-  // and the row goes back.
-  function saveTimingFromUi(input) {
-    var box = input.closest('.timing');
-    var daysText = box.querySelector('[data-t=days]').value.trim();
-    var timing = {
-      days: daysText === '' ? NaN : Number(daysText),
-      when: box.querySelector('[data-t=when]').value,
-      ref: box.querySelector('[data-t=ref]').value.trim().toLowerCase().replace(/\s+/g, '_')
-    };
-    var fid = box.getAttribute('data-flow-timing');
-    var r = fid ? S.setFlowTiming(fid, timing) : S.setTemplateTiming(box.getAttribute('data-tpl'), timing);
-    if (!r.ok && r.error !== 'No change') toast(r.error, true);
-    render();
-  }
-
   // Rename (or merge) a placeholder from its name field, in the body or in a URL button
   function renamePlaceholderFromUi(input, inUrl) {
     var c = S.get(ui.selectedId), lang = input.getAttribute('data-lang'), tr = S.getTr(c, lang);
@@ -1569,6 +1565,7 @@
       else ui.nodeEdit.draft[edit] = t.value;
       return;
     }
+    if (t.getAttribute && t.getAttribute('data-fe') && ui.flowEdit) { ui.flowEdit[t.getAttribute('data-fe')] = t.value; return; }     // the row being edited in the Flows list (a draft)
     var kind = t.getAttribute('data-input');
     if (kind) {
       var c = S.get(ui.selectedId), lang = t.getAttribute('data-lang'), tr = S.getTr(c, lang);
@@ -1593,7 +1590,6 @@
     var t = ev.target, what = t.getAttribute('data-change');
     if (!what) return;
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
-    if (what === 'timing') { saveTimingFromUi(t); return; }
     if (what === 'upload-header') { uploadHeader(t); return; }
     if (what === 'hist-lang') { ui.histLang = t.value; updateHistoryPane(); return; }
     if (what === 'cm-target') {
@@ -1668,6 +1664,10 @@
     if (ev.key === 'Enter' && ev.target.id === 'new-name') { addContent(); }
     else if (ev.key === 'Enter' && ev.target.id === 'rename-input') { saveRename(); }
     else if (ev.key === 'Escape' && ev.target.id === 'rename-input') { ui.renaming = false; render(); }
+    else if (ui.flowEdit && ev.target.getAttribute && ev.target.getAttribute('data-fe')) {          // inside the row being edited in the Flows list
+      if (ev.key === 'Enter' && ev.target.tagName !== 'SELECT') { ev.preventDefault(); saveFlowEdit(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); ui.flowEdit = null; render(); }
+    }
     else if ((ev.metaKey || ev.ctrlKey) && ev.key === 's' && ev.target.getAttribute && ev.target.getAttribute('data-input') && ev.target.getAttribute('data-lang')) {
       ev.preventDefault();
       doSave(ev.target.getAttribute('data-lang'));
@@ -2139,7 +2139,7 @@
         break;
       }
       case 'node-remove': result(S.removeNode(el.getAttribute('data-flow'), el.getAttribute('data-node'))); break;
-      case 'flow-direction': result(S.setFlowDirection(el.closest('.flow-toolbar') ? document.getElementById('canvas').getAttribute('data-flow') : '', el.getAttribute('data-dir'))); break;
+      case 'flow-direction': result(S.setFlowDirection(document.getElementById('canvas').getAttribute('data-flow'), el.getAttribute('data-dir'))); break;
       case 'node-preview-lang': if (ui.nodeEdit) { ui.nodeEdit.draft.previewLang = el.getAttribute('data-lang'); render(); } return;
       case 'node-save': saveNodeEdit(); return;
       case 'node-cancel': cancelNodeEdit(); return;
@@ -2168,6 +2168,9 @@
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
       case 'camps-toggle': ui.campCollapsed = !ui.campCollapsed; ui.campBox = false; ui.campError = ''; ui.focusNext = '.campaigns .camp-toggle'; break;
       case 'flow-info': ui.flowInfo = !ui.flowInfo; break;
+      case 'fl-edit': startFlowEdit(el.getAttribute('data-kind'), el.getAttribute('data-id')); break;
+      case 'fl-save': saveFlowEdit(); return;
+      case 'fl-cancel': ui.flowEdit = null; break;
       case 'hist-info': ui.histInfo = !ui.histInfo; updateHistoryPane(); return;
       case 'hist-tab': {
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';

@@ -12,8 +12,8 @@ uiSuite('flows list as a table: aligned columns; the demo flow opens top down', 
   await b.click('[data-action=set-list-tab][data-tab=flows]');
   const rows = await b.ev(`document.querySelectorAll('#content-list .flow-item').length`);
   ok('under All content the Flows list has the flow and the single-template flows as rows (a flow, Appointment reminder and the ten ANC messages)', rows === 12, rows);
-  ok('the list is a table: a grid of six columns (grip, icon, days, before/after, date, name), every row is a subgrid of it, so the columns are shared', await b.ev(`(function(){var l=document.getElementById('content-list'), g=getComputedStyle(l); return g.display === 'grid' && g.gridTemplateColumns.split(' ').length === 6 && [].every.call(l.querySelectorAll('.flow-item'), function(li){return getComputedStyle(li).display === 'grid' && /^subgrid/.test(getComputedStyle(li).gridTemplateColumns) && li.children.length === 6})})()`));
-  ok('every row has the same six cells in the same order', await b.ev(`[].every.call(document.querySelectorAll('#content-list .flow-item'), function(li){return [].map.call(li.children, function(c){return c.className.split(' ')[0]}).join() === 'drag-handle,fi-ind,fi-days,fi-when,fi-ref,name'})`));
+  ok('the list is a table: a grid of seven columns (grip, pencil, icon, days, before/after, date, name), every row is a subgrid of it, so the columns are shared', await b.ev(`(function(){var l=document.getElementById('content-list'), g=getComputedStyle(l); return g.display === 'grid' && g.gridTemplateColumns.split(' ').length === 7 && [].every.call(l.querySelectorAll('.flow-item'), function(li){return getComputedStyle(li).display === 'grid' && /^subgrid/.test(getComputedStyle(li).gridTemplateColumns) && li.children.length === 7})})()`));
+  ok('every row has the same seven cells in the same order', await b.ev(`[].every.call(document.querySelectorAll('#content-list .flow-item'), function(li){return [].map.call(li.children, function(c){return c.className.split(' ')[0]}).join() === 'drag-handle,fi-edit,fi-ind,fi-days,fi-when,fi-ref,name'})`));
 
   // ---- the columns line up, whatever is in them (240 days, 7 days, a flow with no icon, a template with one)
   ok('the grips line up (same left edge in every row)', same(await edge('.drag-handle', 'left')));
@@ -28,15 +28,15 @@ uiSuite('flows list as a table: aligned columns; the demo flow opens top down', 
 
   // ---- searching keeps it a table
   await b.click('[data-action=open-search]'); await b.type('iron');
-  ok('searching keeps the table: one row, still the six columns', await b.ev(`document.querySelectorAll('#content-list .flow-item').length`) === 1 && await b.ev(`getComputedStyle(document.getElementById('content-list')).gridTemplateColumns.split(' ').length`) === 6);
+  ok('searching keeps the table: one row, still the seven columns', await b.ev(`document.querySelectorAll('#content-list .flow-item').length`) === 1 && await b.ev(`getComputedStyle(document.getElementById('content-list')).gridTemplateColumns.split(' ').length`) === 7);
   await b.key('Escape', 'Escape', 27);
 
   // ---- the demo flow opens top down
   await b.click('.camp-item[data-id=k1]');
-  ok('the demo flow opens with "Top down" selected', await b.ev(`document.querySelector('.dir-toggle .btn.on').textContent.trim()`) === '↓ Top down' && await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-pressed')`) === 'true');
+  ok('the demo flow opens with "Top down" selected', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Top down' && await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-pressed')`) === 'true');
   ok('its steps are laid out downwards: the input first, then the welcome template, then the logic node, in one column', await b.ev(`(function(){var y=function(t){var n=[].filter.call(document.querySelectorAll('.fnode'), function(x){return x.textContent.indexOf(t) !== -1})[0].getBoundingClientRect(); return [n.left, n.top]}; var i=y('Input 1'), w=y('Welcome message'), l=y('Logic 1'); return i[1] < w[1] && w[1] < l[1] && Math.abs(i[0] - w[0]) < 2 && Math.abs(w[0] - l[0]) < 2})()`));
   await b.click('.dir-toggle .btn:not(.on)');
-  ok('and left to right is still there (and still laid out left to right)', await b.ev(`document.querySelector('.dir-toggle .btn.on').textContent.trim()`) === '→ Left to right' && await b.ev(`(function(){var x=function(t){return [].filter.call(document.querySelectorAll('.fnode'), function(n){return n.textContent.indexOf(t) !== -1})[0].getBoundingClientRect().left}; return x('Input 1') < x('Welcome message') && x('Welcome message') < x('Logic 1')})()`));
+  ok('and left to right is still there (and still laid out left to right)', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Left to right' && await b.ev(`(function(){var x=function(t){return [].filter.call(document.querySelectorAll('.fnode'), function(n){return n.textContent.indexOf(t) !== -1})[0].getBoundingClientRect().left}; return x('Input 1') < x('Welcome message') && x('Welcome message') < x('Logic 1')})()`));
   await b.click('[data-action=open-add]'); await b.type('Brand new flow'); await b.click('.add-confirm');
-  ok('a flow you create is not forced: it starts left to right (only the demo flow is top down)', await b.ev(`document.querySelector('.dir-toggle .btn.on').textContent.trim()`) === '→ Left to right');
+  ok('a flow you create is not forced: it starts left to right (only the demo flow is top down)', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Left to right');
 });

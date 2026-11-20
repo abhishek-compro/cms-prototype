@@ -1,66 +1,62 @@
-// The top of a flow (not a single template), simplified: one header row, one toolbar row, hints behind an i button.
+// The top of a flow (not a single template): ONE cohesive toolbar (the + Add node dropdown, the direction icons, the i button; comments and
+// History at the right). No name, no timing, no summary: those are edited with the pencil of the flow's row in the Flows list.
 'use strict';
 const { uiSuite } = require('../lib/harness');
 
-uiSuite('flow top section: simplified header row and toolbar row', async ({ b, ok }) => {
+uiSuite('flow top section: one cohesive toolbar', async ({ b, ok }) => {
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
-  const rect = s => b.ev(`(function(){var r=document.querySelector(${JSON.stringify(s)}).getBoundingClientRect(); return {l:r.left,r:r.right,t:r.top,b:r.bottom,h:r.height}})()`);
+  const rect = s => b.ev(`(function(){var r=document.querySelector(${JSON.stringify(s)}).getBoundingClientRect(); return {l:r.left,r:r.right,t:r.top,b:r.bottom,h:r.height,w:r.width}})()`);
   const midY = async s => { const r = await rect(s); return (r.t + r.b) / 2; };
 
   await b.click('[data-action=set-list-tab][data-tab=flows]');
   await b.click('.camp-item[data-id=k1]');
 
-  // ---- the header row
-  ok('the header is ONE row: the name, a small pencil, the timing as text, and the comments icon and History at the right, all on one line', await (async () => {
-    const ys = [await midY('.flow-head h2'), await midY('.flow-head [data-action=rename-start]'), await midY('.flow-head [data-t=days]'), await midY('.flow-head .cm-open'), await midY('.flow-head [data-action=toggle-history-pane]')];
-    return ys.every(y => Math.abs(y - ys[0]) < 8);
-  })());
-  ok('left to right: name, pencil, timing, then (right edge) comments and History', await b.ev(`(function(){var x=function(s){return document.querySelector('.flow-head '+s).getBoundingClientRect().left}; return x('h2') < x('[data-action=rename-start]') && x('[data-action=rename-start]') < x('[data-t=days]') && x('[data-t=days]') < x('.cm-open') && x('.cm-open') < x('[data-action=toggle-history-pane]')})()`));
-  ok('no "Flow · 2 templates · 1 logic…" summary line, no "Campaign:" line and no text "Rename" link: the header has just the name, the timing and two buttons', !/templates|Campaign:|Rename/.test(await txt('.flow-head')) && !await q('.content-head'));
-  ok('what used to be in that line is in the name\'s tooltip', /Flow · 2 templates · 1 logic · 1 action · 1 input · Campaign: Newborn care/.test(await b.ev(`document.querySelector('.flow-head h2').title`)));
-  ok('the timing is not repeated with the name', !await q('.flow-head .tl-name') && (await txt('.flow-head h2')) === 'Newborn first weeks');
+  // ---- nothing but the toolbar above the canvas
+  ok('the flow\'s section has no name heading, no timing line, no summary and no "Rename": only the toolbar above the canvas', !await q('.flow-head') && !await q('.content-head') && !await q('.flow-card') && !await q('.timing-line') && !await q('.main h2') && !/Newborn first weeks|days before|templates ·|Campaign:|Rename/.test(await txt('.main')) && await q('.main > .toolbar.flow-bar'));
+  ok('the toolbar is directly followed by the canvas, so the section starts with it (about one control high)', await b.ev(`(function(){var tb=document.querySelector('.flow-bar').getBoundingClientRect(), cv=document.getElementById('canvas-wrap').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return tb.top - m.top <= 2 && cv.top - tb.bottom <= 2 && tb.height >= 44 && tb.height <= 50})()`));
 
-  // ---- the toolbar row
-  ok('the toolbar is ONE row: the + Add node dropdown, the direction switch and an i button, all on one line', await (async () => {
-    const sels = ['[data-combo=addnode] .combo-btn', '.dir-toggle', '.flow-toolbar .info-btn'];
+  // ---- one line
+  ok('everything is on ONE line: + Add node, the two direction icons, the i button, then (right) comments and History', await (async () => {
+    const sels = ['[data-combo=addnode] .combo-btn', '.dir-toggle .btn:first-child', '.dir-toggle .btn:last-child', '.flow-bar .info-btn', '.flow-bar .cm-open', '.flow-bar [data-action=toggle-history-pane]'];
     const ys = []; for (const s of sels) ys.push(await midY(s));
-    return ys.every(y => Math.abs(y - ys[0]) < 8);
+    return ys.every(y => Math.abs(y - ys[0]) < 3);
   })());
-  ok('the hint about dragging is not on screen; an i button holds it', !await q('#flow-help') && await b.ev(`document.querySelector('.flow-toolbar .info-btn').getAttribute('aria-expanded')`) === 'false' && !/Drag a node/.test(await txt('.main')));
-  await b.click('.flow-toolbar .info-btn');
-  ok('clicking the i button shows the hint under the toolbar; clicking again hides it', await q('#flow-help') && /Drag a node by its header/.test(await txt('#flow-help')) && await b.ev(`document.querySelector('.flow-toolbar .info-btn').getAttribute('aria-expanded')`) === 'true' && (await b.click('.flow-toolbar .info-btn'), !await q('#flow-help')));
+  ok('in that order from the left, with comments and History at the right edge', await b.ev(`(function(){var x=function(s){return document.querySelector(s).getBoundingClientRect()}, tb=x('.flow-bar'); var ord=['[data-combo=addnode] .combo-btn','.dir-toggle .btn:first-child','.dir-toggle .btn:last-child','.flow-bar .info-btn','.flow-bar .cm-open','.flow-bar [data-action=toggle-history-pane]'].map(function(s){return x(s).left}); return ord.every(function(v,i){return i === 0 || v > ord[i-1]}) && tb.right - x('.flow-bar [data-action=toggle-history-pane]').right < 3})()`));
 
-  // ---- it takes much less room
-  ok('everything above the canvas takes about 100px or less (it was over 190px)', await b.ev(`document.getElementById('canvas-wrap').getBoundingClientRect().top - document.querySelector('.main').getBoundingClientRect().top`) <= 110);
-  ok('the rows are not tall: header and toolbar are each about one control high', (await rect('.flow-head')).h < 50 && (await rect('.flow-toolbar')).h < 56);
+  // ---- cohesive: the same strip as the template editor's toolbar
+  ok('it is the same kind of bar as the template editor\'s toolbar: white, a bottom border, 46px controls, square corners', await b.ev(`(function(){var tb=getComputedStyle(document.querySelector('.flow-bar')); return tb.backgroundColor === 'rgb(255, 255, 255)' && tb.borderBottomWidth === '1px' && [].every.call(document.querySelectorAll('.flow-bar .btn, .flow-bar .combo-btn'), function(e){var s=getComputedStyle(e); return Math.round(e.getBoundingClientRect().height) === 46 && s.borderRadius === '0px'})})()`));
+  ok('the controls touch each other (no gaps between the dropdown and the direction icons, nor between those icons)', await b.ev(`(function(){var a=document.querySelector('[data-combo=addnode] .combo-btn').getBoundingClientRect(), d=document.querySelectorAll('.dir-toggle .btn'), r1=d[0].getBoundingClientRect(), r2=d[1].getBoundingClientRect(); return r1.left - a.right <= 2 && r2.left - r1.right <= 1})()`));
+
+  // ---- the direction switch has icons, no labels
+  ok('the direction switch has no text labels: two icon buttons (an arrow right, an arrow down), named for assistive technology and in tooltips', await b.ev(`[].every.call(document.querySelectorAll('.dir-toggle .btn'), function(x){return x.textContent.trim() === '' && !!x.querySelector('svg')})`) && await b.ev(`[].map.call(document.querySelectorAll('.dir-toggle .btn'), function(x){return x.getAttribute('aria-label') + '|' + x.title}).join()`) === 'Left to right|Left to right,Top down|Top down' && !/Left to right|Top down/.test(await txt('.flow-bar')));
+  ok('the one in use is shown pressed (the demo flow is top down)', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Top down' && await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-pressed')`) === 'true');
+  await b.click('.dir-toggle .btn:not(.on)');
+  ok('clicking the other one switches the flow to left to right (and back)', await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Left to right' && (await b.click('.dir-toggle .btn:not(.on)'), await b.ev(`document.querySelector('.dir-toggle .btn.on').getAttribute('aria-label')`) === 'Top down'));
+
+  // ---- the hint is behind the i button
+  ok('the hint about dragging is not on screen; an i button holds it', !await q('#flow-help') && await b.ev(`document.querySelector('.flow-bar .info-btn').getAttribute('aria-expanded')`) === 'false' && !/Drag a node/.test(await txt('.main')));
+  await b.click('.flow-bar .info-btn');
+  ok('clicking it shows the hint under the toolbar (and where the name and timing are edited); clicking again hides it', await q('#flow-help') && /Drag a node by its header/.test(await txt('#flow-help')) && /pencil/.test(await txt('#flow-help')) && (await b.click('.flow-bar .info-btn'), !await q('#flow-help')));
 
   // ---- everything still works
-  await b.click('.flow-head [data-action=rename-start]');
-  ok('the pencil turns the name into a text box with ✓ and ✕, right there', await q('.flow-head #rename-input') && await b.ev(`document.getElementById('rename-input').value`) === 'Newborn first weeks' && await q('.flow-head [data-action=rename-save]') && await q('.flow-head [data-action=rename-cancel]') && !await q('.flow-head h2'));
-  await b.fill('#rename-input', 'First weeks'); await b.key('Enter', 'Enter', 13);
-  ok('Enter saves the new name: the heading and the list show it', await txt('.flow-head h2') === 'First weeks' && /First weeks/.test(await txt('#content-list .flow-item')));
-  await b.click('.flow-head [data-action=rename-start]'); await b.fill('#rename-input', 'Nope'); await b.key('Escape', 'Escape', 27);
-  ok('Escape cancels it', await txt('.flow-head h2') === 'First weeks' && !await q('#rename-input'));
   const before = await b.ev(`document.querySelectorAll('.fnode').length`);
   await b.click('[data-combo=addnode] .combo-btn'); await b.click('[data-combo=addnode] .combo-opt[data-id="type:logic"]');
-  ok('+ Add node → Logic still adds a node', await b.ev(`document.querySelectorAll('.fnode').length`) === before + 1);
-  await b.click('.dir-toggle .btn:not(.on)');
-  ok('the direction switch still works', await b.ev(`document.querySelector('.dir-toggle .btn.on').textContent.trim()`) === '→ Left to right');
-  await b.click('.flow-head .cm-open');
-  ok('and the comments button opens the comments sidebar for the flow', await q('#comments-pane'));
-  await b.click('.flow-head .cm-open');
-  await b.click('.flow-head [data-action=toggle-history-pane]');
-  ok('and History opens the history (the button then leaves the header, like before)', await q('#history-pane') && !await q('.flow-head [data-action=toggle-history-pane]'));
+  ok('+ Add node → Logic adds a node', await b.ev(`document.querySelectorAll('.fnode').length`) === before + 1);
+  await b.click('.flow-bar .cm-open');
+  ok('the comments button opens the comments sidebar for the flow', await q('#comments-pane'));
+  await b.click('.flow-bar .cm-open');
+  await b.click('.flow-bar [data-action=toggle-history-pane]');
+  ok('History opens the history (the button then leaves the bar, like before)', await q('#history-pane') && !await q('.flow-bar [data-action=toggle-history-pane]'));
   await b.click('[data-action=toggle-history-pane]');
 
-  // ---- a single-template flow keeps its own line (it has no heading): the timing with its name
+  // ---- a single-template flow has no flow bar: it is the template editor
   await b.click('.camp-item[data-id=k4]');
-  ok('a single-template flow is unchanged: its line has the timing and the template\'s name', await b.ev(`(function(){var c=document.querySelector('.flow-card'); return !!c.querySelector('.tl-name') && c.querySelector('.tl-name').textContent === 'ANC welcome and registration' && !document.querySelector('.flow-head')})()`));
+  ok('a single-template flow shows the template editor with its own toolbar (no flow bar, no name / timing line)', await q('.panel.edit') && !await q('.flow-bar') && !await q('.flow-card'));
 
   // ---- theme
   await b.click('.camp-item[data-id=k1]');
-  const col = () => b.ev(`getComputedStyle(document.querySelector('.flow-head h2')).color`);
+  const col = () => b.ev(`getComputedStyle(document.querySelector('.flow-bar')).backgroundColor`);
   await b.setScheme('light'); const light = await col();
   await b.setScheme('dark'); const dark = await col();
   await b.setScheme('light');
