@@ -34,6 +34,11 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   await b.click(await item('Appointment reminder'));
   ok('the same with the Free text checkbox in the strip (a template that is not published yet): equal heights, stuck together', await b.ev(`(function(){var els=[].slice.call(document.querySelectorAll('.toolbar .field-select, .toolbar .block-switch, .toolbar .btn')), hs=els.map(function(e){return Math.round(e.getBoundingClientRect().height)}); var grp=[].slice.call(document.querySelectorAll('.toolbar .tb-group > *')); return els.length >= 6 && !!document.querySelector('.toolbar .tb-group > .block-switch') && hs.every(function(h){return h === hs[0]}) && grp.every(function(e,i){ if(!i) return true; var d=e.getBoundingClientRect().left - grp[i-1].getBoundingClientRect().right; return d <= 0 && d >= -2 })})()`));
   await b.click(await item('Welcome message'));
+  const tbTop = () => b.ev(`Math.round(document.querySelector('.toolbar').getBoundingClientRect().top - document.querySelector('.main').getBoundingClientRect().top)`);
+  await b.ev(`document.querySelector('.main').scrollTop = 400; 0`); await b.settle();
+  ok('the toolbar stays fixed at the top of the editor while the content is scrolled (the content really scrolled)', await b.ev(`document.querySelector('.main').scrollTop`) > 200 && await tbTop() === 0 && await b.ev(`(function(){var tb=document.querySelector('.toolbar').getBoundingClientRect(), e=document.elementFromPoint(tb.left + 40, tb.top + tb.height / 2); return !!e.closest('.toolbar')})()`));
+  ok('it has an opaque background, so the scrolled content does not show through', await b.ev(`getComputedStyle(document.querySelector('.toolbar')).backgroundColor !== 'rgba(0, 0, 0, 0)'`));
+  await b.ev(`document.querySelector('.main').scrollTop = 0; 0`); await b.settle();
   // ================= the layout does not move when you type (a regression: typing used to add the history column) =================
   const layoutNow = () => b.ev(`(function(){var l=document.querySelector('.layout'), m=document.querySelector('.main').getBoundingClientRect(); return {cls: l.className, mainW: Math.round(m.width), cols: getComputedStyle(l).gridTemplateColumns.split(' ').length, pageScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight}})()`);
   const lay0 = await layoutNow();
