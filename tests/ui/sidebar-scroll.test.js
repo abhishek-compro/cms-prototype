@@ -9,6 +9,9 @@ uiSuite('content list: only the list scrolls (tabs, search and + stay fixed)', a
   const fixed = () => b.ev(`JSON.stringify(['.list-tabs','#side-tools','#list-title'].map(function(s){var r=document.querySelector(s).getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]}))`);
 
   await b.click('.camp-item:first-child');                      // All content: 13 items, more than a short window shows
+  ok('the content column (aside.sidebar) has no padding at all', await b.ev(`(function(){var s=getComputedStyle(document.querySelector('aside.sidebar')); return ['Top','Right','Bottom','Left'].every(function(k){return s['padding'+k] === '0px'})})()`));
+  ok('the tabs start at the very edge of the column', await b.ev(`(function(){var s=document.querySelector('.sidebar').getBoundingClientRect(), t=document.querySelector('.list-tabs').getBoundingClientRect(); return Math.round(t.left - s.left) <= 1 && Math.round(t.top - s.top) <= 1})()`));
+  const radiusOfTemplates = await b.ev(`getComputedStyle(document.querySelector('#content-list .content-item')).borderTopLeftRadius`);
   ok('the list is longer than the room it has (so it has to scroll)', await b.ev(`(function(){var l=document.getElementById('content-list'); return l.scrollHeight > l.clientHeight + 50})()`));
   ok('the list is the thing that scrolls (overflow auto) and the column itself does not (no scrollbar on it)', await b.ev(`getComputedStyle(document.getElementById('content-list')).overflowY`) === 'auto' && await b.ev(`(function(){var s=document.querySelector('.sidebar'); return getComputedStyle(s).overflowY === 'hidden' && s.scrollHeight <= s.clientHeight + 1})()`));
   const before = await fixed();
@@ -17,6 +20,7 @@ uiSuite('content list: only the list scrolls (tabs, search and + stay fixed)', a
   ok('the Templates / Flows tabs, the search and + buttons and the title do not move', await fixed() === before && await b.ev(`document.querySelector('.sidebar').scrollTop`) === 0, before + ' vs ' + await fixed());
   ok('they stay visible: the tabs and the two buttons are inside the window at the top of the column', await b.ev(`(function(){var s=document.querySelector('.sidebar').getBoundingClientRect(); return ['.list-tabs','[data-action=open-search]','[data-action=open-add]'].every(function(q){var r=document.querySelector(q).getBoundingClientRect(); return r.top >= s.top && r.bottom <= s.top + 140})})()`));
   await b.click('[data-action=set-list-tab][data-tab=flows]');
+  ok('every item of the flows list is square: no border radius (the templates list keeps its rounded items)', await b.ev(`[].every.call(document.querySelectorAll('#content-list .flow-item'), function(e){var s=getComputedStyle(e); return s.borderTopLeftRadius === '0px' && s.borderTopRightRadius === '0px' && s.borderBottomLeftRadius === '0px' && s.borderBottomRightRadius === '0px'}) && document.querySelectorAll('#content-list .flow-item').length >= 10`) && radiusOfTemplates !== '0px', radiusOfTemplates);
   ok('the same in the Flows tab: the list scrolls under fixed tabs and buttons', await b.ev(`getComputedStyle(document.getElementById('content-list')).overflowY`) === 'auto' && await q('#side-tools') && await b.ev(`document.querySelector('.sidebar').scrollTop`) === 0);
   const f2 = await fixed();
   await scroll('#content-list', 300);

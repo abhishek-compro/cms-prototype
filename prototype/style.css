@@ -169,7 +169,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 #app { height: 100vh; display: flex; flex-direction: column; }   /* the layout takes what the top bar leaves: no page-level scrollbar, whatever the bar's height */
 .layout { --camp-w: 210px; display: grid; grid-template-columns: var(--camp-w) 260px minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
 .layout.hist-off { grid-template-columns: var(--camp-w) 260px minmax(0, 1fr); }
-.sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; padding: 12px; display: flex; flex-direction: column; }   /* only the list scrolls: the tabs, the search / add buttons and the title stay put */
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; padding: 0; display: flex; flex-direction: column; }   /* only the list scrolls: the tabs, the search / add buttons and the title stay put */
 .sidebar > .list-tabs, .sidebar > .side-tools, .sidebar > .side-title { flex: none; }
 .main { overflow: auto; padding: 0; }
 
@@ -404,7 +404,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .ph-help { margin: 0 0 8px; }
 
 /* content sidebar tabs: Templates | Flows */
-.list-tabs { display: flex; gap: 2px; margin: -4px 0 10px; border-bottom: 1px solid var(--border); }
+.list-tabs { display: flex; gap: 2px; margin: 0 0 10px; border-bottom: 1px solid var(--border); }
 .list-tab { flex: 1; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); }
 .list-tab:hover { color: var(--text); background: var(--hover); border-radius: 6px 6px 0 0; }
 .list-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -793,3 +793,18 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .camp-rail:focus-visible, .camp-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .camp-rail-text { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-weight: 600; font-size: 13px; letter-spacing: .02em; padding: 6px 0; max-height: 100%; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .layout.camps-collapsed { --camp-w: auto; } }
+
+/* the timing line above a flow / a single-template flow: one line of flowing text, "<n> days <before/after> <reference date> <name>", with no
+   borders, boxes or dropdown arrows (the number, before/after and the date stay editable: they just look like text) */
+.flow-card.timing-line { display: flex; align-items: baseline; gap: .4em; flex-wrap: nowrap; white-space: nowrap; overflow: hidden; margin: 0; padding: 10px 14px 6px; border: 0; border-radius: 0; background: none; }
+.timing-line .timing { display: inline-flex; align-items: baseline; gap: .4em; flex-wrap: nowrap; flex: none; }
+.timing-line .tl-word { color: inherit; }
+.timing-line .tl-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.timing-line .timing .field, .timing-line .timing .field-select { width: auto; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; font: inherit; color: inherit; line-height: inherit; height: auto; -webkit-appearance: none; appearance: none; }
+.timing-line .timing .num { -moz-appearance: textfield; text-align: right; }
+.timing-line .timing .num::-webkit-outer-spin-button, .timing-line .timing .num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.timing-line .timing .field:hover, .timing-line .timing .field-select:hover { text-decoration: underline dotted; cursor: pointer; }
+.timing-line .timing .field:focus, .timing-line .timing .field-select:focus { outline: 1px dashed var(--accent); outline-offset: 2px; background: transparent; }
+
+/* the items of the flows list are square */
+.content-item.flow-item { border-radius: 0; }

@@ -887,22 +887,24 @@
   }
 
   // "<n> days [before|after] <reference date>": committed on change (Enter / blur), one history event per edit
+  // The timing as one line of flowing text:  <n> days <before/after> <reference date> <name>.  No borders, no boxes, no dropdown arrows: the
+  // number, "before / after" and the date are still the editable parts (click one and change it), they just look like text.
   function timingEditor(t, attrs) {
     function sel(v, label) { return '<option value="' + v + '"' + (t.when === v ? ' selected' : '') + '>' + label + '</option>'; }
+    function wch(text, extra, k) { return ' style="width:' + (Math.round((String(text).length * (k || 1) + extra) * 10) / 10) + 'ch"'; }      // each part is about as wide as its text (letters are narrower than the 0 that ch measures)
     return '<span class="timing" ' + attrs + '>' +
-      '<input class="field num" type="number" min="0" max="999" step="1" data-t="days" data-change="timing" value="' + esc(t.days) + '" aria-label="Number of days">' +
-      '<span class="muted">days</span>' +
-      '<select class="field-select" data-t="when" data-change="timing" aria-label="Before or after">' + sel('before', 'before') + sel('after', 'after') + '</select>' +
-      '<select class="field-select ref" data-t="ref" data-change="timing" aria-label="Reference date">' +
+      '<input class="field num" type="number" min="0" max="999" step="1" data-t="days" data-change="timing" value="' + esc(t.days) + '" aria-label="Number of days"' + wch(t.days, 0.4) + '>' +
+      '<span class="tl-word">days</span>' +
+      '<select class="field-select" data-t="when" data-change="timing" aria-label="Before or after"' + wch(t.when, 0.6, 0.92) + '>' + sel('before', 'before') + sel('after', 'after') + '</select>' +
+      '<select class="field-select ref" data-t="ref" data-change="timing" aria-label="Reference date"' + wch(t.ref, 0.6, 0.92) + '>' +
         (S.REF_DATES.indexOf(t.ref) === -1 ? '<option value="' + esc(t.ref) + '" selected>' + esc(t.ref) + '</option>' : '') +   // a value saved earlier that is not in the list stays selectable
         S.REF_DATES.map(function (d) { return '<option value="' + d + '"' + (t.ref === d ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select>' +
       '</span>';
   }
 
+  // the line above a flow, or above a template that is a flow by itself: its timing and its name, as one line of text
   function flowCardHtml(c) {
-    return '<div class="flow-card"><div class="flow-card-row">' + FLOW_IND + '<strong>This template is itself a flow.</strong>' +
-      '<span class="muted small">It is in no flow of ' + (ui.campaignId ? 'this campaign' : 'its campaign') + '.</span></div>' +
-      '<div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(c.timing, 'data-tpl="' + c.id + '"') + '</div></div>';
+    return '<div class="flow-card timing-line">' + timingEditor(c.timing, 'data-tpl="' + c.id + '"') + '<span class="tl-name">' + esc(c.name) + '</span></div>';
   }
 
   // ---- a searchable picker (templates, flows): used by template nodes, flow nodes and the "+ Template…" / "+ Flow…" buttons ---
@@ -1169,7 +1171,7 @@
       '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
       '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</div></div>' +
-      '<div class="flow-card"><div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div></div>' +
+      '<div class="flow-card timing-line">' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '<span class="tl-name">' + esc(f.name) + '</span></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
         kind: 'add', attrs: 'data-flow="' + f.id + '"', label: '+ Template…', aria: 'Add a template node', search: 'Search templates…', empty: 'No template matches', disabled: !addable.length,
