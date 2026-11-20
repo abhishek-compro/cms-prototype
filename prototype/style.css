@@ -217,7 +217,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* panels */
 /* every language is an editing panel, as wide as its phone plus a bit (80px), all in one horizontal strip */
-.panels { display: flex; align-items: flex-start; gap: 16px; overflow-x: auto; padding-bottom: 14px; }
+.panels { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 14px; }
 .panels > .panel { flex: 0 0 var(--panel-w); width: var(--panel-w); }
 .panel .phone { width: 340px; max-width: 100%; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; }
