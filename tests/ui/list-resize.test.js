@@ -28,6 +28,20 @@ uiSuite('content column: resize by dragging its edge', async ({ b, ok }) => {
   ok('the page does not overflow sideways while resizing', await b.ev(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`));
   await drag(-3000); await drag(150);
 
+  // ---- names are never truncated, however narrow the column is made
+  await drag(-1000);
+  ok('Templates at the narrowest width: every name is shown in full (wrapped over lines, nothing cut off, no ellipsis)', await b.ev(`[].every.call(document.querySelectorAll('#content-list .content-item .name'), function(n){var s=getComputedStyle(n); return s.textOverflow !== 'ellipsis' && n.scrollWidth <= n.clientWidth + 1})`) && await b.ev(`document.querySelector('#content-list .content-item:nth-child(4) .name').textContent.trim()`) === 'ANC welcome and registration');
+  await b.click('[data-action=set-list-tab][data-tab=flows]');
+  await drag(-3000);
+  ok('Flows at the narrowest width: no name or date is cut off with an ellipsis; the text keeps its full width', await b.ev(`[].every.call(document.querySelectorAll('#content-list .flow-item > span, #content-list .flow-item > .name'), function(n){var s=getComputedStyle(n); return s.textOverflow !== 'ellipsis' && s.overflow !== 'hidden' && n.scrollWidth <= n.clientWidth + 1})`));
+  ok('instead the list scrolls sideways: it is wider than the column and can be scrolled to see the end of the longest name', await b.ev(`(function(){var l=document.getElementById('content-list'); l.scrollLeft = 10000; var n=l.querySelector('.flow-item:nth-child(12) .name').getBoundingClientRect(), r=l.getBoundingClientRect(); return l.scrollWidth > l.clientWidth + 100 && l.scrollLeft > 100 && n.right <= r.right + 1})()`));
+  ok('the whole name is really there: the longest one, "Healthy diet in late pregnancy", fits inside the scrollable width', await b.ev(`(function(){var l=document.getElementById('content-list'), n=[].filter.call(l.querySelectorAll('.name'), function(x){return x.textContent === 'Healthy diet in late pregnancy'})[0]; return !!n && n.getBoundingClientRect().width >= 150})()`));
+  await b.ev(`document.getElementById('content-list').scrollLeft = 0; 0`);
+  await drag(3000);
+  ok('wide again: the rows fill the width of the column (the selected row\'s highlight reaches the edge) and there is no sideways scrolling', await b.ev(`(function(){var l=document.getElementById('content-list'), r=l.querySelector('.flow-item').getBoundingClientRect(), lr=l.getBoundingClientRect(); return l.scrollWidth <= l.clientWidth + 1 && r.right >= lr.right - 16})()`));
+  await b.click('[data-action=set-list-tab][data-tab=templates]');
+  await drag(-3000); await drag(150);
+
   // ---- the list and its fixed parts follow the new width
   ok('the tabs, the search and + buttons and the list all take the column\'s width (nothing is cut off at the edge)', await b.ev(`(function(){var s=document.querySelector('.sidebar').getBoundingClientRect(); return ['.list-tabs','#side-tools','#content-list'].every(function(q){var r=document.querySelector(q).getBoundingClientRect(); return r.right <= s.right + 1 && r.left >= s.left - 1})})()`));
   ok('the handle moves with the edge', await b.ev(`Math.abs(document.querySelector('.list-resizer').getBoundingClientRect().right - document.querySelector('.sidebar').getBoundingClientRect().right) < 1.5`));

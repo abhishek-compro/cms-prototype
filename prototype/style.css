@@ -186,7 +186,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .content-item { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; }
 .content-item:hover { background: var(--hover); }
 .content-item.active { background: var(--accent-soft); border-color: var(--accent-border); }
-.content-item .name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.content-item .name { font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }   /* a long name wraps (and its badge goes under it): never cut off */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .chip { font-size: 11px; padding: 0 6px; border-radius: 99px; background: var(--code-bg); color: var(--muted); }
 .chip.deployed { background: var(--ok-soft); color: var(--ok); }
@@ -815,10 +815,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .content-item.flow-item { border: 0; }   /* the entries of the flows list have no border (the selected one is shown by its background) */
 
 /* the Flows list is a table: every entry is a row of aligned columns  grip | icon | n days | before/after | reference date | name  */
-#content-list.flows-table { display: grid; grid-template-columns: max-content max-content max-content max-content max-content minmax(0, 1fr); align-content: start; column-gap: 0; }
+#content-list.flows-table { display: grid; grid-template-columns: max-content max-content max-content max-content max-content minmax(max-content, 1fr); align-content: start; column-gap: 0; overflow: auto; }   /* names are never cut: a narrower column scrolls sideways instead */
 #content-list.flows-table > li:not(.flow-item) { grid-column: 1 / -1; }
 #content-list.flows-table > li.flow-item { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; column-gap: 10px; align-items: center; padding: 7px 10px 7px 6px; white-space: nowrap; }
-.flow-item > span, .flow-item > .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.flow-item > span, .flow-item > .name { min-width: 0; overflow: visible; text-overflow: clip; }
 .flow-item .fi-days { text-align: right; color: var(--muted); }
 .flow-item .fi-when, .flow-item .fi-ref { color: var(--muted); }
 .flow-item .name { display: block; font-weight: 600; }
