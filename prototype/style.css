@@ -751,7 +751,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .stage.done .stage-dot { background: var(--btn-ok); }
 .stage.done { color: var(--stage-done-text); }
 .stage.now { color: var(--stage-now-text); }
-.stage.now .stage-dot { background: var(--stage-now-bg); border-color: var(--stage-dot); box-shadow: 0 0 0 0 var(--stage-glow); animation: stage-blink 1.1s ease-in-out infinite; }
+.stage.now .stage-dot { background: var(--stage-now-bg); border-color: var(--stage-dot); box-shadow: 0 0 0 0 var(--stage-glow); animation: stage-blink 2.8s ease-in-out infinite; }
 @keyframes stage-blink { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--stage-glow); } 50% { opacity: .35; box-shadow: 0 0 9px 4px var(--stage-glow); } }
 .stage-arrow { width: var(--tb-h); height: var(--tb-h); padding: 0; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 0; box-sizing: border-box; }
 .stage-arrow:disabled { opacity: .45; cursor: not-allowed; }

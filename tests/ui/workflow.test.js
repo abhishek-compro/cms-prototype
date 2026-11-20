@@ -28,7 +28,8 @@ uiSuite('workflow: static groups, the current one blinks, arrows move the conten
 
   // ---- the dot of the current step blinks
   ok('only the current step\'s dot blinks (an animation runs on it); the others are still', await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).animationName`) === 'stage-blink' && await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).animationIterationCount`) === 'infinite' && await b.ev(`[].every.call(document.querySelectorAll('.stage:not(.now) .stage-dot'), function(d){return getComputedStyle(d).animationName === 'none'})`));
-  const o1 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`); await b.sleep(400); const o2 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`); await b.sleep(300); const o3 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`);
+  ok('the glow is slow: one blink takes about 3 seconds (not a fast flicker)', parseFloat(await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).animationDuration`)) >= 2.5);
+  const o1 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`); await b.sleep(700); const o2 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`); await b.sleep(700); const o3 = await b.ev(`getComputedStyle(document.querySelector('.stage.now .stage-dot')).opacity`);
   ok('...and it really changes over time (its opacity is not constant)', new Set([o1, o2, o3]).size > 1, [o1, o2, o3].join(' '));
 
   // ---- the colours: green before, yellow now, white after
