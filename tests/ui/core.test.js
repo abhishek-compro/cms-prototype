@@ -26,7 +26,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
-  ok('the language panels sit right under the toolbar (no big gap), and the toolbar right under the top bar', await b.ev(`(function(){var tb=document.querySelector('.toolbar').getBoundingClientRect(), p=document.querySelector('.panels').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return p.top - tb.bottom <= 6 && tb.top - m.top <= 12})()`));
+  ok('the language panels touch the toolbar (zero gap: the panels start where the toolbar buttons end), and the toolbar is right under the top bar, with no padding around the main area', await b.ev(`(function(){var tb=document.querySelector('.toolbar').getBoundingClientRect(), p=document.querySelector('.panels').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); var last=[].reduce.call(document.querySelectorAll('.toolbar > *'), function(a,e){return Math.max(a, e.getBoundingClientRect().bottom)}, 0); return p.top - tb.bottom === 0 && p.top - last <= 1 && tb.top - m.top <= 8 && p.left - m.left === 0})()`));
   // ================= the layout does not move when you type (a regression: typing used to add the history column) =================
   const layoutNow = () => b.ev(`(function(){var l=document.querySelector('.layout'), m=document.querySelector('.main').getBoundingClientRect(); return {cls: l.className, mainW: Math.round(m.width), cols: getComputedStyle(l).gridTemplateColumns.split(' ').length, pageScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight}})()`);
   const lay0 = await layoutNow();
@@ -103,6 +103,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
 
   // ================= block template approval =================
   await b.click(await item('Appointment reminder'));
+  ok('the checkbox in the toolbar is called "Free text"', /^\s*Free text\s*$/.test(await txt('.toolbar .block-switch')) && !/Block template approval/.test(await txt('.toolbar')));
   ok('not published yet: the block checkbox is offered', await q('[data-change=toggle-block]') && await b.ev(`!document.querySelector('[data-change=toggle-block]').checked`));
   await b.click('[data-change=toggle-block]');
   ok('blocking: a banner appears, Publish all is disabled, the list shows "no template"', await q('.banner') && await b.ev(`document.querySelector('[data-action=deploy-all]').disabled`) && /no template/.test(await txt('.content-item.active')));
