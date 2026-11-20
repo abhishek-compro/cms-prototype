@@ -485,14 +485,14 @@
       '<div class="wa-meta"><span class="wa-count small">' + counter('text', p.text.length, S.LIMITS.body) + '</span><span class="wa-time">9:41</span></div></div>';
     return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
       '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span>' +
-      (problemCount(c, tr) ? '<span class="badge blocked" title="Problems block publishing">' + problemCount(c, tr) + ' problem' + (problemCount(c, tr) === 1 ? '' : 's') + '</span>' : '') + '</div>' +
+      (problemCount(c, tr) ? '<span class="badge blocked" title="Problems block publishing">' + problemCount(c, tr) + ' problem' + (problemCount(c, tr) === 1 ? '' : 's') + '</span>' : '') +
+      '<span class="head-actions"><button class="btn revert" data-action="revert" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Revert</button>' +
+      '<button class="btn primary save" data-action="save" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Save</button></span></div>' +
       '<div class="wa-editor">' + phoneShell(bubble + secButtons(c, tr, p), ' editable') + secAdd(c, tr, p) + '</div>' +
       '<div class="wa-details">' + secHeaderUrl(c, tr, p) + secPlaceholders(c, tr, p) + secButtonDetails(c, tr, p) + secProblems(c, tr, p) + '</div>' +
       '<div class="panel-foot">' +
       '<span class="dirty-note small" style="color:var(--warn)">' + (dirty ? 'Unsaved changes' : '') + '</span>' +
       '<span class="grow"></span>' + waNameHtml(tr) +
-      '<button class="btn revert" data-action="revert" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Revert</button>' +
-      '<button class="btn primary save" data-action="save" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Save</button>' +
       '</div></section>';
   }
 

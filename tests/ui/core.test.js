@@ -66,6 +66,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   await b.click('[data-theme=system]');
   await b.click('.panel.edit[data-lang=en] .revert');
 
+  ok('Save (and Revert) are in the head of each language panel, on the right of the language name, above the phone; the foot no longer has them', await b.ev(`(function(){var out=true; ['en','hi'].forEach(function(l){var p=document.querySelector('.panel.edit[data-lang='+l+']'), h=p.querySelector('.panel-head'), s=h.querySelector('.save'), r=h.querySelector('.revert'), n=h.querySelector('strong').getBoundingClientRect(), sb=s.getBoundingClientRect(); if(!s||!r||p.querySelector('.panel-foot .save')||p.querySelector('.panel-foot .revert')||!(sb.left > n.right)||!(sb.bottom <= p.querySelector('.phone').getBoundingClientRect().top)) out=false}); return out})()`));
   // ================= languages =================
   ok('each panel says which language it is and its publish status; there are no language tabs', /English/.test(await txt(panelHead('en'))) && /Hindi/.test(await txt(panelHead('hi'))) && /^Edited since publish/.test(await badge('en')) && /^Published/.test(await badge('hi')) && !await q('.lang-tabs') && !await q('.lang-tab'));
   await b.fill('.panel.edit[data-lang=en] [data-input=footer]', 'अस्थायी');

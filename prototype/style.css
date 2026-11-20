@@ -712,3 +712,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .sec-row { flex-wrap: wrap; }
 .sec-label .wa-hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .sec-row .btn.link { white-space: nowrap; }
+
+/* Revert and Save sit in the head of a language panel, next to the language name, above the phone */
+.panel-head { flex-wrap: wrap; }
+.panel-head .head-actions { margin-left: auto; display: flex; gap: 6px; }
+.panel-head .head-actions .btn { padding: 3px 12px; }
