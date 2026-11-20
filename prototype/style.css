@@ -21,7 +21,7 @@
   --btn-primary-hover: #1a5fd0;
   --btn-ok: #1a7f4b;
   --btn-ok-hover: #146c3f;
-  --toolbar-bg: #dfe8f5; --toolbar-line: #b8c7de;
+  --toolbar-bg: #ffffff; --toolbar-line: #aeb8c8;
   --stage-done-bg: #c6ecd2; --stage-done-text: #14532d; --stage-now-bg: #ffe066; --stage-now-bg-2: #fff3b0; --stage-now-text: #5c4400; --stage-dot: #d49a00; --stage-glow: rgba(212, 154, 0, .6);
   --ok: #1a7f4b;
   --ok-soft: #e3f5ea;
@@ -759,3 +759,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .stage-arrow { width: var(--tb-h); height: var(--tb-h); padding: 0; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 0; box-sizing: border-box; }
 .stage-arrow:disabled { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .stage.now .stage-dot { animation: none; } }
+
+/* the toolbar's own bottom border is the only horizontal line: its buttons have no top or bottom border (only the left / right lines between them) */
+.toolbar .btn, .toolbar .field-select, .toolbar .block-switch { border-top: 0; border-bottom: 0; }
