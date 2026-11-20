@@ -12,7 +12,7 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   const probs = () => txt(E('[data-sec=problems] .probs'));
   const warns = () => txt(E('[data-sec=problems] .warns'));
 
-  ok('the sample template is consistent: no problems, no warnings, Publish all available', !await q(E('[data-sec=problems] .probs')) && !await q(E('[data-sec=problems] .warns')) && /Publish all \(1\)/.test(await publishBtn()));
+  ok('the sample template is consistent: no problems, no warnings, Publish all available', !await q(E('[data-sec=problems] .probs')) && !await q(E('[data-sec=problems] .warns')) && /^Publish all$/.test(await publishBtn()));
 
   // ---- number of buttons
   await b.click('tr.clickable[data-lang=hi]');
@@ -36,7 +36,7 @@ uiSuite('languages must match: buttons, header, footer (errors) and placeholders
   await b.fill(E('[data-input=btn-param]'), 'about');
   ok('with the URL button complete the language has no problems at all', !await q(E('[data-sec=problems] .probs')), await probs());
   await b.click(E('.save'));
-  ok('saved: Publish all is available again', /Publish all \(\d\)$/.test(await publishBtn()), await publishBtn());
+  ok('saved: Publish all is available again', /^Publish all$/.test(await publishBtn()), await publishBtn());
 
   // swap the order of types: change the first button to a URL button is not possible in the UI, so remove + re-add in the other order
   await b.click(E('[data-action=btn-remove][data-idx="0"]'));

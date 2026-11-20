@@ -241,7 +241,7 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   // ================= export =================
   await fresh();
   await b.ev(`(function(){window.__dl=[]; var o=URL.createObjectURL; URL.createObjectURL=function(bl){window.__blob=bl; return o.call(URL,bl)}; HTMLAnchorElement.prototype.click=function(){window.__dl.push(this.download)}; return 1})()`);
-  ok('there is no JSON download in the UI (only CSV)', !await q('[data-action=json-one]') && !await b.ev(`/JSON/.test(document.querySelector('.content-head .actions').textContent)`));
+  ok('there is no JSON download in the UI (only CSV)', !await q('[data-action=json-one]') && !await b.ev(`/JSON/.test(document.querySelector('.toolbar').textContent)`));
   await b.click('[data-action=csv-one]');
   const csv = await b.ev(`window.__blob.text()`);
   ok('CSV columns unchanged; text column carries the named-placeholder body', /^﻿?name,language,wa_template_name,text\r\n/.test(csv) && /Hello {{name}}, welcome/.test(csv), csv.slice(0, 200));

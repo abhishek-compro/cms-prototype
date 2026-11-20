@@ -302,16 +302,9 @@
   }
 
   function headHtml(c) {
-    // no name heading and no description line (the name is in the list on the left; Rename is the pencil on its item there)
-    var blockWhy = S.blockProblem(c);
-    var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
-    return '<div class="content-head">' +
-      '<div class="actions">' + cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
-      (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Block template approval</label>') +
-      '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
-      '<button class="btn deploy" data-action="deploy-all"' + (deployable ? '' : ' disabled') + '>Publish all' + (deployable ? ' (' + deployable + ')' : '') + '</button>' +
-      '</div></div>' +
-      (c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '');
+    // no name heading and no description line (the name is in the list on the left; Rename is the pencil on its item there);
+    // the actions live in the editor toolbar below. Only the blocked banner stays here.
+    return c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '';
   }
 
   function langOptions(c, selected, exclude) {
@@ -334,10 +327,16 @@
       left = '<label>Reference <select data-change="set-ref">' + langOptions(c, ui.refLang) + '</select></label>' +
         '<label>Editing <select data-change="set-edit">' + langOptions(c, ui.editLang) + '</select></label>';
     }
+    var blockWhy = S.blockProblem(c);
+    var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="toolbar">' +
       '<label><input type="checkbox" data-change="toggle-side"' + (ui.side ? ' checked' : '') + '> Side by side</label>' +
       left + '<span style="flex:1"></span>' +
-      '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '">' + (ui.historyOpen ? 'Hide' : 'Show') + ' history</button></div>';
+      (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Block template approval</label>') +
+      cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
+      '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
+      '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '">' + (ui.historyOpen ? 'Hide' : 'Show') + ' history</button>' +
+      '<button class="btn deploy" data-action="deploy-all"' + (deployable ? ' title="Publish ' + deployable + ' language' + (deployable === 1 ? '' : 's') + '"' : ' disabled') + '>Publish all</button></div>';
   }
 
   function waNameHtml(tr) {

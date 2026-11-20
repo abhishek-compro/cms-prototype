@@ -14,7 +14,7 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   const histCount = () => b.ev(`Store.historyFor(Store.list()[0].id,'all').length`);
 
   // ---- the button at the top, the sidebar
-  ok('the template has no name heading and no description line; the comments button in the header is just an icon (no text), with the count in its label', !await q('.content-head h2') && !/Template name base/.test(await txt('.content-head')) && /Comments \(1 open\)/.test(await toggleText()) && /^\d*$/.test((await txt('.cm-open')).trim()) && await q('.cm-open svg'));
+  ok('the template has no name heading and no description line; the comments button in the toolbar is just an icon (no text), with the count in its label', !await q('.content-head') && !await q('.main h2') && !/Template name base/.test(await txt('.main')) && /Comments \(1 open\)/.test(await toggleText()) && /^\d*$/.test((await txt('.cm-open')).trim()) && await q('.cm-open svg'));
   ok('the sidebar is closed until the button is clicked', !await q('#comments-pane') && !await q('#comments'));
   await b.click('.cm-open');
   ok('the button opens the right sidebar (not the history), and it is marked pressed', await q('#comments-pane') && !await q('#history-pane') && await b.ev(`document.querySelector('.cm-open').getAttribute('aria-pressed')`) === 'true');

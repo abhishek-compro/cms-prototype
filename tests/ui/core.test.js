@@ -21,7 +21,8 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   // ================= first look =================
   ok('four columns: campaigns | content names | editor, history hidden by default', await q('.campaigns') && await q('.sidebar') && await q('.main') && !await q('#history-pane') && await q('.layout.hist-off'));
   ok('side by side is off by default: one editing panel, no reference panel', await cnt('.panel') === 1 && !await q('.panel.ref'));
-  ok('the first content opens, with no name heading above the editor', await txt('.content-item.active .name') === 'Welcome message' && !await q('.content-head h2'));
+  ok('the first content opens, with no name heading above the editor', await txt('.content-item.active .name') === 'Welcome message' && !await q('.main h2'));
+  ok('one toolbar holds Side by side, the comments icon, CSV, Show history and Publish all; Publish all has no count in its label', await b.ev(`(function(){var t=document.querySelector('.toolbar'); return ['[data-change=toggle-side]','.cm-open','[data-action=csv-one]','[data-action=toggle-history-pane]','[data-action=deploy-all]'].every(function(s){return !!t.querySelector(s)}) && t.querySelector('[data-action=deploy-all]').textContent.trim()==='Publish all'})()`));
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
@@ -132,7 +133,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('the CSV file starts with a UTF-8 BOM (EF BB BF) so Excel reads Hindi correctly', JSON.stringify(bom) === '[239,187,191]' && /नमस्ते/.test(allCsv), JSON.stringify(bom));
 
   // ================= rename =================
-  ok('Rename is a pencil on the list item (no Rename button in the header)', await q('.content-item.active .ci-edit svg') && !/Rename/.test(await txt('.content-head')) && await b.ev(`document.querySelector('.content-item.active .ci-edit').getAttribute('aria-label')`) !== '');
+  ok('Rename is a pencil on the list item (no Rename button in the header)', await q('.content-item.active .ci-edit svg') && !/Rename/.test(await txt('.toolbar')) && await b.ev(`document.querySelector('.content-item.active .ci-edit').getAttribute('aria-label')`) !== '');
   await b.click('.content-item.active [data-action=rename-start]');
   ok('clicking it turns the name into a text box inside the list item, focused', await b.ev(`document.activeElement.id`) === 'rename-input' && await q('.content-item.active .ci-rename'));
   await b.fill('#rename-input', 'Visit reminder'); await b.key('Enter', 'Enter', 13);

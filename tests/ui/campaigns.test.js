@@ -21,14 +21,14 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.click('[data-action=select-campaign][data-id=k1]');
   ok('Newborn care filters the list (2 names), title follows', await names() === 'Welcome message, Daily health tip' && await title() === 'Newborn care', await names());
   ok('current selection kept when it is in the campaign', await h2() === 'Welcome message', await h2());
-  ok('the template header has no name heading and no description line (no campaign list either)', !await q('.content-head h2') && !/Campaign|Template name base/.test(await b.ev(`document.querySelector('.content-head').textContent`)));
+  ok('the template header has no name heading and no description line (no campaign list either)', !await q('.content-head') && !await q('.main h2') && !/Template name base/.test(await b.ev(`document.querySelector('.main').textContent`)));
 
   await b.click('[data-action=select-campaign][data-id=k2]');
   ok('Postnatal: 1 name and the editor switches to it', await names() === 'Appointment reminder' && await h2() === 'Appointment reminder', await names() + ' / ' + await h2());
 
   await b.click('[data-action=select-campaign][data-id=k3]');
   ok('empty campaign: no names, helpful empty state in main, no crash',
-    await names() === '' && /No content in this campaign yet/.test(await b.ev(`document.querySelector('.main').textContent`)) && !await q('.content-head'), await names());
+    await names() === '' && /No content in this campaign yet/.test(await b.ev(`document.querySelector('.main').textContent`)) && !await q('.toolbar'), await names());
 
   await b.click('[data-action=open-add]'); await b.type('Polio drops'); await b.click('.add-confirm');
   ok('adding while a campaign is selected files it there, selects it, says so in the toast',
