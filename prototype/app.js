@@ -288,7 +288,7 @@
         return '<button class="list-tab' + (ui.listTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.listTab === t[0]) + '" data-action="set-list-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div>' +
       '<div class="side-tools" id="side-tools">' + sideToolsInner() + '</div>' +
-      '<ul class="content-list' + (ui.listTab === 'flows' ? ' flows-table' : '') + '" id="content-list">' + listHtml() + '</ul>' +
+      '<ul class="content-list' + (ui.listTab === 'flows' ? ' flows-table' : '') + '" id="content-list" data-tab="' + ui.listTab + '">' + listHtml() + '</ul>' +
       '<div class="list-resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the list: drag, or press the left and right arrow keys; double-click to reset" title="Drag to resize (double-click to reset)"></div>' +
       '</aside>';
   }
@@ -1272,11 +1272,11 @@
   function scrollSnapshot() {
     var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas'), l = document.getElementById('content-list');
     var pn = document.querySelector('.panels');
-    return { strip: pn ? pn.scrollLeft : 0, stripTop: pn ? pn.scrollTop : 0, list: l ? l.scrollTop : 0, flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
+    return { strip: pn ? pn.scrollLeft : 0, stripTop: pn ? pn.scrollTop : 0, list: l ? l.scrollTop : 0, listLeft: l ? l.scrollLeft : 0, listTab: l ? l.getAttribute('data-tab') : null, flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
   }
   function scrollRestore(snap) {       // re-rendering the flow editor must not throw you back to the top-left of the canvas
     var lst = document.getElementById('content-list');
-    if (lst) lst.scrollTop = snap.list;
+    if (lst && lst.getAttribute('data-tab') === snap.listTab) { lst.scrollTop = snap.list; lst.scrollLeft = snap.listLeft; }   // the same list, redrawn: it keeps its place both ways (a different tab starts at the top-left)
     var pn2 = document.querySelector('.panels');
     if (pn2) { pn2.scrollLeft = snap.strip; pn2.scrollTop = snap.stripTop; }           // the row of language panels keeps its place when it is redrawn             // the list keeps its place when the page is redrawn (it is the only thing in the column that scrolls)
     var cv = document.getElementById('canvas');

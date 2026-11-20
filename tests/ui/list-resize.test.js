@@ -36,6 +36,20 @@ uiSuite('content column: resize by dragging its edge', async ({ b, ok }) => {
   ok('Flows at the narrowest width: no name or date is cut off with an ellipsis; the text keeps its full width', await b.ev(`[].every.call(document.querySelectorAll('#content-list .flow-item > span, #content-list .flow-item > .name'), function(n){var s=getComputedStyle(n); return s.textOverflow !== 'ellipsis' && s.overflow !== 'hidden' && n.scrollWidth <= n.clientWidth + 1})`));
   ok('instead the list scrolls sideways: it is wider than the column and can be scrolled to see the end of the longest name', await b.ev(`(function(){var l=document.getElementById('content-list'); l.scrollLeft = 10000; var n=l.querySelector('.flow-item:nth-child(12) .name').getBoundingClientRect(), r=l.getBoundingClientRect(); return l.scrollWidth > l.clientWidth + 100 && l.scrollLeft > 100 && n.right <= r.right + 1})()`));
   ok('the whole name is really there: the longest one, "Healthy diet in late pregnancy", fits inside the scrollable width', await b.ev(`(function(){var l=document.getElementById('content-list'), n=[].filter.call(l.querySelectorAll('.name'), function(x){return x.textContent === 'Healthy diet in late pregnancy'})[0]; return !!n && n.getBoundingClientRect().width >= 150})()`));
+  // ---- clicking an item (the page is redrawn) must not throw the list back to the start
+  await b.ev(`(function(){var l=document.getElementById('content-list'); l.scrollLeft = 10000; l.scrollTop = 0; return 1})()`); await b.settle();
+  const sl0 = await b.ev(`document.getElementById('content-list').scrollLeft`);
+  const pt = await b.ev(`(function(){var l=document.getElementById('content-list').getBoundingClientRect(), n=document.querySelector('#content-list .flow-item:nth-child(4) .name').getBoundingClientRect(); return [(Math.max(n.left, l.left) + Math.min(n.right, l.right)) / 2, (n.top + n.bottom) / 2]})()`);   // the visible part of the name
+  await b.clickAt(pt[0], pt[1]);
+  ok('clicking a flow item keeps the list scrolled where it was: the horizontal position is the same after the click (it did go back to the start)', sl0 > 100 && Math.abs(await b.ev(`document.getElementById('content-list').scrollLeft`) - sl0) <= 1 && await q('#content-list .flow-item.active'), sl0 + ' -> ' + await b.ev(`document.getElementById('content-list').scrollLeft`));
+  ok('and the item was selected (it is the active one, the editor shows it)', await b.ev(`document.querySelectorAll('#content-list .flow-item')[3].classList.contains('active')`));
+  await b.ev(`document.getElementById('content-list').scrollLeft = 80; 0`); await b.settle();
+  await b.click('[data-action=toggle-history-pane]');
+  ok('any other redraw (opening the history) keeps the position too', Math.abs(await b.ev(`document.getElementById('content-list').scrollLeft`) - 80) <= 1);
+  await b.click('[data-action=toggle-history-pane]');
+  await b.click('[data-action=set-list-tab][data-tab=templates]'); await b.click('[data-action=set-list-tab][data-tab=flows]');
+  ok('switching tabs starts the other list at its start (the position belongs to the list you redraw)', await b.ev(`document.getElementById('content-list').scrollLeft`) === 0);
+  await drag(-3000);
   await b.ev(`document.getElementById('content-list').scrollLeft = 0; 0`);
   await drag(3000);
   ok('wide again: the rows fill the width of the column (the selected row\'s highlight reaches the edge) and there is no sideways scrolling', await b.ev(`(function(){var l=document.getElementById('content-list'), r=l.querySelector('.flow-item').getBoundingClientRect(), lr=l.getBoundingClientRect(); return l.scrollWidth <= l.clientWidth + 1 && r.right >= lr.right - 16})()`));
