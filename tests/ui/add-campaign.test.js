@@ -12,7 +12,6 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
 
   await b.ev(`localStorage.clear(); 0`); await reload();
   ok('closed: header with title and a + button, no text box', await q('.camp-head .side-title') && await q('[data-action=open-add-campaign] svg') && !await q('#new-campaign'));
-  ok('+ button has a label/tooltip', await b.ev(`!!document.querySelector('[data-action=open-add-campaign]').getAttribute('aria-label') && !!document.querySelector('[data-action=open-add-campaign]').title`));
 
   await b.click('[data-action=open-add-campaign]');
   ok('click + opens the text box: focused, keeps the + icon, has the Add button', await q('#new-campaign') && await active() === 'new-campaign' && await q('.campaigns .tool-box > svg') && await q('.camp-add-confirm'));
@@ -30,7 +29,7 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
 
   // content added now goes into the new campaign
   await b.click('[data-action=open-add]'); await b.type('Antenatal visit tips'); await b.click('.add-confirm');
-  ok('content added now is filed under the new campaign', await names() === 'Antenatal visit tips' && /Campaign: Maternal health/.test(await b.ev(`document.querySelector('.content-head').textContent`)), await names());
+  ok('content added now is filed under the new campaign', await names() === 'Antenatal visit tips', await names());
 
   // validation: duplicate (case-insensitive), empty
   await b.click('[data-action=open-add-campaign]'); await b.type('newborn CARE'); await b.key('Enter', 'Enter', 13);

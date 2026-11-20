@@ -13,7 +13,7 @@
     refLang: null,       // read-only reference language (side-by-side)
     editLang: null,      // language being edited (also the active tab when side-by-side is off)
     historyOpen: false,  // right sidebar visible (hidden by default)
-    commentsOpen: false, // the "Show comments" list is open
+    commentsOpen: false, // the right sidebar shows comments (instead of history)
     commentsTab: 'open', // 'open' | 'resolved'
     cmTarget: null,      // what the next comment is about: { scope, lang, part, idx, start, end, quote } | { scope, nodeId }
     cmDraft: '',         // the comment being written (kept across re-renders)
@@ -294,24 +294,22 @@
   }
 
   function headHtml(c) {
-    var title = ui.renaming
-      ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(c.name) + '">' +
+    // no name heading and no description line (the name is in the list on the left); Rename sits with the other actions
+    var rename = ui.renaming
+      ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(c.name) + '" aria-label="Content name">' +
         '<button class="btn primary" data-action="rename-save">Save</button><button class="btn" data-action="rename-cancel">Cancel</button></div>'
-      : '<h2>' + esc(c.name) + '</h2><button class="btn link" data-action="rename-start">Rename</button>';
+      : '';
     var blockWhy = S.blockProblem(c);
     var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="content-head">' +
-      '<div><div class="title">' + title + '</div>' +
-      '<div class="muted small">Template name base: <code>' + esc(S.slugOf(c)) + '</code> · ' + c.translations.length + ' language' + (c.translations.length === 1 ? '' : 's') +
-      (c.campaignIds.length ? ' · ' + (c.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(c.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
-      '<div class="actions">' +
+      '<div>' + rename + '</div>' +
+      '<div class="actions">' + cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
+      (ui.renaming ? '' : '<button class="btn" data-action="rename-start" title="Rename ' + esc(c.name) + '">Rename</button>') +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Block template approval</label>') +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
-      '<button class="btn icon" data-action="json-one" title="Download the orchestrator\'s extra_content JSON (placeholders, header, buttons, footer) for ' + esc(c.name) + '" aria-label="Download extra_content JSON">' + ICON_DOWNLOAD + '<span>JSON</span></button>' +
       '<button class="btn deploy" data-action="deploy-all"' + (deployable ? '' : ' disabled') + '>Publish all' + (deployable ? ' (' + deployable + ')' : '') + '</button>' +
       '</div></div>' +
-      (c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '') +
-      commentsHtml({ kind: 'content', id: c.id, c: c });
+      (c.blocked ? '<div class="banner">Template approval is blocked for this content. Publishing is disabled, and it stays free-text only.</div>' : '');
   }
 
   function langOptions(c, selected, exclude) {
@@ -604,7 +602,7 @@
       (body ? '<div class="event-body">' + body + '</div>' : '') + '</li>';
   }
 
-  // ---- comments: add at the top, list under "Show comments" (Open | Resolved), badges on the parts ------------------
+  // ---- comments: a button at the top opens the right sidebar (composer on top, comments as pills, Open | Resolved), badges on the parts ----
   // The composer at the top of a template / flow adds a comment about the whole thing, a part (body, header, footer, a button) or, for
   // body / footer / button text, the text you selected in the field (the selection is picked up as you make it and shown as a quote).
   // On a flow, about a node (the 💬 on a node, or the dropdown). Resolved comments leave the Open list and sit under Resolved.
@@ -677,34 +675,36 @@
       }
       goto = !!m.part;
     }
-    return '<li class="cm-item' + (m.resolved ? ' resolved' : '') + '" data-comment="' + m.id + '">' +
-      '<div class="cm-head"><strong>' + esc(m.author) + '</strong><span class="muted small">' + esc(fmtTime(m.createdAt)) + '</span><span class="chip">' + esc(where) + '</span></div>' +
+    return '<li class="cm-item cm-pill' + (m.resolved ? ' resolved' : '') + '" data-comment="' + m.id + '">' +
+      '<div class="cm-head"><span class="chip">' + esc(where) + '</span></div>' +
       (m.quote ? '<blockquote class="cm-q' + (loc && loc.state === 'gone' ? ' gone' : '') + '">“' + esc(m.quote) + '”' + (note ? ' <span class="muted small">' + note + '</span>' : '') + '</blockquote>' : '') +
       '<div class="cm-text">' + esc(m.text) + '</div>' +
+      '<div class="cm-meta muted small"><strong>' + esc(m.author) + '</strong> · ' + esc(fmtTime(m.createdAt)) + '</div>' +
       (m.resolved ? '<div class="muted small">Resolved by ' + esc(m.resolvedBy) + ' · ' + esc(fmtTime(m.resolvedAt)) + '</div>' : '') +
       '<div class="cm-actions">' + (goto ? '<button class="btn link" data-action="cm-goto" data-comment="' + m.id + '">Go to</button>' : '') +
       (m.resolved ? '<button class="btn link" data-action="cm-reopen" data-comment="' + m.id + '">Reopen</button>'
         : '<button class="btn" data-action="cm-resolve" data-comment="' + m.id + '">Resolve</button>') + '</div></li>';
   }
-  function commentsHtml(scope) {
-    if (!scope) return '';
+  function cmButtonHtml(scope) {            // "Comments (n)" in the header of a template / flow: opens the right sidebar
+    var n = S.commentsFor(cmWhere(scope), 'open').length;
+    return '<button class="btn cm-open' + (ui.commentsOpen ? ' on' : '') + '" data-action="cm-toggle" aria-pressed="' + !!ui.commentsOpen + '" title="' + (ui.commentsOpen ? 'Hide' : 'Show') + ' the comments sidebar">💬 Comments (' + n + ')</button>';
+  }
+  // the right sidebar in comments mode: the composer on top, then the comments as message pills (Open | Resolved)
+  function commentsPaneInner(scope) {
     var open = S.commentsFor(cmWhere(scope), 'open'), done = S.commentsFor(cmWhere(scope), 'resolved');
-    var list = '';
-    if (ui.commentsOpen) {
-      var showing = ui.commentsTab === 'resolved' ? done : open;
-      list = '<div class="cm-list"><div class="hp-tabs" role="tablist">' +
-        [['open', 'Open (' + open.length + ')'], ['resolved', 'Resolved (' + done.length + ')']].map(function (t) {
-          return '<button class="hp-tab' + (ui.commentsTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.commentsTab === t[0]) + '" data-action="cm-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
-        }).join('') + '</div>' +
-        (showing.length ? '<ul class="cm-items">' + showing.map(function (m) { return cmItemHtml(scope, m); }).join('') + '</ul>'
-          : '<div class="hint">' + (ui.commentsTab === 'resolved' ? 'No resolved comments.' : 'No open comments.') + '</div>') + '</div>';
-    }
-    return '<section class="comments" id="comments" aria-label="Comments"><div class="cm-bar">' +
+    var showing = ui.commentsTab === 'resolved' ? done : open;
+    return '<div class="hp-head"><div class="hp-top"><h3>Comments</h3><span class="grow"></span>' +
+      '<button class="btn link" data-action="cm-toggle" title="Hide comments">Hide</button></div></div>' +
+      '<section class="comments" id="comments" aria-label="New comment">' +
       '<label class="cm-on"><span class="muted small">Comment on</span><span id="cm-target-wrap" class="cm-target-wrap">' + cmSelectHtml(scope) + '</span></label>' +
-      '<textarea id="cm-text" rows="1" class="field cm-text-in" placeholder="Add a comment…" title="Ctrl+Enter adds the comment" aria-label="New comment" maxlength="' + S.COMMENT_MAX + '">' + esc(ui.cmDraft) + '</textarea>' +
-      '<button class="btn primary" data-action="cm-add">Add comment</button>' +
-      '<button class="btn" data-action="cm-toggle" aria-expanded="' + !!ui.commentsOpen + '">' + (ui.commentsOpen ? 'Hide' : 'Show') + ' comments (' + open.length + ')</button>' +
-      '</div>' + list + '</section>';
+      '<textarea id="cm-text" rows="3" class="field cm-text-in" placeholder="Add a comment…" title="Ctrl+Enter adds the comment" aria-label="New comment" maxlength="' + S.COMMENT_MAX + '">' + esc(ui.cmDraft) + '</textarea>' +
+      '<div class="cm-send"><span class="muted small">Ctrl+Enter</span><button class="btn primary" data-action="cm-add">Add comment</button></div></section>' +
+      '<div class="cm-list"><div class="hp-tabs" role="tablist">' +
+      [['open', 'Open (' + open.length + ')'], ['resolved', 'Resolved (' + done.length + ')']].map(function (t) {
+        return '<button class="hp-tab' + (ui.commentsTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.commentsTab === t[0]) + '" data-action="cm-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
+      }).join('') + '</div>' +
+      (showing.length ? '<ul class="cm-items">' + showing.map(function (m) { return cmItemHtml(scope, m); }).join('') + '</ul>'
+        : '<div class="hint">' + (ui.commentsTab === 'resolved' ? 'No resolved comments.' : 'No open comments.') + '</div>') + '</div>';
   }
   function refreshCmTarget() {
     var scope = cmScopeNow(), el = document.getElementById('cm-target-wrap');
@@ -735,7 +735,7 @@
     else if (t && t.part) { where.lang = t.lang; where.part = t.part; if (t.idx !== undefined) where.idx = t.idx; if (t.quote) { where.start = t.start; where.end = t.end; where.quote = t.quote; } }
     var r = S.addComment(where, ui.cmDraft);
     if (!r.ok) { toast(r.error, true); return; }
-    ui.cmDraft = ''; ui.cmTarget = null; ui.commentsOpen = true; ui.commentsTab = 'open';
+    ui.cmDraft = ''; ui.cmTarget = null; ui.commentsOpen = true; ui.historyOpen = false; ui.commentsTab = 'open';
     toast('Comment added');
     render();
   }
@@ -1169,8 +1169,7 @@
     return '<div class="content-head"><div><div class="title">' + title + '</div>' +
       '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
-      (ui.historyOpen ? '' : '<div class="actions"><button class="btn" data-action="toggle-history-pane">Show history</button></div>') + '</div>' +
-      commentsHtml({ kind: 'flow', id: f.id, f: f }) +
+      '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane">Show history</button>') + '</div></div>' +
       '<div class="flow-card"><div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
@@ -1290,8 +1289,11 @@
       ? headHtml(c) + editHtml(c)
       : '<div class="hint">No content in ' + (ui.campaignId ? 'this campaign' : 'the list') + ' yet. Use the + button in the left bar to add one.</div>';
     var subject = currentFlow() || (ui.listTab === 'flows' ? (fi && fi.kind === 'template' ? c : null) : c);
-    var pane = subject && ui.historyOpen ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (pane && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    var cmScope = ui.commentsOpen ? cmScopeNow() : null;
+    var histShown = !cmScope && subject && ui.historyOpen;
+    var pane = cmScope ? '<aside class="history-pane comments-pane" id="comments-pane">' + commentsPaneInner(cmScope) + '</aside>'
+      : histShown ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
@@ -2002,15 +2004,15 @@
       case 'new-content': addContent(); return;
       case 'pick-lang': ui.editLang = lang; break;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
-      case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; break;
+      case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
       case 'hist-tab': {
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';
         updateHistoryPane();
         return;
       }
       case 'cm-add': addCommentFromUi(); return;
-      case 'cm-toggle': ui.commentsOpen = !ui.commentsOpen; break;
-      case 'cm-show': ui.commentsOpen = true; ui.commentsTab = 'open'; break;
+      case 'cm-toggle': ui.commentsOpen = !ui.commentsOpen; if (ui.commentsOpen) ui.historyOpen = false; break;
+      case 'cm-show': ui.commentsOpen = true; ui.historyOpen = false; ui.commentsTab = 'open'; break;
       case 'cm-tab': ui.commentsTab = el.getAttribute('data-tab') === 'resolved' ? 'resolved' : 'open'; break;
       case 'cm-clear-quote': if (ui.cmTarget) { ui.cmTarget.quote = undefined; ui.cmTarget.start = ui.cmTarget.end = undefined; } refreshCmTarget(); return;
       case 'cm-resolve': if (!result(S.setCommentResolved(el.getAttribute('data-comment'), true), 'Comment resolved')) return; break;
@@ -2020,6 +2022,7 @@
         var sc2 = cmScopeNow();
         if (!sc2 || sc2.kind !== 'flow') return;
         ui.cmTarget = { scope: sc2.id, nodeId: el.getAttribute('data-node') };
+        ui.commentsOpen = true; ui.historyOpen = false;
         ui.focusNext = '#cm-text';
         break;
       }
@@ -2071,7 +2074,6 @@
         return;
       }
       case 'remove-header': result(S.setHeaderType(c.id, 'none'), 'Header removed from every language'); break;
-      case 'json-one': download(S.slugOf(c) + '.extra_content.json', JSON.stringify(S.toExtraContent(c.id), null, 2) + '\n', 'application/json'); return;
       case 'csv-all': download('content-' + today() + '.csv', S.toCsv()); return;
       case 'csv-one': download(S.slugOf(c) + '-' + today() + '.csv', S.toCsv([c.id])); return;
       case 'reset':

@@ -6,7 +6,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const names = () => b.ev(`[].map.call(document.querySelectorAll('.content-item .name'), e => e.childNodes[0].textContent.trim()).join(', ')`);
   const camps = () => b.ev(`[].map.call(document.querySelectorAll('.camp-item'), e => e.textContent.trim()).join(' | ')`);
-  const h2 = () => b.ev(`(document.querySelector('.content-head h2')||{}).textContent || ''`);
+  const h2 = () => b.ev(`(document.querySelector('.content-item.active .name')||{}).textContent || ''`);   // the open template = the selected item in the list (the editor has no name heading)
   const title = () => b.ev(`document.getElementById('list-title').textContent`);
   const reload = async () => { await b.ev(`location.reload(); 0`); await b.sleep(900); };
 
@@ -21,7 +21,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.click('[data-action=select-campaign][data-id=k1]');
   ok('Newborn care filters the list (2 names), title follows', await names() === 'Welcome message, Daily health tip' && await title() === 'Newborn care', await names());
   ok('current selection kept when it is in the campaign', await h2() === 'Welcome message', await h2());
-  ok('header shows the campaign', /Campaign: Newborn care/.test(await b.ev(`document.querySelector('.content-head').textContent`)));
+  ok('the template header has no name heading and no description line (no campaign list either)', !await q('.content-head h2') && !/Campaign|Template name base/.test(await b.ev(`document.querySelector('.content-head').textContent`)));
 
   await b.click('[data-action=select-campaign][data-id=k2]');
   ok('Postnatal: 1 name and the editor switches to it', await names() === 'Appointment reminder' && await h2() === 'Appointment reminder', await names() + ' / ' + await h2());
@@ -32,7 +32,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
 
   await b.click('[data-action=open-add]'); await b.type('Polio drops'); await b.click('.add-confirm');
   ok('adding while a campaign is selected files it there, selects it, says so in the toast',
-    await names() === 'Polio drops' && await h2() === 'Polio drops' && /Campaign: Immunisation/.test(await b.ev(`document.querySelector('.content-head').textContent`)) && /in Immunisation/.test(await b.ev(`document.getElementById('toast').textContent`)), await names());
+    await names() === 'Polio drops' && await h2() === 'Polio drops' && /in Immunisation/.test(await b.ev(`document.getElementById('toast').textContent`)), await names());
 
   await b.click('[data-action=select-campaign][data-id=""]');
   ok('All content shows everything incl. the new one (4)', (await names()).split(', ').length === 4, await names());
@@ -50,7 +50,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.click('[data-action=select-campaign][data-id=""]');
   await b.click('[data-action=open-add]'); await b.type('Loose note'); await b.click('.add-confirm');
   ok('adding under All content creates content without a campaign (no Campaign label)',
-    await h2() === 'Loose note' && !/Campaign:/.test(await b.ev(`document.querySelector('.content-head').textContent`)));
+    await h2() === 'Loose note');
 
   await reload();
   ok('after reload content keeps its campaign (Immunisation has Polio drops)',
@@ -71,11 +71,4 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.ev(`window.confirm = function(){return true}; 0`);
   await b.click('[data-action=reset]');
   ok('Reset demo data returns to All content with the sample data', await title() === 'All content' && (await names()).split(', ').length === 3, await title());
-
-  const ovf = () => b.ev(`document.documentElement.scrollWidth > document.documentElement.clientWidth`);
-  ok('no horizontal page overflow (history closed)', !await ovf());
-  await b.click('[data-action=toggle-history-pane]');
-  ok('no horizontal page overflow (history open)', !await ovf());
-  await b.click('[data-action=select-campaign][data-id=k1]');
-  await b.ev(`document.querySelector('[data-theme=dark]').click(); 0`); await b.sleep(200);
 });

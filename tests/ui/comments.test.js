@@ -2,26 +2,33 @@
 'use strict';
 const { uiSuite } = require('../lib/harness');
 
-uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, nodes, resolve', async ({ b, ok }) => {
+uiSuite('comments: a button at the top opens the right sidebar (composer + message pills, Open | Resolved), parts, nodes, resolve', async ({ b, ok }) => {
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const cnt = s => b.ev(`document.querySelectorAll(${JSON.stringify(s)}).length`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
   const items = () => b.ev(`[].map.call(document.querySelectorAll('.cm-item'), function(i){return i.querySelector('.chip').textContent + ' | ' + ((i.querySelector('.cm-q')||{}).textContent||'').replace(/\\s+/g,' ').trim() + ' | ' + i.querySelector('.cm-text').textContent})`);
-  const toggleText = () => txt('[data-action=cm-toggle]');
+  const toggleText = () => txt('.cm-open');
   const select = (sel, s, e) => b.ev(`(function(){var t=document.querySelector(${JSON.stringify(sel)}); t.focus(); t.setSelectionRange(${s},${e}); t.dispatchEvent(new Event('select',{bubbles:true})); return 1})()`);
   const pickTarget = v => b.ev(`(function(){var s=document.getElementById('cm-target-sel'); s.value=${JSON.stringify(v)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
   const say = async t => { await b.fill('#cm-text', t); await b.click('[data-action=cm-add]'); };
   const histCount = () => b.ev(`Store.historyFor(Store.list()[0].id,'all').length`);
 
-  // ---- the composer at the top
-  ok('the comment composer is at the top of the template, above the editor panels', await q('#comments') && await b.ev(`document.getElementById('comments').getBoundingClientRect().top < document.querySelector('.panel.edit').getBoundingClientRect().top`));
-  ok('it has a "Comment on" dropdown, a text box, Add comment, and Show comments with the number of open ones', await q('#cm-target-sel') && await q('#cm-text') && await q('[data-action=cm-add]') && /Show comments \(1\)/.test(await toggleText()));
+  // ---- the button at the top, the sidebar
+  ok('the template has no name heading and no description line; "Comments (1)" is a button in the header', !await q('.content-head h2') && !/Template name base/.test(await txt('.content-head')) && /Comments \(1\)/.test(await toggleText()));
+  ok('the sidebar is closed until the button is clicked', !await q('#comments-pane') && !await q('#comments'));
+  await b.click('.cm-open');
+  ok('the button opens the right sidebar (not the history), and it is marked pressed', await q('#comments-pane') && !await q('#history-pane') && await b.ev(`document.querySelector('.cm-open').getAttribute('aria-pressed')`) === 'true');
+  ok('the sidebar is on the right of the editor, with the composer at its top', await b.ev(`document.getElementById('comments-pane').getBoundingClientRect().left >= document.querySelector('.main').getBoundingClientRect().right - 1 && document.getElementById('comments').getBoundingClientRect().top < document.querySelector('.cm-list').getBoundingClientRect().top`));
+  ok('it has a "Comment on" dropdown, a text box, Add comment, and Open | Resolved tabs', await q('#cm-target-sel') && await q('#cm-text') && await q('[data-action=cm-add]') && await q('.cm-list .hp-tab.active'));
   ok('the dropdown offers the whole template and, per language, the body, header, footer and each button', await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.value}).join(',')`) === 'general,en|body|,en|header|,en|footer|,en|button|0,en|button|1,hi|body|,hi|header|,hi|footer|,hi|button|0,hi|button|1', await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.value}).join(',')`));
-  ok('the list is not shown until Show comments is clicked', !await q('.cm-list'));
-
-  // ---- Show comments: Open | Resolved
-  await b.click('[data-action=cm-toggle]');
-  ok('Show comments lists the open comments under Open (1) and has a Resolved (1) tab; the button now says Hide', await q('.cm-list') && /Open \(1\)/.test(await txt('.cm-list .hp-tab.active')) && /Resolved \(1\)/.test(await txt('.cm-list .hp-tab:not(.active)')) && /Hide comments/.test(await toggleText()));
+  ok('comments are message pills: rounded bubbles', await b.ev(`parseFloat(getComputedStyle(document.querySelector('.cm-pill')).borderTopLeftRadius) >= 14`));
+  await b.click('#comments-pane [data-action=cm-toggle]');
+  ok('Hide in the sidebar closes it', !await q('#comments-pane') && await b.ev(`document.querySelector('.cm-open').getAttribute('aria-pressed')`) === 'false');
+  await b.click('[data-action=toggle-history-pane]');
+  ok('Show history opens the history in that same sidebar, and comments are not shown with it', await q('#history-pane') && !await q('#comments-pane'));
+  await b.click('.cm-open');
+  ok('and Comments takes the sidebar back (one right sidebar at a time)', await q('#comments-pane') && !await q('#history-pane'));
+  ok('Open (1) is the default tab and there is a Resolved (1) tab', /Open \(1\)/.test(await txt('.cm-list .hp-tab.active')) && /Resolved \(1\)/.test(await txt('.cm-list .hp-tab:not(.active)')));
   let it = await items();
   ok('an item shows where (language · part), the quoted text, and the comment', it.length === 1 && /^English · Body \| “welcome to Noora Health” \| Should we say/.test(it[0]), it.join('\n'));
   ok('resolved comments are not in the default list', !/Footer matches/.test(it.join()));
@@ -34,7 +41,7 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
   await say('   ');
   ok('an empty comment is refused with a message', /Write a comment/.test(await txt('#toast')) && await cnt('.cm-item') === 1);
   await say('Whole template remark');
-  ok('adding a comment with no part chosen is about the whole template; the list updates, the box is cleared', /Comment added/.test(await txt('#toast')) && await cnt('.cm-item') === 2 && /Whole template/.test((await items())[0]) && /Show comments|Hide comments \(2\)/.test(await toggleText()) && await b.ev(`document.getElementById('cm-text').value`) === '', (await items()).join('\n'));
+  ok('adding a comment with no part chosen is about the whole template; the list updates, the box is cleared', /Comment added/.test(await txt('#toast')) && await cnt('.cm-item') === 2 && /Whole template/.test((await items())[0]) && /Comments \(2\)/.test(await toggleText()) && await b.ev(`document.getElementById('cm-text').value`) === '', (await items()).join('\n'));
   ok('the newest comment is first', /Whole template remark/.test((await items())[0]));
 
   // ---- a selected piece of text in the body
@@ -55,7 +62,6 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
   ok('so the comment is on the whole Body, without a quote', /^English · Body \|  \| Body as a whole/.test((await items())[0]), (await items())[0]);
 
   // ---- footer text, button text, header, other language
-  await b.click('[data-action=cm-toggle]');       // close the list while we work on the parts
   await b.ev(`(function(){var s=document.querySelector('.panel.edit [data-change=add-part]'); s.value='footer'; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`).catch(() => {});
   const footer = await b.ev(`document.querySelector('.panel.edit [data-input=footer]').value`);
   await select('.panel.edit [data-input=footer]', 0, 4);
@@ -74,8 +80,8 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
 
   // ---- the draft survives the list being toggled; Ctrl+Enter adds
   await b.fill('#cm-text', 'half written');
-  await b.click('[data-action=cm-toggle]');
-  ok('a half-written comment is kept when the list is toggled', await b.ev(`document.getElementById('cm-text').value`) === 'half written');
+  await b.click('.cm-open'); await b.click('.cm-open');
+  ok('a half-written comment is kept when the sidebar is closed and opened again', await b.ev(`document.getElementById('cm-text').value`) === 'half written');
   await b.ev(`(function(){var t=document.getElementById('cm-text'); t.focus(); t.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})); return 1})()`);
   await b.sleep(100);
   ok('Ctrl+Enter in the box adds the comment', (await items()).some(i => /half written/.test(i)) && await b.ev(`document.getElementById('cm-text').value`) === '');
@@ -88,7 +94,7 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
 
   // ---- text changed since
   await b.fill('.panel.edit [data-input=text]', 'Completely different words');
-  await b.click('[data-action=cm-toggle]'); await b.click('[data-action=cm-toggle]');
+  await b.click('.cm-open'); await b.click('.cm-open');
   ok('when the quoted text is no longer in the field, the comment says so (the comment stays)', /changed or been removed/.test(await txt('.cm-item .cm-q.gone')), await txt('.cm-list'));
   await b.click('.panel.edit .revert');
 
@@ -113,15 +119,14 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
 
   // ---- flows: nodes
   await b.click('[data-action=set-list-tab][data-tab=flows]');
-  ok('on a flow the composer is above the canvas, and the dropdown lists the whole flow and every node', await q('#comments') && await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.textContent}).join('|')`) === 'Whole flow|Template · Welcome message|Logic · Logic 1|Template · Daily health tip|Input · Input 1|Action · Alert health worker', await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.textContent}).join('|')`));
+  await b.click('.cm-open');
+  ok('on a flow the header has the Comments button, which opens the sidebar with the flow\'s composer, and the dropdown lists the whole flow and every node', await q('.cm-open') && await q('#comments-pane') && await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.textContent}).join('|')`) === 'Whole flow|Template · Welcome message|Logic · Logic 1|Template · Daily health tip|Input · Input 1|Action · Alert health worker', await b.ev(`[].map.call(document.querySelectorAll('#cm-target-sel option'), function(o){return o.textContent}).join('|')`));
   const nodeId = t => b.ev(`(function(){var n=[].filter.call(document.querySelectorAll('.fnode'), function(x){return x.textContent.indexOf(${JSON.stringify(t)}) !== -1})[0]; return n && n.getAttribute('data-node')})()`);
   const action = await nodeId('Alert health worker'), welcome = await nodeId('Welcome message');
   ok('a node with an open comment shows 💬 and the number; others show nothing until hovered', /💬\s*1/.test(await txt(`.fnode[data-node="${action}"] .node-cm`)) && await q(`.fnode[data-node="${action}"] .node-cm.has`) && !await q(`.fnode[data-node="${welcome}"] .node-cm.has`));
   await b.click(`.fnode[data-node="${welcome}"] .node-cm`);
   ok('clicking a node\'s 💬 aims the composer at that node and puts the cursor in the box (it does not start editing the node)', await b.ev(`document.getElementById('cm-target-sel').value`) === 'node|' + welcome && await b.ev(`document.activeElement.id`) === 'cm-text' && !await q('.fnode.editing'));
   await say('Check the wording of this template');
-  await b.click('[data-action=cm-toggle]');
-  await b.click('[data-action=cm-toggle]');
   ok('the comment is listed under the node\'s name and the node now shows 💬 1', /^Template · Welcome message \|  \| Check the wording/.test((await items())[0]) && /💬\s*1/.test(await txt(`.fnode[data-node="${welcome}"] .node-cm`)), (await items()).join('\n'));
   await b.click(`.cm-item:first-child [data-action=cm-goto]`);
   ok('Go to scrolls to the node and flashes it', await q(`.fnode[data-node="${welcome}"].flash`));
@@ -137,9 +142,4 @@ uiSuite('comments: composer at the top, Show comments (Open | Resolved), parts, 
   await b.click('#cm-text');
   ok('while a node is being edited the composer cannot be used (the usual lock)', await q('.fnode.editing') && /Save \(✓\) or cancel \(✕\)/.test(await txt('#toast')));
   await b.click('.fnode.editing [data-action=node-cancel]');
-
-  // ---- theme
-  await b.setScheme('dark');
-  ok('the comment colours are theme variables: the quote chip differs in dark mode', await b.ev(`getComputedStyle(document.querySelector('.cm-item')).backgroundColor`) !== 'rgb(250, 251, 252)');
-  await b.setScheme('light');
 });

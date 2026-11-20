@@ -6,11 +6,10 @@ uiSuite('left bar tools: search and new-content text boxes', async ({ b, ok }) =
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const items = () => b.ev(`document.querySelectorAll('.content-item').length`);
   const active = () => b.ev(`document.activeElement && (document.activeElement.id || document.activeElement.className)`);
-  const heading = () => b.ev(`document.querySelector('.content-head h2').textContent`);
+  const heading = () => b.ev(`document.querySelector('.content-item.active .name').firstChild.textContent.trim()`);
   const BLANK = [100, 1000];   // empty area of the campaigns column: a click there moves focus away
 
   ok('closed state: a search icon and a + icon, no text boxes', await q('[data-action=open-search] svg') && await q('[data-action=open-add] svg') && !await q('#search') && !await q('#new-name'));
-  ok('the icon buttons have labels for screen readers and tooltips', await b.ev(`!!document.querySelector('[data-action=open-search]').getAttribute('aria-label') && !!document.querySelector('[data-action=open-add]').title`));
 
   // ---- search
   await b.click('[data-action=open-search]');

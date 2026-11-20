@@ -30,13 +30,13 @@ run here is reported as **skipped** with the reason, never as a pass.
 | `ui/campaigns.test.js`, `ui/add-campaign.test.js` | Campaigns sidebar: filtering, creating content inside a campaign, adding campaigns, old saved data. |
 | `ui/drag-drop.test.js` | Real mouse drags: the grip handle, the Copy / Move / Cancel dialog, "Can't move". |
 | `ui/language-consistency.test.js` | Mismatches between a template's languages: button count / type, header, footer (errors that block publishing while saving works) and placeholder names (warning only), live in the editor. |
-| `ui/comments.test.js` | Comments: the composer at the top, selecting text in body / footer / button picks up a quote, header and other-language parts, Show comments with Open | Resolved, Resolve / Reopen, badges, Go to, text that changed, flow nodes (💬 on a node), the node-edit lock, not in the history. (Unit tests in `store.test.js`.) |
+| `ui/comments.test.js` | Comments: the Comments button and right sidebar (composer, message pills), selecting text in body / footer / button picks up a quote, header and other-language parts, Open | Resolved with Open | Resolved, Resolve / Reopen, badges, Go to, text that changed, flow nodes (💬 on a node), the node-edit lock, not in the history. (Unit tests in `store.test.js`.) |
 | `ui/rewind.test.js` | The history sidebar's two tabs: Content (the tree of content steps) and Other (the linear list of the rest): one line per step (what, who, when), Details panels, git-like lanes, current marker, Rewind as a new step, branches, disabled while unsaved, kept after reload. (Unit tests in `store.test.js`: snapshots, rewind rules, `historyTree` lanes, migration.) |
 | `ui/header-media.test.js` | Uploading the header file: image / video / PDF previewed in the editor, the phone and the reference panel; WhatsApp type and size limits, replace / remove, kept after reload, wrong kind for the header type. (Unit tests cover the rules in `store.test.js`.) |
 | `ui/preview.test.js` | The phone preview dialog: opens only on the Preview button, placeholders filled with defaults, formatting, header / footer / buttons, unsaved edits as a snapshot, reference panel, focus and closing, light / dark. |
-| `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, JSON export. |
+| `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, CSV export. |
 | `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
-| `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV/JSON downloads, rename, reset. |
+| `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV downloads, rename, reset. |
 
 ## How the browser tests work
 

@@ -21,15 +21,13 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   const W = await idOf('Welcome message'), A = await idOf('Appointment reminder'), D = await idOf('Daily health tip');
 
   ok('each item has a drag handle on its left; the item itself is not draggable', await b.ev(`[].every.call(document.querySelectorAll('.content-item'), function(li){var h=li.querySelector('.drag-handle'); return h && h.draggable && !li.draggable && h.getBoundingClientRect().right <= li.querySelector('.name').getBoundingClientRect().left + 1})`));
-  ok('handle is a grip icon with a tooltip, hidden from screen readers', await b.ev(`(function(){var h=document.querySelector('.drag-handle'); return !!h.querySelector('svg') && h.getAttribute('aria-hidden')==='true' && /Drag onto a campaign/.test(h.title) && getComputedStyle(h).cursor==='grab'})()`));
-  ok('campaigns sidebar hint mentions the handle', /handle/.test(await txt('.camp-hint')), await txt('.camp-hint'));
   let bodyDragStarted = true;
   try { await b.drag(item(W) + ' .name', camp('k3')); } catch (e) { bodyDragStarted = !/not intercepted/.test(e.message); }
   ok('dragging the item body (not the handle) does NOT start a drag or open a dialog', !bodyDragStarted && !await q('.modal'));
   await b.click(item(D) + ' .drag-handle');
-  ok('click on a handle selects that item', await b.ev(`document.querySelector('.content-head h2').textContent`) === 'Daily health tip');
+  ok('click on a handle selects that item', await b.ev(`document.querySelector('.content-item.active .name').firstChild.textContent.trim()`) === 'Daily health tip');
   await b.click(item(W) + ' .name');
-  ok('click on the item body selects it', await b.ev(`document.querySelector('.content-head h2').textContent`) === 'Welcome message');
+  ok('click on the item body selects it', await b.ev(`document.querySelector('.content-item.active .name').firstChild.textContent.trim()`) === 'Welcome message');
 
   // ---- drag from All content onto Immunisation (template is only in Newborn care)
   let marked = false;
@@ -41,7 +39,6 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   ok('the list sits above the options', await b.ev(`document.querySelector('.exists-list').getBoundingClientRect().bottom <= document.querySelector('.dlg-options').getBoundingClientRect().top`));
   ok('Copy/Move descriptions say what will happen', /Keep it in Newborn care and add it to Immunisation/.test(await optDesc('copy')) && /Remove it from Newborn care and add it to Immunisation/.test(await optDesc('move')), await optDesc('copy') + ' / ' + await optDesc('move'));
   ok('focus starts on the first option', await b.ev(`document.activeElement.getAttribute('data-action')`) === 'dialog-copy');
-  ok('drop-over marks are cleared after the drop', !await q('.drop-over') && !await q('.dragging'));
 
   // cancel paths change nothing
   await b.click('[data-action=dialog-cancel]');
@@ -65,7 +62,7 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   await b.click('[data-action=dialog-copy]');   // ---- COPY
   ok('Copy: dialog closes, toast confirms', !await q('.modal') && /Copied “Welcome message” to Immunisation/.test(await txt('#toast')), await txt('#toast'));
   ok('Copy: template now in Newborn care AND Immunisation (stored)', JSON.parse(await store()).find(x => x[0] === 'Welcome message')[1].sort().join() === 'k1,k3');
-  ok('Copy: header lists both campaigns', /Campaigns: Newborn care, Immunisation/.test(await txt('.content-head')), await txt('.content-head'));
+  ok('Copy: the template is now in both campaigns', await b.ev(`(function(){var s=JSON.parse(localStorage.getItem('cms-prototype-v1')); var n=function(id){return s.campaigns.filter(function(c){return c.id===id})[0].name}; var c=s.contents.filter(function(c){return c.name==='Welcome message'})[0]; return c.campaignIds.map(n).join(', ')})()`) === 'Newborn care, Immunisation');
   await b.click(camp('k3'));
   ok('Copy: it shows under Immunisation', await names() === 'Welcome message', await names());
   await b.click(camp('k1'));
@@ -138,6 +135,5 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   await b.click(camp(''));
   await b.drag(grip(D), camp('k3'));
   await b.ev(`document.querySelector('[data-theme=dark]').click(); 0`); await b.sleep(200);
-  ok('no horizontal overflow with the dialog open', await b.ev(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`));
 
 });

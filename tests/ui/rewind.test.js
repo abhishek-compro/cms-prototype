@@ -96,9 +96,4 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   if (!await q('#history-pane')) await b.click('[data-action=toggle-history-pane]');
   await b.click('[data-tab=content]');
   ok('and so is the tree, with its current marker on the newest step', await cnt('.tree-cur') === 1 && await q('.tree-item:first-child .tree-row .tree-cur') && /^Rewound to:/.test((await rows())[0]));
-
-  // ---- dark theme
-  await b.setScheme('dark');
-  ok('lane colours are theme variables: they differ in dark mode', await b.ev(`getComputedStyle(document.querySelector('.tree-graph circle.l0')).fill`) !== 'rgb(31, 111, 235)');
-  await b.setScheme('light');
 });

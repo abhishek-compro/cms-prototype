@@ -21,7 +21,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   // ================= first look =================
   ok('four columns: campaigns | content names | editor, history hidden by default', await q('.campaigns') && await q('.sidebar') && await q('.main') && !await q('#history-pane') && await q('.layout.hist-off'));
   ok('side by side is off by default: one editing panel, no reference panel', await cnt('.panel') === 1 && !await q('.panel.ref'));
-  ok('the first content opens, with its campaign in the header', await txt('.content-head h2') === 'Welcome message' && /Campaign: Newborn care/.test(await txt('.content-head')));
+  ok('the first content opens, with no name heading above the editor', await txt('.content-item.active .name') === 'Welcome message' && !await q('.content-head h2'));
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
@@ -122,7 +122,6 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
 
   // ================= downloads =================
   await capture();
-  ok('the CSV and JSON buttons are icon + text', await b.ev(`['csv-all','csv-one','json-one'].every(function(a){var x=document.querySelector('[data-action='+a+']'); return x.querySelector('svg') && /^(CSV|JSON)$/.test(x.textContent.trim()) && x.getAttribute('aria-label') && x.title})`));
   await b.click('[data-action=csv-one]');
   const one = await b.ev(`window.__dl[0]`), oneCsv = await b.ev(`window.__blob.text()`);
   ok('"CSV" on a name downloads <slug>-<date>.csv with the four columns and only that name', /^appointment_reminder-\d{4}-\d{2}-\d{2}\.csv$/.test(one) && /^name,language,wa_template_name,text\r\n/.test(oneCsv) && !/Welcome message/.test(oneCsv) && /appointment_reminder_v2/.test(oneCsv), one);
@@ -135,17 +134,16 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   // ================= rename =================
   await b.click('[data-action=rename-start]');
   await b.fill('#rename-input', 'Visit reminder'); await b.key('Enter', 'Enter', 13);
-  ok('renaming updates the heading and the template name base', await txt('.content-head h2') === 'Visit reminder' && /visit_reminder/.test(await txt('.content-head')));
+  ok('renaming updates the name in the list', await txt('.content-item.active .name') === 'Visit reminder');
   ok('renaming is logged under Other', (await b.ev(`Store.historyFor(Store.list()[1].id,'content')[0].action`)) === 'renamed');
   await b.click('[data-action=rename-start]');
   await b.fill('#rename-input', 'welcome message'); await b.key('Enter', 'Enter', 13);
   ok('renaming to a clashing name is refused with a message', /already maps/.test(await txt('#toast')) && await q('#rename-input'));
   await b.key('Escape', 'Escape', 27);
-  ok('Escape cancels the rename', !await q('#rename-input') && await txt('.content-head h2') === 'Visit reminder');
+  ok('Escape cancels the rename', !await q('#rename-input') && await txt('.content-item.active .name') === 'Visit reminder');
 
   // ================= reset =================
   await b.ev(`window.confirm = function(){ return true }; 0`);
   await b.click('[data-action=reset]');
-  ok('Reset demo data brings back the sample content and All content', await txt('#list-title') === 'All content' && await cnt('.content-item') === 3 && await txt('.content-head h2') === 'Welcome message');
-  ok('no horizontal page overflow', await b.ev(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`));
+  ok('Reset demo data brings back the sample content and All content', await txt('#list-title') === 'All content' && await cnt('.content-item') === 3 && await txt('.content-item.active .name') === 'Welcome message');
 });

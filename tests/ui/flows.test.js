@@ -89,7 +89,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
 
   // ================= a template that is a flow by itself =================
   await b.click(await tplItem('Appointment reminder'));
-  ok('it opens with a flow card (indicator + "Sent <timing>") above the normal template editor', await q('.flow-card .flow-ind') && /This template is itself a flow/.test(await txt('.flow-card')) && await txt('.content-head h2') === 'Appointment reminder' && await q('.panel.edit'));
+  ok('it opens with a flow card (indicator + "Sent <timing>") above the normal template editor', await q('.flow-card .flow-ind') && /This template is itself a flow/.test(await txt('.flow-card')) && await txt('.content-item.active .name') === 'Appointment reminder' && !await q('.content-head h2') && await q('.panel.edit'));
   ok('the timing starts with the dummy values: 7 days before expected_date_of_delivery', await val('.flow-card [data-t=days]') === '7' && await val('.flow-card [data-t=when]') === 'before' && await val('.flow-card [data-t=ref]') === 'expected_date_of_delivery');
   await setTiming('.flow-card .timing', 3);
   ok('editing the days updates the card, the list and the saved template', await val('.flow-card [data-t=days]') === '3' && await meta('Appointment reminder') === '3 days before expected_date_of_delivery' && await b.ev(`Store.list()[1].timing.days`) === 3, await meta('Appointment reminder'));
@@ -235,7 +235,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('a second template is a second node; its campaigns are unchanged (Welcome message stays only in Newborn care)', await titles() === 'Appointment reminder | Welcome message' && await b.ev(`Store.list()[0].campaignIds.join()`) === 'k1');
   ok('the list entry counts the flow\'s templates', await meta('Postnatal reminders') === '7 days before expected_date_of_delivery · 2 templates', await meta('Postnatal reminders'));
   await b.click((await node('Welcome message')) + ' [data-action=open-template]');
-  ok('the Open link of a template node opens that template in the Templates tab', await b.ev(`document.querySelector('.list-tab.active').textContent.trim()`) === 'Templates' && await txt('.content-head h2') === 'Welcome message');
+  ok('the Open link of a template node opens that template in the Templates tab', await b.ev(`document.querySelector('.list-tab.active').textContent.trim()`) === 'Templates' && await txt('.content-item.active .name') === 'Welcome message');
   await tab('flows');
   ok('back in Flows the flow is still open', await txt('.content-head h2') === 'Postnatal reminders' && await titles() === 'Appointment reminder | Welcome message');
 

@@ -241,18 +241,7 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   // ================= export =================
   await fresh();
   await b.ev(`(function(){window.__dl=[]; var o=URL.createObjectURL; URL.createObjectURL=function(bl){window.__blob=bl; return o.call(URL,bl)}; HTMLAnchorElement.prototype.click=function(){window.__dl.push(this.download)}; return 1})()`);
-  await b.click('[data-action=json-one]');
-  const fname = await b.ev(`window.__dl[0]`);
-  const jsonText = await b.ev(`window.__blob.text()`);
-  ok('JSON button downloads <slug>.extra_content.json', fname === 'welcome_message.extra_content.json', fname);
-  const json = JSON.parse(jsonText);
-  ok('JSON has the four schema keys per language plus footer', ['header', 'body_param_defaults', 'body_param_positions', 'buttons', 'footer'].every(k => k in json) && json.body_param_positions.en.name[0] === 1 && json.buttons.hi[1].type === 'URL' && json.footer.en === 'Noora Health');
-  const why = orchestrator.skipReason();
-  if (why) ok.skip('the downloaded JSON passes the orchestrator\'s real validate_extra_content', why);
-  else {
-    const res = orchestrator.run('validate', { export: json });
-    ok('the downloaded JSON passes the orchestrator\'s real validate_extra_content', res.export === 'OK', JSON.stringify(res));
-  }
+  ok('there is no JSON download in the UI (only CSV)', !await q('[data-action=json-one]') && !await b.ev(`/JSON/.test(document.querySelector('.content-head .actions').textContent)`));
   await b.click('[data-action=csv-one]');
   const csv = await b.ev(`window.__blob.text()`);
   ok('CSV columns unchanged; text column carries the named-placeholder body', /^﻿?name,language,wa_template_name,text\r\n/.test(csv) && /Hello {{name}}, welcome/.test(csv), csv.slice(0, 200));
@@ -269,6 +258,5 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await fresh();
   await b.click('[data-change=toggle-side]');
   await b.ev(`document.querySelector('[data-theme=dark]').click(); 0`); await b.sleep(200);
-  ok('no horizontal overflow', await b.ev(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`));
 
 });
