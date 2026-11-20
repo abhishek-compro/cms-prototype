@@ -371,12 +371,17 @@
       var why = dir < 0 ? (target ? 'Move back to ' + target.label : 'Already with the first group') : (target ? 'Move on to ' + target.label : 'Already with the last group');
       return '<button class="stage-arrow" data-action="stage-' + (dir < 0 ? 'back' : 'next') + '"' + (target ? '' : ' disabled') + ' aria-label="' + esc(why) + '" title="' + esc(why) + '">' + glyph + '</button>';
     }
+    var atLast = idx === S.STAGES.length - 1, finished = atLast && S.stageDone(c);
+    // at the last group the right arrow is replaced by a green Publish button (after it, a quiet "Published")
+    var right = !atLast ? arrow(1, next, CHEVRON_R)
+      : finished ? '<span class="stage-published" role="status">Published</span>'
+      : '<button class="stage-publish" data-action="stage-finish" title="Publish this content and finish the workflow" aria-label="Publish this content and finish the workflow">Publish</button>';
     return '<div class="stages" role="group" aria-label="Where this content is in the workflow">' + arrow(-1, prev, CHEVRON_L) +
       '<ol class="stage-list">' + S.STAGES.map(function (st, i) {
-        var state = i < idx ? 'done' : i === idx ? 'now' : 'todo';
+        var state = i < idx || (i === idx && finished) ? 'done' : i === idx ? 'now' : 'todo';
         return '<li class="stage ' + state + '" data-stage="' + st.id + '"' + (i === idx ? ' aria-current="step" title="This content is with ' + esc(st.label) + ' now"' : '') + '>' +
           '<span class="stage-dot" aria-hidden="true"></span><span class="stage-label">' + esc(st.label) + '</span></li>';
-      }).join('') + '</ol>' + arrow(1, next, CHEVRON_R) + '</div>';
+      }).join('') + '</ol>' + right + '</div>';
   }
 
   function toolbarHtml(c) {
@@ -798,6 +803,7 @@
       case 'campaign_copied': return 'Copied to ' + e.after;
       case 'campaign_moved': return 'Moved to ' + e.after;
       case 'stage_moved': return 'Moved to ' + stageLabel(e.after);
+      case 'stage_done': return 'Published, workflow finished';
       case 'rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
       case 'flow_list_moved': return 'Moved in the flow list';
       case 'flow_rewound': return 'Rewound to: ' + eventTitle(S.eventOf(e.to));
@@ -2222,6 +2228,11 @@
       case 'rename-save': saveRename(); return;
       case 'save': doSave(lang); return;
       case 'revert': delete ui.drafts[draftKey(c.id, lang)]; delete ui.shown[draftKey(c.id, lang)]; break;
+      case 'stage-finish': {
+        var rf = S.finishWorkflow(c.id);
+        result(rf, rf.ok ? (rf.count ? 'Published, workflow finished' : 'Workflow finished') : '');
+        break;
+      }
       case 'stage-back': case 'stage-next': {
         var rs = S.moveStage(c.id, action === 'stage-back' ? -1 : 1);
         result(rs, rs.ok ? 'Moved to ' + rs.to.label : '');

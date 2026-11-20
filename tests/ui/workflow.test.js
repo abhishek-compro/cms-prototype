@@ -56,8 +56,7 @@ uiSuite('workflow: static groups, the current one blinks, arrows move the conten
   await b.click('[data-action=stage-next]');
   ok('the right arrow moves the content on to Translation: Content turns green, Translation turns yellow and gets the dot', await steps() === 'Product:done | Medical:done | Content:done | Translation:now | Publish:todo' && await q('.stage.now .stage-dot') && /Moved to Translation/.test(await txt('#toast')), await steps());
   await b.click('[data-action=stage-next]');
-  ok('and on to Publish: everything before is green, the right arrow is disabled (nowhere further)', await now() === 'Publish' && await b.ev(`document.querySelector('[data-action=stage-next]').disabled`) && await cnt('.stage.done') === 4 && await cnt('.stage.todo') === 0);
-  ok('the disabled arrow says why', /Already with the last group/.test(await b.ev(`document.querySelector('[data-action=stage-next]').title`)));
+  ok('and on to Publish: everything before is green, the last dot is yellow and there is no right arrow any more (a Publish button is there instead)', await now() === 'Publish' && !await q('[data-action=stage-next]') && await q('.stage-publish') && await cnt('.stage.done') === 4 && await cnt('.stage.todo') === 0);
   await b.click('[data-action=stage-back]'); await b.click('[data-action=stage-back]'); await b.click('[data-action=stage-back]');
   ok('the left arrow moves it back, one group at a time: Medical is now yellow and Content, Translation, Publish are white', await steps() === 'Product:done | Medical:now | Content:todo | Translation:todo | Publish:todo', await steps());
   await b.click('[data-action=stage-back]');
@@ -91,6 +90,33 @@ uiSuite('workflow: static groups, the current one blinks, arrows move the conten
   await b.reload();
   ok('after a reload the content is still with the same group', await now() === 'Content');
 
-  // ---- the publish button is gone
-  ok('the Publish button was removed from the toolbar (the last group is how the workflow ends)', !await q('[data-action=deploy-all]') && !await q('.toolbar .btn.deploy') && !/Publish all/.test(await txt('.toolbar')));
+  // ---- no Publish button until the last group
+  ok('before the last group there is no Publish button: the right end of the strip is an arrow', !await q('.stage-publish') && await q('[data-action=stage-next]') && !await q('[data-action=deploy-all]') && !/Publish all/.test(await txt('.toolbar')));
+
+  // ---- at the last group: a green Publish button on the right of the steps
+  await b.click('[data-action=stage-next]'); await b.click('[data-action=stage-next]');
+  ok('with the last group (Publish) current, the right arrow is replaced by a Publish button, to the right of the steps', await now() === 'Publish' && !await q('[data-action=stage-next]') && await q('.stages .stage-publish') && await b.ev(`document.querySelector('.stage-publish').getBoundingClientRect().left >= document.querySelector('.stage-list').getBoundingClientRect().right - 1`) && await b.ev(`document.querySelector('.stage-publish').textContent.trim()`) === 'Publish');
+  ok('the button is green (the filled button colour) with white text', JSON.stringify(rgb(await bg('.stage-publish'))) === JSON.stringify(rgb(await b.ev(`getComputedStyle(document.documentElement).getPropertyValue('--btn-ok').trim() ? (function(){var d=document.createElement('i'); d.style.color=getComputedStyle(document.documentElement).getPropertyValue('--btn-ok'); document.body.appendChild(d); var c=getComputedStyle(d).color; d.remove(); return c})() : ''`))) && await b.ev(`getComputedStyle(document.querySelector('.stage-publish')).color`) === 'rgb(255, 255, 255)');
+  ok('the last dot is still yellow and blinking until it is pressed', await steps() === 'Product:done | Medical:done | Content:done | Translation:done | Publish:now');
+  await b.click('.stage-publish');
+  ok('pressing it turns the Publish dot green (every dot is green now) and the button gives way to a quiet "Published"', await steps() === 'Product:done | Medical:done | Content:done | Translation:done | Publish:done' && !await q('.stage-publish') && /Published/.test(await txt('.stage-published')) && await cnt('.stage.now') === 0);
+  ok('it really published the content: the languages say Published and have a wa_template_name', /Published/.test(await txt('.panel.edit[data-lang=en] .badge')) && /_v\d+/.test(await txt('.panel.edit[data-lang=en]')) , await txt('.panel.edit[data-lang=en] .panel-foot'));
+  await b.click('[data-action=toggle-history-pane]'); await b.click('.hp-tab[data-tab=other]');
+  ok('it is in the Other tab ("Finished the workflow")', /workflow/i.test(await txt('#history-pane')) , (await txt('#history-pane')).slice(0, 200));
+  await b.click('[data-action=toggle-history-pane]');
+  await b.reload();
+  ok('after a reload it is still green', await steps() === 'Product:done | Medical:done | Content:done | Translation:done | Publish:done');
+  await b.click('[data-action=stage-back]');
+  ok('stepping back (left arrow) reopens it: Translation is current again and the Publish button comes back later', await now() === 'Translation' && await q('[data-action=stage-next]'));
+  await b.click('[data-action=stage-next]');
+  ok('back at the last group the Publish button shows again (it was published already, so only the dot turns green)', await q('.stage-publish') && await now() === 'Publish');
+  await b.click('.stage-publish');
+  ok('and pressing it again finishes without publishing anything new', await cnt('.stage.now') === 0 && await b.ev(`Store.historyFor(Store.list().filter(function(c){return c.name==='Welcome message'})[0].id,'all').filter(function(e){return e.action==='deployed'}).length`) >= 1);
+
+  // ---- free text cannot be published
+  await pick('Appointment reminder');
+  await b.click('[data-change=toggle-block]');
+  await b.click('[data-action=stage-next]'); await b.click('[data-action=stage-next]'); await b.click('[data-action=stage-next]');
+  await b.click('.stage-publish');
+  ok('free-text content cannot be published: a toast says why and the last dot stays yellow', /blocked/.test(await txt('#toast')) && await now() === 'Publish');
 });

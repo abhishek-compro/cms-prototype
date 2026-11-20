@@ -1216,3 +1216,29 @@ test('defaultLangOrder: English first, then the others alphabetically by name (t
   const only = S.createContent('Only Hindi first', 'hi').content;
   assert.equal(langs(S.defaultLangOrder(only)), 'hi', 'a content with no English is just alphabetical');
 });
+
+test('workflow: finishWorkflow publishes and turns the last group green; only at the last group; refused for free text and for nothing to publish', () => {
+  const { S } = loadStore();
+  const c = S.list().find(x => x.name === 'Welcome message');
+  assert.match(S.finishWorkflow(c.id).error, /not with the Publish group yet/);
+  while (S.stageOf(S.get(c.id)).id !== 'deploy') S.moveStage(c.id, 1);
+  assert.equal(S.stageDone(S.get(c.id)), false);
+  const r = S.finishWorkflow(c.id);
+  assert.equal(r.ok, true);
+  assert.equal(S.stageDone(S.get(c.id)), true, 'the last group is done');
+  assert.ok(S.get(c.id).translations.every(t => !t.text || t.waName), 'what could be published is published');
+  assert.equal(S.finishWorkflow(c.id).error, 'Already published');
+  assert.equal(S.historyFor(c.id, 'activity')[0].action, 'stage_done', 'logged under Other, not a content step');
+  assert.equal(S.isContentStep(S.historyFor(c.id, 'activity')[0]), false);
+  assert.equal(S.moveStage(c.id, -1).ok, true, 'stepping back reopens it');
+  assert.equal(S.stageDone(S.get(c.id)), false);
+  S.moveStage(c.id, 1);
+  assert.equal(S.finishWorkflow(c.id).ok, true, 'published already: only the group turns green');
+  assert.equal(S.finishWorkflow(c.id).ok, false);
+  const d = S.list().find(x => x.name === 'Appointment reminder');
+  while (S.stageOf(S.get(d.id)).id !== 'deploy') S.moveStage(d.id, 1);
+  S.setBlocked(d.id, true);
+  assert.match(S.finishWorkflow(d.id).error, /blocked/);
+  assert.equal(S.stageDone(S.get(d.id)), false);
+  assert.equal(S.finishWorkflow('nope').ok, false);
+});

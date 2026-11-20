@@ -36,6 +36,7 @@
     campaign_copied: 'Copied to campaign',
     campaign_moved: 'Moved to campaign',
     stage_moved: 'Moved to a group',
+    stage_done: 'Finished the workflow (published)',
     rewound: 'Rewound',
     timing_edited: 'Changed timing',
     flow_created: 'Created flow',
@@ -894,6 +895,7 @@
   var USER_GROUPS = ['product', 'medical', 'content', 'translation', 'deploy'];
   function stageIndex(c) { var i = STAGES.map(function (s) { return s.id; }).indexOf(c && c.stage); return i === -1 ? 0 : i; }
   function stageOf(c) { return STAGES[stageIndex(c)]; }
+  function stageDone(c) { return !!(c && c.stageDone); }       // the last group has done its work: its dot is green too
   // dir: -1 = back to the previous group, +1 = on to the next one
   function moveStage(id, dir) {
     var c = get(id);
@@ -901,11 +903,33 @@
     var from = stageIndex(c), to = from + (dir < 0 ? -1 : 1);
     if (to < 0) return fail('It is already with the first group (' + STAGES[0].label + ')');
     if (to >= STAGES.length) return fail('It is already with the last group (' + STAGES[STAGES.length - 1].label + ')');
+    if (dir < 0 && c.stageDone) { c.stageDone = false; }            // stepping back from a finished workflow reopens it first
     if (USER_GROUPS.indexOf(STAGES[from].id) === -1) return fail('You are not in the ' + STAGES[from].label + ' group, so you cannot move content that sits with it');
     c.stage = STAGES[to].id;
     log(c, null, 'stage_moved', { before: STAGES[from].id, after: STAGES[to].id });
     save();
     return { ok: true, from: STAGES[from], to: STAGES[to] };
+  }
+
+  // The Publish button at the end of the workflow: only for content that sits with the last group. It publishes what can be published
+  // (the same rules as deployAll) and turns the last group green. Refused for free-text content, and when there is nothing published
+  // and nothing that could be published (empty translations, problems, mismatches).
+  function finishWorkflow(id) {
+    var c = get(id);
+    if (!c) return fail('Content not found');
+    var last = STAGES[STAGES.length - 1];
+    if (c.stage !== last.id) return fail('The content is not with the ' + last.label + ' group yet');
+    if (c.stageDone) return fail('Already published');
+    if (USER_GROUPS.indexOf(last.id) === -1) return fail('You are not in the ' + last.label + ' group');
+    if (c.blocked) return fail('Template approval is blocked for this content');
+    var targets = c.translations.filter(function (tr) { return !canDeploy(c, tr); });
+    var anyPublished = c.translations.some(function (tr) { return statusOf(tr, c) === 'deployed'; });
+    if (!targets.length && !anyPublished) return fail('Nothing to publish: every translation is empty, has problems or mismatches between languages');
+    var waName = targets.length ? deployMany(c, targets) : null;
+    c.stageDone = true;
+    log(c, null, 'stage_done', { before: last.id, after: 'done', detail: waName });
+    save();
+    return { ok: true, waName: waName, count: targets.length };
   }
 
   function setBlocked(id, blocked) {
@@ -1972,6 +1996,8 @@
     stageIndex: stageIndex,
     stageOf: stageOf,
     moveStage: moveStage,
+    finishWorkflow: finishWorkflow,
+    stageDone: stageDone,
     langName: langName,
     slugify: slugify,
     load: load,
