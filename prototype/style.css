@@ -1,6 +1,7 @@
 /* Theme tokens. Light is the default; dark applies when data-theme="dark", or when the theme is
    "system" (no data-theme attribute) and the OS prefers dark. Keep the two dark blocks identical. */
 :root {
+  --panel-w: 420px;
   color-scheme: light;
   --bg: #f6f7f9;
   --surface: #fff;
@@ -214,8 +215,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 5px; vertical-align: middle; }
 
 /* panels */
-.panels { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-.panels.single { grid-template-columns: minmax(0, 760px); }
+.panels { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, var(--panel-w))); }   /* a language panel is as wide as its phone plus a bit (80px) */
+.panels.single { grid-template-columns: minmax(0, var(--panel-w)); }
+.panel .phone { width: 340px; max-width: 100%; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; }
 .panel.ref { background: var(--surface-2); }
 .panel-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -721,3 +723,6 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .bdet { padding: 4px 0 2px; }
 .wa-remove { font-size: 16px; line-height: 1; }
 .wa-remove:hover { color: var(--danger, #c0392b); }
+.sec-row { flex-wrap: wrap; }
+.sec-label .wa-hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.sec-row .btn.link { white-space: nowrap; }

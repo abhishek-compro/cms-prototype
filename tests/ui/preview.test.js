@@ -48,6 +48,16 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   await b.click('.content-item:nth-child(1)');
   await b.click('tr.clickable[data-lang=en]');
 
+  // ---- the editing panel is as wide as its phone plus a bit (50-100 px), including everything below the phone
+  const wOf = s => b.ev(`Math.round(document.querySelector(${JSON.stringify(s)}).getBoundingClientRect().width)`);
+  const pw = await wOf(E('.phone'));
+  const panelW = await wOf('.panel.edit');
+  ok('the editing panel is 50-100 px wider than its phone', panelW - pw >= 50 && panelW - pw <= 100, panelW + ' vs phone ' + pw);
+  ok('nothing below the phone is wider than the panel (no horizontal scroll inside it)', await b.ev(`(function(){var p=document.querySelector('.panel.edit'); return p.scrollWidth <= p.clientWidth + 1 && [].every.call(p.querySelectorAll('input, select, table, textarea'), function(e){ return e.getBoundingClientRect().right <= p.getBoundingClientRect().right + 1 })})()`));
+  await b.click('[data-change=toggle-side]');
+  ok('side by side: both panels have that width and the reference phone is as wide as the editing one', await wOf('.panel.edit') === panelW && await wOf('.panel.ref') === panelW && await wOf('.panel.ref .phone') === pw);
+  await b.click('[data-change=toggle-side]');
+
   // ---- the phone has a constant height, a bit shorter than an average phone; a long message scrolls inside the chat
   const phoneH = () => b.ev(`Math.round(document.querySelector('.panel.edit .phone').getBoundingClientRect().height)`);
   const h0 = await phoneH();
