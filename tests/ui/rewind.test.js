@@ -16,6 +16,14 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('the sidebar has exactly two tabs: Content and Other (the tree lives in Content)', await b.ev(`[].map.call(document.querySelectorAll('.hp-tab'), function(t){return t.textContent.trim()}).join('|')`) === 'Content|Other');
   await b.click('[data-tab=content]');
   ok('the Content tab is selected (first) and the sidebar gets wider to fit one line per step', await b.ev(`document.querySelector('[data-tab=content]').getAttribute('aria-selected')`) === 'true' && await b.ev(`document.querySelector('#history-pane').getBoundingClientRect().width`) > 400);
+  ok('the explanation is not on screen by default: an "i" button sits next to the language dropdown instead', !await q('#history-pane .hist-info') && await q('#history-pane .hp-lang .info-btn svg') && await b.ev(`document.querySelector('#history-pane .info-btn').getAttribute('aria-expanded')`) === 'false' && !/Rewind puts/.test(await txt('#history-pane')));
+  await b.click('#history-pane .info-btn');
+  ok('clicking the i button shows the explanation (Details, Rewind, branches, Other) under it', await q('#history-pane .hist-info') && /Details/.test(await txt('#history-pane .hist-info')) && /Rewind/.test(await txt('#history-pane .hist-info')) && /Other/.test(await txt('#history-pane .hist-info')) && await b.ev(`document.querySelector('#history-pane .info-btn').getAttribute('aria-expanded')`) === 'true' && await b.ev(`document.querySelector('#history-pane .info-btn').getBoundingClientRect().bottom <= document.querySelector('#history-pane .hist-info').getBoundingClientRect().top + 1`));
+  await b.click('.hp-tab[data-tab=other]');
+  ok('the Other tab has its own i button; the explanation stays open there and describes that tab', await q('#history-pane .info-btn') && /Other activity/.test(await txt('#history-pane .hist-info')));
+  await b.click('#history-pane .info-btn');
+  ok('clicking the i button again hides it', !await q('#history-pane .hist-info') && await b.ev(`document.querySelector('#history-pane .info-btn').getAttribute('aria-expanded')`) === 'false');
+  await b.click('[data-tab=content]');
   const n0 = await b.ev(`Store.historyTree(Store.list()[0].id, 'en').rows.length`);
   ok('the Content tab shows one language at a time: a Language dropdown at its top with every language of the template, English first and selected', await b.ev(`[].map.call(document.querySelectorAll('#history-pane [data-change=hist-lang] option'), function(o){return o.value}).join()`) === 'en,hi' && await b.ev(`document.querySelector('#history-pane [data-change=hist-lang]').value`) === 'en');
   ok('there is one line for every CONTENT step of that language (plus the steps for every language), newest first', await cnt('.tree-row') === n0 && n0 > 4, n0);

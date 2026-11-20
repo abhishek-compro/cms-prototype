@@ -9,6 +9,7 @@
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
+    histInfo: false,     // the explanation at the top of the history tabs is open (under the i button)
     histLang: null,      // the language the history sidebar shows (one at a time; null = the first language)
     scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
@@ -64,6 +65,7 @@
   function fmtTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
   function langLabel(code) { return esc(S.langName(code)) + ' <code>' + esc(code) + '</code>'; }
   var ICON_PENCIL = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  var ICON_INFO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>';
   var ICON_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_SEARCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
@@ -768,11 +770,16 @@
     var hl = histLangNow(c);
     return '<div class="hp-lang"><select class="field-select" data-change="hist-lang" aria-label="Language shown in the history">' +
       c.translations.map(function (t) { return '<option value="' + t.lang + '"' + (t.lang === hl ? ' selected' : '') + '>' + esc(S.langName(t.lang)) + ' (' + t.lang + ')</option>'; }).join('') +
-      '</select></div>';
+      '</select>' + histInfoBtn() + '</div>';
   }
+  // the explanations of the history tabs sit under an "i" button (closed by default)
+  function histInfoBtn() {
+    return '<button class="info-btn' + (ui.histInfo ? ' on' : '') + '" data-action="hist-info" aria-expanded="' + !!ui.histInfo + '" aria-controls="hist-info" aria-label="About this list" title="About this list">' + ICON_INFO + '</button>';
+  }
+  function histInfoBox(html) { return ui.histInfo ? '<div class="muted small hist-info" id="hist-info">' + html + '</div>' : ''; }
   function treeHtml(c) {
     var tree = S.historyTree(c.id, histLangNow(c)), dirty = c.translations.some(function (t) { return isDirty(c, t); });
-    var help = '<div class="muted small tree-help">Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.</div>';
+    var help = histInfoBox('Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.');
     if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
     return histLangPickHtml(c) + help + '<ol class="tree" aria-label="Content history tree, newest first">' + tree.rows.map(function (row) {
       var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
@@ -812,7 +819,8 @@
       body = treeHtml(c);
     } else {
       var names = S.historyFor(c.id, 'activity');
-      body = '<div class="muted small" style="margin-bottom:12px">Other activity, one after the other: published, renamed, approval blocked/allowed, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Content</strong> tab.</div>' +
+      body = '<div class="hp-lang"><span class="grow"></span>' + histInfoBtn() + '</div>' +
+        histInfoBox('Other activity, one after the other: published, renamed, free text on or off, timing changed, copied or moved between campaigns. Changes to the content itself are in the <strong>Content</strong> tab.') +
         (names.length ? '<ul class="timeline compact">' + names.map(function (e) { return eventHtml(e, false); }).join('') + '</ul>' : '<div class="hint">None yet.</div>');
     }
     return head + body;
@@ -1991,6 +1999,7 @@
       case 'new-content': addContent(); return;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
+      case 'hist-info': ui.histInfo = !ui.histInfo; updateHistoryPane(); return;
       case 'hist-tab': {
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';
         updateHistoryPane();
