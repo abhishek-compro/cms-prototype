@@ -31,12 +31,15 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
 
   // ================= structure =================
   await fresh();
-  ok('edit panel has the phone parts (header, body, footer, buttons, add) and below the phone the details (header id, placeholders, button payloads, problems)',
-    await b.ev(`[].map.call(document.querySelectorAll('.panel.edit [data-sec]'), function(e){return e.dataset.sec}).join()`) === 'header,body,footer,buttons,add,header-id,placeholders,button-details,problems');
+  ok('edit panel has the phone parts (header, body, footer, buttons, add) and below the phone the details (header link, placeholders, button payloads, problems)',
+    await b.ev(`[].map.call(document.querySelectorAll('.panel.edit [data-sec]'), function(e){return e.dataset.sec}).join()`) === 'header,body,footer,buttons,add,header-url,placeholders,button-details,problems');
   ok('body has a counter against the 1024 limit', /106 \/ 1024/.test(await txt(E('.wa-meta .wa-count'))), await txt(E('.wa-meta .wa-count')));
   ok('placeholders: named {{name}} -> WhatsApp position {{1}}, with its default', await phNames() === 'name:{{1}}' && await val(E('[data-input=default][data-name=name]')) === 'Friend');
   ok('no read-only copy of the body under Placeholders (the phone preview replaced it); numbering is in the table', !await q(E('.wa-body')) && !await q(E('.wa-body-text')));
-  ok('buttons: 2 cards (Quick reply, URL) with the schema fields and the per-type counters', await cnt(E('.bcard')) === 2 && await q(E('[data-input=btn-payload]')) && await q(E('[data-input=btn-url]')) && /quick replies 1 \/ 3 · URL 1 \/ 1/.test(await txt(E('[data-sec=button-details] .sec-label'))));
+  ok('buttons: 2 buttons in the phone; below it a field each (payload, URL) labelled with the button text, and no "quick replies 1 / 3 · URL 1 / 1" count', await cnt(E('.bcard')) === 2 && await q(E('[data-input=btn-payload]')) && await q(E('[data-input=btn-url]')) && await b.ev(`[].map.call(document.querySelectorAll('.panel.edit .bdet .bdet-label'), function(l){return l.textContent}).join('|')`) === 'Tell me more|Visit website' && !/quick replies|\d \/ \d/.test(await txt(E('[data-sec=button-details] .sec-label'))));
+  await b.fill(E('[data-input=btn-text][data-idx="0"]'), 'Learn more');
+  ok('typing a button\'s text in the phone updates its label below the phone at once', /^Learn more$/.test(await txt(E('.bdet[data-idx="0"] .bdet-label'))));
+  await b.click(E('.revert'));
   ok('URL button shows its own placeholder table ({{page}} -> {{1}}, default about)', await val(E('[data-input=btn-param][data-name=page]')) === 'about');
   ok('footer has its counter against 60', /12 \/ 60/.test(await txt(E('[data-sec=footer] .wa-count'))));
   ok('no problems for the seed: the problems box is not shown at all', !await q(E('.probs')));
@@ -79,7 +82,7 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await b.click(E('[data-action=btn-remove][data-idx="0"]'));
   ok('removing the last button hides the Buttons section again', await visibleSecs() === 'body,add');
   await addPart('header:image');
-  ok('a header goes above the body', await visibleSecs() === 'header,body,add,header-id');
+  ok('a header goes above the body', await visibleSecs() === 'header,body,add,header-url');
   await b.click('[data-action=remove-header]');
   ok('Remove header takes it away', await visibleSecs() === 'body,add');
   await b.click(E('.revert'));
@@ -123,7 +126,7 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
   await fresh();
   ok('the seed already has a URL button: the URL option is disabled, quick reply is available', await optionState('button:URL') === 'disabled' && await optionState('button:QUICK_REPLY') === 'enabled');
   await addPart('button:QUICK_REPLY');
-  ok('adding a quick reply adds a card, focuses its Text field and updates the counter', await cnt(E('.bcard')) === 3 && await b.ev(`document.activeElement.getAttribute('data-input')`) === 'btn-text' && /quick replies 2 \/ 3 · URL 1 \/ 1/.test(await txt(E('[data-sec=button-details] .sec-label'))));
+  ok('adding a quick reply adds a card, focuses its Text field and updates the counter', await cnt(E('.bcard')) === 3 && await b.ev(`document.activeElement.getAttribute('data-input')`) === 'btn-text' && await cnt(E('.bdet')) === 3);
   ok('the dropdown shows how many quick replies are used', /2 of 3 used/.test(await b.ev(`document.querySelector('.panel.edit option[value="button:QUICK_REPLY"]').textContent`)));
   ok('empty new button is reported (text and payload)', /Button 3 needs text/.test(await probs()) && /Button 3 needs a default payload/.test(await probs()), await probs());
   await b.type('A text that is far too long for a button');
@@ -151,14 +154,14 @@ uiSuite('template parts: header, body placeholders, buttons, footer', async ({ b
 
   // the limits
   await addPart('button:QUICK_REPLY');
-  ok('three quick replies: the dropdown option is disabled and says all are used; the counter shows 3 / 3', await optionState('button:QUICK_REPLY') === 'disabled' && /all 3 used|3 of 3 used/.test(await b.ev(`document.querySelector('.panel.edit option[value="button:QUICK_REPLY"]').textContent`)) && /quick replies 3 \/ 3/.test(await txt(E('[data-sec=button-details] .sec-label'))));
+  ok('three quick replies: the dropdown option is disabled and says all are used; the counter shows 3 / 3', await optionState('button:QUICK_REPLY') === 'disabled' && /all 3 used|3 of 3 used/.test(await b.ev(`document.querySelector('.panel.edit option[value="button:QUICK_REPLY"]').textContent`)));
   await addPart('button:QUICK_REPLY');
   ok('choosing a disabled option adds nothing', await cnt(E('.bcard')) === 4);
   ok('the URL option is disabled too (one URL button already) and says so', await optionState('button:URL') === 'disabled' && /already added/.test(await b.ev(`document.querySelector('.panel.edit option[value="button:URL"]').textContent`)));
   await b.click(E('[data-action=btn-remove][data-idx="1"]'));
-  ok('removing the URL button frees the URL slot (the dropdown updates; quick replies stay at 3 / 3)', await optionState('button:URL') === 'enabled' && await optionState('button:QUICK_REPLY') === 'disabled' && /quick replies 3 \/ 3 · URL 0 \/ 1/.test(await txt(E('[data-sec=button-details] .sec-label'))) && await cnt(E('.bcard')) === 3);
+  ok('removing the URL button frees the URL slot (the dropdown updates; quick replies stay at 3 / 3)', await optionState('button:URL') === 'enabled' && await optionState('button:QUICK_REPLY') === 'disabled' && await cnt(E('.bcard')) === 3 && await cnt(E('.bdet')) === 3);
   await addPart('button:URL');
-  ok('adding a URL button puts it back at 1 / 1 and disables the URL option again', await optionState('button:URL') === 'disabled' && /URL 1 \/ 1/.test(await txt(E('[data-sec=button-details] .sec-label'))));
+  ok('adding a URL button puts it back at 1 / 1 and disables the URL option again', await optionState('button:URL') === 'disabled' && await cnt(E('.bcard')) === 4);
   await b.click(E('.revert'));
 
   // ================= rename a placeholder; one name can fill several WhatsApp numbers =================

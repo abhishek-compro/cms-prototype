@@ -19,6 +19,8 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   ok('the bubble holds the header picture, the body text (editable), the footer (editable) and a time', await q(E('.wa-bubble .wa-media-image')) && await q(E('.wa-bubble textarea[data-input=text]')) && await q(E('.wa-bubble input[data-input=footer]')) && /\d:\d\d/.test(await txt(E('.wa-bubble .wa-time'))));
   ok('the body shows the authored text with its {{placeholder}}', /^Hello {{name}}, welcome to Noora Health\./.test(await val(E('[data-input=text]'))));
   ok('the buttons are under the bubble, as WhatsApp shows them, and their text is typed on the button', await cnt(E('.wa-chat > .wa-btns .wa-btn-edit')) === 2 && !await q(E('.wa-bubble .wa-btn-edit')) && await b.ev(`[].map.call(document.querySelectorAll('.panel.edit .wa-btn-in'), function(i){return i.value}).join('|')`) === 'Tell me more|Visit website');
+  ok('the + Add dropdown is below the phone, not inside it', await q(E('[data-change=add-part]')) && !await q(E('.phone [data-change=add-part]')) && await b.ev(`document.querySelector('.panel.edit [data-change=add-part]').getBoundingClientRect().top >= document.querySelector('.panel.edit .phone').getBoundingClientRect().bottom - 1`));
+  ok('the buttons sit close to the bubble and to each other (a few pixels, like WhatsApp)', await b.ev(`(function(){var bub=document.querySelector('.panel.edit .wa-bubble').getBoundingClientRect(), bs=document.querySelectorAll('.panel.edit .wa-btn-edit'), a=bs[0].getBoundingClientRect(), c=bs[1].getBoundingClientRect(); return a.top - bub.bottom <= 4 && c.top - a.bottom <= 4})()`));
   ok('there are no section labels (Body, Footer, Buttons…) inside the phone', !await q(E('.wa-chat .sec-label')) && !await q(E('.wa-chat .bcard-head')));
 
   // ---- what is NOT in the phone sits below it
@@ -41,7 +43,7 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   await b.click('tr.clickable[data-lang=hi]');
   ok('picking another language row puts that language in the phone', /^नमस्ते {{name}}/.test(await val(E('[data-input=text]'))));
   await b.click('.content-item:nth-child(3)');
-  ok('a template with no header, footer or buttons shows only the body in the bubble (and + Add under the phone)', !await q(E('.wa-media')) && !await q(E('[data-input=footer]')) && !await q(E('.wa-btn-edit')) && await q(E('[data-change=add-part]')) && /Tip of the day/.test(await val(E('[data-input=text]'))));
+  ok('a template with no header, footer or buttons shows only the body in the bubble (and + Add below the phone)', !await q(E('.wa-media')) && !await q(E('[data-input=footer]')) && !await q(E('.wa-btn-edit')) && await q(E('[data-change=add-part]')) && /Tip of the day/.test(await val(E('[data-input=text]'))));
   await b.click('.content-item:nth-child(1)');
   await b.click('tr.clickable[data-lang=en]');
 

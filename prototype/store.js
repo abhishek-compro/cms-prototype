@@ -80,7 +80,7 @@
   //   text      = the body as authored, with NAMED placeholders {{name}}. This is a layer on top of WhatsApp's
   //               numbered placeholders: the WhatsApp body ({{1}} {{2}} ...) and the name -> positions map are derived.
   //   defaults  = { name: default value }            (extra_content.body_param_defaults[lang])
-  //   header    = media id (TurnMedia uuid), only used when Content.headerType != 'none'   (extra_content.header[lang])
+  //   header    = https link to the media file on the static CDN, only used when Content.headerType != 'none'   (extra_content.header[lang])
   //   buttons   = [{type:'QUICK_REPLY', text, default_payload} | {type:'URL', text, url, default_parameters}]
   //   footer    = plain text, no placeholders      (read by the orchestrator as extra_content.footer[lang])
   //   waName '' until published
@@ -178,8 +178,7 @@
     if (changed) save();
   }
   function reset() {
-    try { root.localStorage.removeItem(STORAGE_KEY); root.localStorage.removeItem(MEDIA_KEY); } catch (e) { /* ignore */ }
-    mediaFiles = {}; mediaKept = {}; mediaFilesLoaded = false;
+    try { root.localStorage.removeItem(STORAGE_KEY); root.localStorage.removeItem('cms-prototype-media'); } catch (e) { /* ignore */ }
     seed();
   }
 
@@ -234,23 +233,42 @@
   var HEADER_TYPES = [
     { id: 'none', label: 'None' }, { id: 'image', label: 'Image' }, { id: 'video', label: 'Video' }, { id: 'document', label: 'Document' }
   ];
-  // ---- Header media files ---------------------------------------------------------------
-  // The header of a language is a media id. In the prototype "uploading" a file registers it under a new id (state.media keeps the
-  // name, type and size) and keeps the file itself in memory and, when it fits, in its own localStorage key (never in the main
-  // state, so a big video cannot stop the app from saving). The limits are WhatsApp's for template headers.
-  var MB = 1024 * 1024, MEDIA_KEY = 'cms-prototype-media';
-  var MEDIA_RULES = {
+  // ---- Header media: a link to the file on the static CDN ------------------------------------
+  // The header of a language is an https link to an image / video / PDF on the static CDN. The prototype connects to nothing, so the
+  // CDN is a dummy: "uploading" a file here registers it under a randomly generated link on that dummy CDN (state.media keeps the
+  // name, type and size under the link) and the file itself is kept as data in the browser's IndexedDB (see app.js), so the
+  // picture can be shown while editing. A link typed or pasted by hand that the prototype has no file for is shown as a tile with
+  // the file's name. The limits are WhatsApp's for template headers.
+  var MB = 1024 * 1024, CDN_BASE = 'https://cdn.noorahealth.org/templates/';
+  var HEADER_FILES = {
     image: { label: 'JPEG or PNG', mimes: ['image/jpeg', 'image/png'], exts: ['jpg', 'jpeg', 'png'], max: 5 * MB },
     video: { label: 'MP4 or 3GPP', mimes: ['video/mp4', 'video/3gpp'], exts: ['mp4', '3gp', '3gpp'], max: 16 * MB },
     document: { label: 'PDF', mimes: ['application/pdf'], exts: ['pdf'], max: 100 * MB }
   };
+  var URL_RE = /^https?:\/\/[^\s\/$.?#][^\s]*$/i;
   function fmtSize(n) { return n >= MB ? (Math.round(n / MB * 10) / 10) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
-  function mediaRule(type) { return MEDIA_RULES[type] || null; }
-  function mediaHint(type) { var r = MEDIA_RULES[type]; return r ? r.label + ', up to ' + fmtSize(r.max) : ''; }
-  function mediaAccept(type) { var r = MEDIA_RULES[type]; return r ? r.mimes.concat(r.exts.map(function (e) { return '.' + e; })).join(',') : ''; }
-  // null when `file` ({name, type (mime), size}) may be used as the header of `type`, else why not
-  function checkMedia(type, file) {
-    var r = MEDIA_RULES[type];
+  function headerHint(type) { var r = HEADER_FILES[type]; return r ? r.label + ', up to ' + fmtSize(r.max) : ''; }
+  function mediaAccept(type) { var r = HEADER_FILES[type]; return r ? r.mimes.concat(r.exts.map(function (e) { return '.' + e; })).join(',') : ''; }
+  function isMediaUrl(url) { return URL_RE.test(String(url || '').trim()) && String(url).trim().length <= 2000; }
+  function mediaPath(url) { return String(url || '').trim().replace(/[?#].*$/, '').replace(/^https?:\/\/[^\/]*/i, ''); }
+  function mediaFileName(url) { var seg = mediaPath(url).split('/').filter(Boolean).pop() || ''; try { return decodeURIComponent(seg); } catch (e) { return seg; } }
+  // what kind of file the link says it is (by its extension), or null when it does not say
+  function kindOfUrl(url) {
+    var ext = (mediaFileName(url).split('.').pop() || '').toLowerCase();
+    return ['image', 'video', 'document'].filter(function (k) { return HEADER_FILES[k].exts.indexOf(ext) !== -1; })[0] || null;
+  }
+  // null when `url` may be the header of `type`, else why not (an empty link is not judged here: the consistency rule asks for one)
+  function checkMediaUrl(type, url) {
+    url = String(url || '').trim();
+    if (!url) return null;
+    if (!isMediaUrl(url)) return 'The header must be a link to the file on the CDN, starting with https://';
+    var kind = kindOfUrl(url);
+    if (kind && type !== 'none' && kind !== type) return 'The header link is ' + (kind === 'image' ? 'an image' : kind === 'video' ? 'a video' : 'a document') + ' (' + mediaFileName(url) + '), but the header type is ' + type;
+    return null;
+  }
+  // null when `file` ({name, type (mime), size}) may be uploaded as the header of `type`, else why not
+  function checkFile(type, file) {
+    var r = HEADER_FILES[type];
     if (!r) return 'Choose a header type first';
     if (!file || !file.name) return 'No file chosen';
     var ext = (String(file.name).split('.').pop() || '').toLowerCase();
@@ -259,39 +277,29 @@
     if (file.size > r.max) return file.name + ' is ' + fmtSize(file.size) + '; WhatsApp allows ' + fmtSize(r.max) + ' for a ' + type + ' header';
     return null;
   }
-  function kindOfMime(mime, name) {
-    var ext = (String(name || '').split('.').pop() || '').toLowerCase();
-    return ['image', 'video', 'document'].filter(function (k) { return MEDIA_RULES[k].mimes.indexOf(mime) !== -1 || (!mime && MEDIA_RULES[k].exts.indexOf(ext) !== -1); })[0] || null;
+  function randomHex(n) {
+    var c = root.crypto, out = '';
+    if (c && c.getRandomValues) { var a = new Uint8Array(Math.ceil(n / 2)); c.getRandomValues(a); a.forEach(function (x) { out += ('0' + x.toString(16)).slice(-2); }); return out.slice(0, n); }
+    while (out.length < n) out += Math.floor(Math.random() * 16).toString(16);
+    return out;
   }
-  var mediaFiles = {}, mediaFilesLoaded = false;     // id -> data URL: everything uploaded in this session + what was kept in localStorage
-  var mediaKept = {};                                // the part of it that is in localStorage
-  function loadMediaFiles() {
-    if (mediaFilesLoaded) return;
-    mediaFilesLoaded = true;
-    try { var raw = root.localStorage.getItem(MEDIA_KEY); if (raw) { mediaKept = JSON.parse(raw) || {}; Object.keys(mediaKept).forEach(function (k) { mediaFiles[k] = mediaKept[k]; }); } } catch (e) { mediaKept = {}; }
+  // a new random link on the dummy CDN for `file`; it keeps the file's extension so the link says what kind of file it is
+  function newCdnLink(type, file) {
+    var r = HEADER_FILES[type], ext = (String(file.name || '').split('.').pop() || '').toLowerCase();
+    if (r.exts.indexOf(ext) === -1) ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'video/mp4': 'mp4', 'video/3gpp': '3gp', 'application/pdf': 'pdf' })[file.type] || r.exts[0];
+    return CDN_BASE + randomHex(16) + '.' + ext;
   }
-  function mediaMap() { if (!state.media) state.media = {}; return state.media; }
-  function newMediaId() {
-    var c = root.crypto;
-    if (c && c.randomUUID) return c.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return Math.floor(Math.random() * 16).toString(16); });
-  }
-  // Register an uploaded file (already checked with checkMedia) and its data URL; returns {id, kept}. `kept` = the file survives a reload.
-  function addMedia(type, file, dataUrl) {
-    var why = checkMedia(type, file);
+  // Register an uploaded file (checked with checkFile) under a new random CDN link; the app keeps the file's data in IndexedDB under that link
+  function addMedia(type, file) {
+    var why = checkFile(type, file);
     if (why) return fail(why);
-    loadMediaFiles();
-    var id = newMediaId();
-    mediaFiles[id] = dataUrl || '';
-    var next = Object.assign({}, mediaKept); next[id] = dataUrl || '';
-    var kept = false;
-    if (dataUrl) { try { root.localStorage.setItem(MEDIA_KEY, JSON.stringify(next)); mediaKept = next; kept = true; } catch (e) { kept = false; } }
-    mediaMap()[id] = { id: id, name: file.name, mime: file.type || '', size: file.size, kind: type, kept: kept, uploadedAt: clock().toISOString() };
+    var url = newCdnLink(type, file);
+    if (!state.media) state.media = {};
+    state.media[url] = { url: url, name: file.name, mime: file.type || '', size: file.size, kind: type, uploadedAt: clock().toISOString() };
     save();
-    return { ok: true, id: id, kept: kept };
+    return { ok: true, url: url };
   }
-  function getMedia(id) { return (id && state.media && state.media[id]) || null; }
-  function mediaData(id) { loadMediaFiles(); return mediaFiles[id] || null; }
+  function getMedia(url) { return (url && state.media && state.media[String(url).trim()]) || null; }
 
   // Button limits are a product rule (stricter than the orchestrator's schema, which allows 10 buttons):
   // at most 3 quick replies and 1 URL button per translation.
@@ -407,8 +415,7 @@
       else if (d.length > LIMITS.value) add('Placeholders', '{{' + n + '}} default is ' + d.length + ' characters; the maximum is ' + LIMITS.value);
     });
 
-    var media = getMedia((parts.header || '').trim());
-    if (content.headerType !== 'none' && media && media.kind !== content.headerType) add('Header', 'The header file ' + media.name + ' is ' + (media.kind === 'image' ? 'an image' : media.kind === 'video' ? 'a video' : 'a document') + ', but the header type is ' + content.headerType);
+    if (content.headerType !== 'none') { var hwhy = checkMediaUrl(content.headerType, parts.header); if (hwhy) add('Header', hwhy); }
 
     var footer = parts.footer || '';
     if (footer.length > LIMITS.footer) add('Footer', 'Footer is ' + footer.length + ' characters; WhatsApp allows ' + LIMITS.footer);
@@ -1678,7 +1685,7 @@
     patch(w.id, 'en', {
       text: 'Hello {{name}}, welcome to Noora Health. We will share tips to help you care for your newborn.',
       defaults: { name: 'Friend' },
-      header: '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40',
+      header: 'https://cdn.noorahealth.org/templates/welcome-en.png',
       footer: 'Noora Health',
       buttons: [
         { type: 'QUICK_REPLY', text: 'Tell me more', default_payload: 'welcome_more' },
@@ -1688,7 +1695,7 @@
     addTranslation(w.id, 'hi', 'नमस्ते {{name}}, नूरा हेल्थ में आपका स्वागत है। हम आपको नवजात शिशु की देखभाल के सुझाव भेजेंगे।');
     patch(w.id, 'hi', {
       defaults: { name: 'दोस्त' },
-      header: '7c1d4e92-5b38-4f0a-9d6e-2a8b3c5f1e07',
+      header: 'https://cdn.noorahealth.org/templates/welcome-hi.png',
       footer: 'नूरा हेल्थ',
       buttons: [
         { type: 'QUICK_REPLY', text: 'और जानें', default_payload: 'welcome_more' },
@@ -1841,15 +1848,18 @@
     buttonCounts: buttonCounts,
     canAddButton: canAddButton,
     HEADER_TYPES: HEADER_TYPES,
-    MEDIA_RULES: MEDIA_RULES,
-    mediaRule: mediaRule,
-    mediaHint: mediaHint,
+    HEADER_FILES: HEADER_FILES,
+    CDN_BASE: CDN_BASE,
+    headerHint: headerHint,
     mediaAccept: mediaAccept,
-    checkMedia: checkMedia,
-    kindOfMime: kindOfMime,
+    isMediaUrl: isMediaUrl,
+    mediaFileName: mediaFileName,
+    kindOfUrl: kindOfUrl,
+    checkMediaUrl: checkMediaUrl,
+    checkFile: checkFile,
+    newCdnLink: newCdnLink,
     addMedia: addMedia,
     getMedia: getMedia,
-    mediaData: mediaData,
     fmtSize: fmtSize,
     positionsOf: positionsOf,
     renamePlaceholder: renamePlaceholder,

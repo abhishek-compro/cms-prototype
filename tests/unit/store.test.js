@@ -445,7 +445,7 @@ test('toExtraContent: the orchestrator shape - every key per language, positions
   assert.deepEqual(Object.keys(x).sort(), ['body_param_defaults', 'body_param_positions', 'buttons', 'footer', 'header']);
   assert.deepEqual(x.body_param_defaults.en, { name: 'Friend' });
   assert.deepEqual(x.body_param_positions.en, { name: [1] });
-  assert.deepEqual(x.header, { en: '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40', hi: '7c1d4e92-5b38-4f0a-9d6e-2a8b3c5f1e07' }, 'every language gets a header value (empty = none yet)');
+  assert.deepEqual(x.header, { en: 'https://cdn.noorahealth.org/templates/welcome-en.png', hi: 'https://cdn.noorahealth.org/templates/welcome-hi.png' }, 'every language gets a header value (empty = none yet)');
   S.addTranslation(w.id, 'kn', 'ಹಲೋ');
   assert.equal(S.toExtraContent(w.id).header.kn, '', 'a language without a header gets an empty value');
   assert.deepEqual(x.buttons.en[0], { type: 'QUICK_REPLY', text: 'Tell me more', default_payload: 'welcome_more' });
@@ -621,71 +621,84 @@ test('consistency: the editor can pass unsaved drafts', () => {
   assert.match(S.consistency(w, { hi: draft }).errors[0].message, /English 2, Hindi 0/);
 });
 
-// ---------------------------------------------------------------- header media files
-test('media: WhatsApp rules per header type (type, size, empty)', () => {
+// ---------------------------------------------------------------- header media: a link to the static CDN
+test('header link: must be an https link; the extension, when there is one, must fit the header type', () => {
   const S = fresh();
-  assert.equal(S.checkMedia('image', { name: 'a.png', type: 'image/png', size: 100 }), null);
-  assert.equal(S.checkMedia('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 }), null);
-  assert.match(S.checkMedia('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 + 1 }), /5 MB/);
-  assert.match(S.checkMedia('image', { name: 'a.gif', type: 'image/gif', size: 100 }), /not allowed.*JPEG or PNG/);
-  assert.match(S.checkMedia('image', { name: 'a.pdf', type: 'application/pdf', size: 100 }), /not allowed/);
-  assert.equal(S.checkMedia('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 }), null);
-  assert.equal(S.checkMedia('video', { name: 'a.3gp', type: 'video/3gpp', size: 10 }), null);
-  assert.match(S.checkMedia('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 + 1 }), /16 MB/);
-  assert.match(S.checkMedia('video', { name: 'a.mov', type: 'video/quicktime', size: 10 }), /MP4 or 3GPP/);
-  assert.equal(S.checkMedia('document', { name: 'a.pdf', type: 'application/pdf', size: 99 * 1024 * 1024 }), null);
-  assert.match(S.checkMedia('document', { name: 'a.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 10 }), /PDF/);
-  assert.match(S.checkMedia('image', { name: 'a.png', type: 'image/png', size: 0 }), /empty/);
-  assert.match(S.checkMedia('none', { name: 'a.png', type: 'image/png', size: 1 }), /header type/);
-  assert.equal(S.checkMedia('image', { name: 'PHOTO.PNG', type: '', size: 10 }), null, 'a browser that gives no mime type: the extension decides');
-  assert.match(S.checkMedia('image', { name: 'x.exe', type: '', size: 10 }), /not allowed/);
-  assert.equal(S.mediaHint('video'), 'MP4 or 3GPP, up to 16 MB');
+  assert.equal(S.checkMediaUrl('image', ''), null, 'empty is not judged here');
+  assert.equal(S.checkMediaUrl('image', 'https://cdn.noorahealth.org/a/b/pic.png'), null);
+  assert.equal(S.checkMediaUrl('image', 'http://cdn.example.org/PIC.JPG?v=2#x'), null, 'query and fragment are ignored; case does not matter');
+  assert.equal(S.checkMediaUrl('image', 'https://cdn.example.org/media/abc123'), null, 'a link with no extension says nothing about the kind');
+  assert.match(S.checkMediaUrl('image', '3f2b8c1e-9a47-4d6b-8c3e-1f5a7b9d2e40'), /link to the file on the CDN, starting with https/);
+  assert.match(S.checkMediaUrl('image', 'cdn.example.org/pic.png'), /https/);
+  assert.match(S.checkMediaUrl('image', 'https://cdn example.org/pic.png'), /https/, 'no spaces');
+  assert.match(S.checkMediaUrl('image', 'ftp://x.org/pic.png'), /https/);
+  assert.match(S.checkMediaUrl('image', 'https://cdn.example.org/guide.pdf'), /a document \(guide\.pdf\), but the header type is image/);
+  assert.match(S.checkMediaUrl('video', 'https://cdn.example.org/pic.png'), /an image \(pic\.png\), but the header type is video/);
+  assert.equal(S.checkMediaUrl('video', 'https://cdn.example.org/clip.mp4'), null);
+  assert.equal(S.checkMediaUrl('video', 'https://cdn.example.org/clip.3gp'), null);
+  assert.equal(S.checkMediaUrl('document', 'https://cdn.example.org/g/guide.pdf'), null);
+  assert.match(S.checkMediaUrl('document', 'https://cdn.example.org/clip.mp4'), /a video/);
+  assert.match(S.checkMediaUrl('image', 'https://x.org/' + 'a'.repeat(2000) + '.png'), /https/, 'a link over 2000 characters is refused');
+  assert.equal(S.headerHint('video'), 'MP4 or 3GPP, up to 16 MB');
+  assert.equal(S.headerHint('image'), 'JPEG or PNG, up to 5 MB');
+  assert.equal(S.mediaFileName('https://cdn.example.org/a/b/My%20file.png?x=1'), 'My file.png');
+  assert.equal(S.kindOfUrl('https://x.org/a.PDF'), 'document');
+  assert.equal(S.kindOfUrl('https://x.org/a'), null);
 });
 
-test('media: an upload gets a new id, is remembered, and the file is kept separately from the main state', () => {
-  const { S, mem } = loadStore();
-  const r = S.addMedia('image', { name: 'baby.png', type: 'image/png', size: 10 }, 'data:image/png;base64,AAAA');
-  assert.ok(r.ok && r.kept);
-  assert.match(r.id, /^[0-9a-f-]{36}$/);
-  assert.equal(S.getMedia(r.id).name, 'baby.png');
-  assert.equal(S.getMedia(r.id).kind, 'image');
-  assert.equal(S.mediaData(r.id), 'data:image/png;base64,AAAA');
-  assert.ok(!JSON.stringify(JSON.parse(mem['cms-prototype-v1'])).includes('base64'), 'the file is not in the main saved state');
-  assert.ok(JSON.parse(mem['cms-prototype-media'])[r.id]);
-  // another page load: metadata and file come back
-  const S2 = loadStore(mem).S;
-  assert.equal(S2.getMedia(r.id).name, 'baby.png');
-  assert.equal(S2.mediaData(r.id), 'data:image/png;base64,AAAA');
-  assert.notEqual(S.addMedia('image', { name: 'b.png', type: 'image/png', size: 1 }, 'data:x').id, r.id);
-});
-
-test('media: a refused file registers nothing; a file that does not fit in localStorage is kept for the session only', () => {
-  const { S, mem } = loadStore();
-  assert.equal(S.addMedia('image', { name: 'a.pdf', type: 'application/pdf', size: 1 }, 'data:x').ok, false);
-  assert.deepEqual(Object.keys(S.getMedia('nope') || {}), []);
-  const realSet = globalThis.localStorage.setItem;
-  globalThis.localStorage.setItem = (k, v) => { if (k === 'cms-prototype-media') throw new Error('QuotaExceededError'); realSet(k, v); };
-  const r = S.addMedia('video', { name: 'big.mp4', type: 'video/mp4', size: 9 * 1024 * 1024 }, 'data:video/mp4;base64,AAAA');
-  assert.ok(r.ok && r.kept === false);
-  assert.equal(S.mediaData(r.id), 'data:video/mp4;base64,AAAA', 'still previewable in this session');
-  assert.equal(S.getMedia(r.id).kept, false);
-  assert.ok(!mem['cms-prototype-media'] || !JSON.parse(mem['cms-prototype-media'])[r.id]);
-});
-
-test('media: a header file of the wrong kind for the header type is a problem; reset forgets uploads', () => {
+test('header link: a bad link is a problem (saving is allowed), the sample links are fine, and there is no upload any more', () => {
   const { S, mem } = loadStore();
   const w = byName(S, 'Welcome message');
-  const v = S.addMedia('video', { name: 'clip.mp4', type: 'video/mp4', size: 5 }, 'data:v').id;
-  const i = S.addMedia('image', { name: 'pic.png', type: 'image/png', size: 5 }, 'data:i').id;
+  assert.match(tr(w, 'en').header, /^https:\/\/cdn\.noorahealth\.org\//, 'the sample header is a CDN link');
   assert.deepEqual(problems(S, w, 'en'), []);
-  assert.ok(patch(S, w, 'en', { header: v }).ok, 'saving is allowed');
-  assert.deepEqual(problems(S, w, 'en'), ['The header file clip.mp4 is a video, but the header type is image']);
-  assert.ok(patch(S, w, 'en', { header: i }).ok);
+  assert.ok(patch(S, w, 'en', { header: 'not a link' }).ok, 'saving is allowed');
+  assert.deepEqual(problems(S, w, 'en'), ['The header must be a link to the file on the CDN, starting with https://']);
+  assert.ok(patch(S, w, 'en', { header: 'https://cdn.example.org/clip.mp4' }).ok);
+  assert.deepEqual(problems(S, w, 'en'), ['The header link is a video (clip.mp4), but the header type is image']);
+  assert.ok(patch(S, w, 'en', { header: 'https://cdn.example.org/pic.png' }).ok);
   assert.deepEqual(problems(S, w, 'en'), []);
-  assert.equal(S.problems({ headerType: 'none' }, { text: 'x', header: v }).length, 0, 'no header type, no check');
+  assert.equal(S.problems({ headerType: 'none' }, { text: 'x', header: 'not a link' }).length, 0, 'no header type, no check');
   S.reset();
-  assert.equal(S.getMedia(i), null);
-  assert.equal(mem['cms-prototype-media'], undefined);
+  assert.equal(mem['cms-prototype-media'], undefined, 'an old uploaded-files key is cleaned up');
+});
+
+test('header upload: WhatsApp rules per header type (type, size, empty)', () => {
+  const S = fresh();
+  assert.equal(S.checkFile('image', { name: 'a.png', type: 'image/png', size: 100 }), null);
+  assert.equal(S.checkFile('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 }), null);
+  assert.match(S.checkFile('image', { name: 'a.jpg', type: 'image/jpeg', size: 5 * 1024 * 1024 + 1 }), /5 MB/);
+  assert.match(S.checkFile('image', { name: 'a.gif', type: 'image/gif', size: 100 }), /not allowed.*JPEG or PNG/);
+  assert.match(S.checkFile('image', { name: 'a.pdf', type: 'application/pdf', size: 100 }), /not allowed/);
+  assert.equal(S.checkFile('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 }), null);
+  assert.equal(S.checkFile('video', { name: 'a.3gp', type: 'video/3gpp', size: 10 }), null);
+  assert.match(S.checkFile('video', { name: 'a.mp4', type: 'video/mp4', size: 16 * 1024 * 1024 + 1 }), /16 MB/);
+  assert.match(S.checkFile('video', { name: 'a.mov', type: 'video/quicktime', size: 10 }), /MP4 or 3GPP/);
+  assert.equal(S.checkFile('document', { name: 'a.pdf', type: 'application/pdf', size: 99 * 1024 * 1024 }), null);
+  assert.match(S.checkFile('document', { name: 'a.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 10 }), /PDF/);
+  assert.match(S.checkFile('image', { name: 'a.png', type: 'image/png', size: 0 }), /empty/);
+  assert.match(S.checkFile('none', { name: 'a.png', type: 'image/png', size: 1 }), /header type/);
+  assert.equal(S.checkFile('image', { name: 'PHOTO.PNG', type: '', size: 10 }), null, 'a browser that gives no mime type: the extension decides');
+  assert.match(S.checkFile('image', { name: 'x.exe', type: '', size: 10 }), /not allowed/);
+  assert.match(S.mediaAccept('video'), /video\/mp4.*\.mp4/);
+});
+
+test('header upload: a file gets a random link on the dummy CDN that keeps its extension, and is remembered under it', () => {
+  const { S, mem } = loadStore();
+  const r = S.addMedia('image', { name: 'baby.png', type: 'image/png', size: 10 });
+  assert.ok(r.ok);
+  assert.match(r.url, /^https:\/\/cdn\.noorahealth\.org\/templates\/[0-9a-f]{16}\.png$/);
+  assert.equal(S.checkMediaUrl('image', r.url), null, 'the link it gets is a valid header link for that type');
+  assert.equal(S.getMedia(r.url).name, 'baby.png');
+  assert.equal(S.getMedia(r.url).kind, 'image');
+  assert.equal(S.getMedia(r.url).size, 10);
+  const r2 = S.addMedia('image', { name: 'baby.png', type: 'image/png', size: 10 });
+  assert.notEqual(r2.url, r.url, 'every upload gets its own random link, even for the same file');
+  assert.match(S.addMedia('video', { name: 'clip', type: 'video/mp4', size: 5 }).url, /\.mp4$/, 'no extension in the name: the mime type decides');
+  assert.match(S.addMedia('image', { name: 'p.JPEG', type: 'image/jpeg', size: 5 }).url, /\.jpeg$/);
+  assert.equal(S.addMedia('image', { name: 'a.pdf', type: 'application/pdf', size: 1 }).ok, false, 'a refused file registers nothing');
+  assert.equal(S.getMedia('https://cdn.noorahealth.org/templates/nope.png'), null);
+  assert.ok(!JSON.stringify(JSON.parse(mem['cms-prototype-v1'])).includes('base64'), 'only metadata is in the main saved state; the data lives in IndexedDB');
+  assert.equal(loadStore(mem).S.getMedia(r.url).name, 'baby.png', 'the metadata survives a reload');
 });
 
 // ---------------------------------------------------------------- rewinding: the undo tree

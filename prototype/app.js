@@ -360,37 +360,39 @@
   // Containers data-sec="header|body|footer|buttons|add" (in the phone) and "header-id|placeholders|button-details|problems"
   // (below it) always exist or can appear while typing; never re-render the field being typed in.
 
-  // what the media of the header is, in a few words (shown under the picture while editing)
-  function mediaNote(c, id) {
-    id = (id || '').trim();
-    if (!id) return 'No ' + c.headerType + ' uploaded yet';
-    var m = S.getMedia(id);
-    if (!m) return 'Media id ' + id + ' · no file in this prototype, so nothing to preview';
-    return m.name + ' · ' + S.fmtSize(m.size) + (S.mediaData(id) ? '' : ' · preview is not kept after a reload for a file this big');
+  // what the header link is, in a few words (shown under the picture while editing)
+  function mediaNote(c, url) {
+    url = (url || '').trim();
+    if (!url) return 'No ' + c.headerType + ' yet. Hover the picture and click the pencil to upload one, or paste a CDN link below the phone.';
+    var why = S.checkMediaUrl(c.headerType, url);
+    if (why) return why;
+    var m = S.getMedia(url);
+    if (m) return m.name + ' · ' + S.fmtSize(m.size) + (mediaUrls[url] ? '' : ' · the file is not kept in this browser any more, only the link');
+    return S.mediaFileName(url) || url;
   }
   function headerVisualHtml(c, p) {
     return waHeaderHtml(c, p) + '<div class="wa-hnote small" data-note="header">' + esc(mediaNote(c, p.header)) + '</div>';
   }
 
-  // Header type is one per template (name level); each language has its own media file (stored as a media id)
+  // Header type is one per template (name level); each language has its own link. In the phone: only the header as it looks
+  // (a tile with the file's name); the type, the link and the limits are below the phone (secHeaderUrl).
   function secHeader(c, tr, p) {
     if (c.headerType === 'none') return '';
-    var has = !!(p.header || '').trim();
     return '<div class="wa-part wa-part-header" data-sec="header">' + cmBadge(c, tr.lang, 'header') +
       '<div class="wa-hvis" data-media="' + tr.lang + '">' + headerVisualHtml(c, p) + '</div>' +
-      '<div class="wa-hctl"><select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
-      S.HEADER_TYPES.filter(function (h) { return h.id !== 'none'; }).map(function (h) { return '<option value="' + h.id + '"' + (h.id === c.headerType ? ' selected' : '') + '>' + h.label + '</option>'; }).join('') + '</select>' +
-      '<button class="btn" data-action="pick-header" data-lang="' + tr.lang + '">' + (has ? 'Replace ' : 'Upload ') + c.headerType + '</button>' +
-      (has ? '<button class="btn link" data-action="clear-header-file" data-lang="' + tr.lang + '">Remove file</button>' : '') +
-      '<button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove header</button>' +
-      '<span class="wa-hint small">' + esc(S.mediaHint(c.headerType)) + '</span>' +
-      '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div></div>';
+      '<button class="wa-edit" data-action="edit-header" data-lang="' + tr.lang + '" aria-label="Upload a different ' + c.headerType + '" title="Upload a different ' + c.headerType + ' (' + esc(S.headerHint(c.headerType)) + ')">' + ICON_PENCIL + '</button>' +
+      '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div>';
   }
-  // below the phone: the media id (set by the upload, or a TurnMedia uuid pasted by hand)
-  function secHeaderId(c, tr, p) {
-    if (c.headerType === 'none') return '<div data-sec="header-id"></div>';
-    return '<div class="sec" data-sec="header-id">' + lbl('Header media id') +
-      '<input class="field" data-input="header" data-lang="' + tr.lang + '" value="' + esc(p.header) + '" placeholder="Media ID (set by the upload, or paste a TurnMedia uuid)" aria-label="Media ID" autocomplete="off" spellcheck="false"></div>';
+  // below the phone: the header type (applies to every language), its limits, and the link to the file on the static CDN
+  function secHeaderUrl(c, tr, p) {
+    if (c.headerType === 'none') return '<div data-sec="header-url"></div>';
+    return '<div class="sec" data-sec="header-url"><div class="sec-label sec-row"><span>Header</span>' +
+      '<select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
+      S.HEADER_TYPES.filter(function (h) { return h.id !== 'none'; }).map(function (h) { return '<option value="' + h.id + '"' + (h.id === c.headerType ? ' selected' : '') + '>' + h.label + '</option>'; }).join('') + '</select>' +
+      '<span class="wa-hint small">' + esc(S.headerHint(c.headerType)) + '</span><span class="grow"></span>' +
+      '<button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove header</button></div>' +
+      '<label class="fld"><span>Media link <span class="muted small">file on the static CDN</span></span>' +
+      '<input class="field" data-input="header" data-lang="' + tr.lang + '" value="' + esc(p.header) + '" placeholder="https://cdn.example.org/path/file.' + (c.headerType === 'video' ? 'mp4' : c.headerType === 'document' ? 'pdf' : 'png') + '" aria-label="Header media link" inputmode="url" autocomplete="off" spellcheck="false"></label></div>';
   }
 
   function secBody(c, tr, p) {
@@ -444,24 +446,22 @@
         '<button class="wa-x" data-action="btn-remove" data-lang="' + tr.lang + '" data-idx="' + i + '" aria-label="Remove button ' + (i + 1) + '" title="Remove this button">×</button></div>';
     }).join('') + '</div>';
   }
-  // below the phone: what each button does (quick reply payload, or the URL and its variables)
+  // below the phone: what each button does. The button's own text is the label of its field (quick reply payload, or the URL and its variables).
   function secButtonDetails(c, tr, p, ro) {
     var bs = p.buttons || [];
     if (!bs.length) return ro ? '' : '<div data-sec="button-details"></div>';
-    var n = S.buttonCounts(bs);
-    return '<div class="sec" data-sec="button-details">' + lbl('Buttons', '· quick replies ' + n.quickReply + ' / ' + S.LIMITS.quickReplies + ' · URL ' + n.url + ' / ' + S.LIMITS.urlButtons) +
+    return '<div class="sec" data-sec="button-details">' + lbl('Buttons') +
       bs.map(function (b, i) {
-        var url = b.type === 'URL';
+        var url = b.type === 'URL', label = '<span class="bdet-label" data-label="' + i + '">' + esc(b.text || 'Button ' + (i + 1)) + '</span>';
         if (ro) {
-          return '<div class="bro"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span> “' + esc(b.text) + '” <span class="muted">→</span> ' +
+          return '<div class="bro"><span class="bdet-label">' + esc(b.text || 'Button ' + (i + 1)) + '</span> <span class="muted">→</span> ' +
             (url ? esc(b.url) : esc(b.default_payload)) + (url ? btnParams(tr, b, i, true) : '') + '</div>';
         }
-        return '<div class="bdet" data-idx="' + i + '"><div class="bcard-head"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span>' +
-          '<span class="muted small">Button ' + (i + 1) + (b.text ? ' · ' + esc(b.text) : '') + '</span></div>' +
+        return '<div class="bdet" data-idx="' + i + '">' +
           (url
-            ? '<label class="fld"><span>URL <span class="muted small">use {{name}} for a variable part</span></span>' +
+            ? '<label class="fld"><span>' + label + ' <span class="muted small">URL · use {{name}} for a variable part</span></span>' +
               '<input class="field" data-input="btn-url" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.url) + '" placeholder="https://" autocomplete="off" spellcheck="false"></label>' + btnParams(tr, b, i, false)
-            : '<label class="fld"><span>Default payload</span><input class="field" data-input="btn-payload" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.default_payload) + '" autocomplete="off" spellcheck="false"></label>') +
+            : '<label class="fld"><span>' + label + ' <span class="muted small">default payload</span></span><input class="field" data-input="btn-payload" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.default_payload) + '" autocomplete="off" spellcheck="false"></label>') +
           '</div>';
       }).join('') + '</div>';
   }
@@ -519,8 +519,8 @@
       '<div class="wa-meta"><span class="wa-count small">' + counter('text', p.text.length, S.LIMITS.body) + '</span><span class="wa-time">9:41</span></div></div>';
     return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
       '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Editing</span></div>' +
-      '<div class="wa-editor">' + phoneShell(bubble + secButtons(c, tr, p) + secAdd(c, tr, p), ' editable') + '</div>' +
-      '<div class="wa-details">' + secHeaderId(c, tr, p) + secPlaceholders(c, tr, p, false) + secButtonDetails(c, tr, p, false) + secProblems(c, tr, p) + '</div>' +
+      '<div class="wa-editor">' + phoneShell(bubble + secButtons(c, tr, p), ' editable') + secAdd(c, tr, p) + '</div>' +
+      '<div class="wa-details">' + secHeaderUrl(c, tr, p) + secPlaceholders(c, tr, p, false) + secButtonDetails(c, tr, p, false) + secProblems(c, tr, p) + '</div>' +
       '<div class="panel-foot">' +
       '<span class="dirty-note small" style="color:var(--warn)">' + (dirty ? 'Unsaved changes' : '') + '</span>' +
       '<span class="grow"></span>' + waNameHtml(tr) +
@@ -1285,6 +1285,42 @@
     if (w) { w.scrollLeft = snap.left; w.scrollTop = snap.top; }
   }
 
+  // ---- uploaded header files: kept as data in IndexedDB, shown from local blob URLs (nothing is ever fetched) --------------
+  // Key = the (dummy CDN) link the upload was given. mediaUrls: link -> blob URL, filled at start-up and on upload. If IndexedDB is not
+  // available (some private windows) the file is still shown until the page is closed.
+  var mediaUrls = {};
+  function mediaDb() {
+    return new Promise(function (resolve, reject) {
+      try {
+        var req = window.indexedDB.open('cms-prototype-media', 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore('files', { keyPath: 'url' }); };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      } catch (e) { reject(e); }
+    });
+  }
+  function mediaTx(mode, fn) {
+    return mediaDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('files', mode), out = fn(tx.objectStore('files'));
+        tx.oncomplete = function () { db.close(); resolve(out && out.result); };
+        tx.onerror = tx.onabort = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+  function mediaPut(url, blob) { return mediaTx('readwrite', function (st) { return st.put({ url: url, blob: blob }); }).catch(function () { /* kept for this session only */ }); }
+  function mediaClear() {
+    Object.keys(mediaUrls).forEach(function (u) { try { URL.revokeObjectURL(mediaUrls[u]); } catch (e) { /* ignore */ } });
+    mediaUrls = {};
+    return mediaTx('readwrite', function (st) { return st.clear(); }).catch(function () { /* ignore */ });
+  }
+  function mediaLoad() {
+    return mediaTx('readonly', function (st) { return st.getAll(); }).then(function (rows) {
+      (rows || []).forEach(function (r) { if (r && r.blob && !mediaUrls[r.url]) mediaUrls[r.url] = URL.createObjectURL(r.blob); });
+      return (rows || []).length;
+    }).catch(function () { return 0; });
+  }
+
   function autosize(el) { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }   // the body grows with its text, like the bubble
   function autosizeAll() { [].forEach.call(document.querySelectorAll('.wa-text-in'), autosize); }
 
@@ -1330,41 +1366,36 @@
     return r.ok;
   }
 
-  // A file was chosen for the header of one language: check it against WhatsApp's rules, read it, register it, show it right away.
-  // Nothing is saved until the language is saved (the file id is part of the draft like any other part).
+  // A file was chosen for the header of one language: check it against WhatsApp's rules, give it a random link on the dummy CDN,
+  // keep its data in IndexedDB and show it right away. Nothing is saved until the language is saved (the link is part of the draft).
   function uploadHeader(input) {
     var file = input.files && input.files[0], lang = input.getAttribute('data-lang');
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang);
     if (!file || !tr) return;
-    var why = S.checkMedia(c.headerType, { name: file.name, type: file.type, size: file.size });
+    var meta = { name: file.name, type: file.type, size: file.size };
+    var why = S.checkFile(c.headerType, meta);
     input.value = '';
     if (why) { toast(why, true); return; }
-    var reader = new FileReader();
-    reader.onload = function () {
-      var cur = S.get(ui.selectedId);
-      if (!cur || cur.id !== c.id || !panelOf(lang)) return;           // the author moved on while the file was being read
-      var r = S.addMedia(c.headerType, { name: file.name, type: file.type, size: file.size }, String(reader.result));
-      if (!r.ok) { toast(r.error, true); return; }
-      editableDraft(c, tr).header = r.id;
-      refreshSec(lang, 'header'); refreshSec(lang, 'problems'); syncDirty(lang);
-      toast(file.name + ' attached' + (r.kept ? '' : ' (this file is too big to keep after a reload)'));
-    };
-    reader.onerror = function () { toast('Could not read ' + file.name, true); };
-    reader.readAsDataURL(file);
+    var r = S.addMedia(c.headerType, meta);
+    if (!r.ok) { toast(r.error, true); return; }
+    mediaUrls[r.url] = URL.createObjectURL(file);
+    mediaPut(r.url, file);
+    editableDraft(c, tr).header = r.url;
+    refreshSec(lang, 'header'); refreshSec(lang, 'problems'); syncDirty(lang);
+    toast(file.name + ' attached as ' + r.url);
   }
-
   function panelOf(lang) { return document.querySelector('.panel.edit[data-lang="' + lang + '"]'); }
 
   // Re-render one section of the editing panel. Only sections that do not contain the field being typed in
   var SEC_HTML = {
     placeholders: function (c, tr, p) { return secPlaceholders(c, tr, p, false); }, buttons: secButtons, 'button-details': function (c, tr, p) { return secButtonDetails(c, tr, p, false); },
-    problems: secProblems, add: secAdd, header: secHeader, 'header-id': secHeaderId
+    problems: secProblems, add: secAdd, header: secHeader, 'header-url': secHeaderUrl
   };
   function refreshSec(lang, sec) {
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang), panel = panelOf(lang);
     if (!tr || !panel) return;
     var p = currentParts(c, tr);
-    (sec === 'buttons' ? ['buttons', 'button-details'] : sec === 'header' ? ['header', 'header-id'] : [sec]).forEach(function (k) {
+    (sec === 'buttons' ? ['buttons', 'button-details'] : sec === 'header' ? ['header', 'header-url'] : [sec]).forEach(function (k) {
       var el = panel.querySelector('[data-sec="' + k + '"]');
       if (el && SEC_HTML[k]) el.outerHTML = SEC_HTML[k](c, tr, p);
     });
@@ -1454,7 +1485,10 @@
       else if (kind === 'footer') { d.footer = t.value; setCount(lang, 'footer', t.value.length, S.LIMITS.footer); }
       else if (kind === 'header') { d.header = t.value; var mbox = panelOf(lang).querySelector('[data-media]'); if (mbox) mbox.innerHTML = headerVisualHtml(c, d); }
       else if (kind === 'default') { d.defaults[name] = t.value; }
-      else if (kind === 'btn-text') { d.buttons[idx].text = t.value; setCount(lang, 'btn-text-' + idx, t.value.length, S.LIMITS.buttonText); }
+      else if (kind === 'btn-text') {
+        d.buttons[idx].text = t.value; setCount(lang, 'btn-text-' + idx, t.value.length, S.LIMITS.buttonText);
+        var lab = panelOf(lang).querySelector('[data-label="' + idx + '"]'); if (lab) lab.textContent = t.value || 'Button ' + (idx + 1);     // the label of its payload / URL field below the phone
+      }
       else if (kind === 'btn-payload') { d.buttons[idx].default_payload = t.value; }
       else if (kind === 'btn-url') { d.buttons[idx].url = t.value; refreshParams(lang, idx); }
       else if (kind === 'btn-param') { d.buttons[idx].default_parameters[name] = t.value; }
@@ -1678,10 +1712,14 @@
     var head = '';
     if (c.headerType !== 'none') {
       var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
-      var hm = S.getMedia((p.header || '').trim()), hurl = hm && S.mediaData(hm.id);
-      if (hurl && hm.kind === 'image' && c.headerType === 'image') head = '<div class="wa-media-file"><img class="wa-img" src="' + esc(hurl) + '" alt="' + esc(hm.name) + '"></div>';
-      else if (hurl && hm.kind === 'video' && c.headerType === 'video') head = '<div class="wa-media-file"><video class="wa-img" src="' + esc(hurl) + '" controls preload="metadata"></video></div>';
-      else if (hm && hm.kind === 'document' && c.headerType === 'document') head = '<div class="wa-doc"><span class="wa-media-ic" aria-hidden="true">📄</span><div><div class="wa-doc-name">' + esc(hm.name) + '</div><div class="wa-sub">PDF · ' + esc(S.fmtSize(hm.size)) + '</div></div></div>';
+      // The link is never fetched (the prototype connects to nothing): an uploaded file is shown from its local data, any other
+      // link as a tile with the file's name
+      var url = (p.header || '').trim(), usable = url && !S.checkMediaUrl(c.headerType, url), name = usable ? S.mediaFileName(url) : '';
+      var meta = usable ? S.getMedia(url) : null, data = meta && meta.kind === c.headerType ? mediaUrls[url] : null;
+      if (data && c.headerType === 'image') head = '<div class="wa-media-file"><img class="wa-img" src="' + esc(data) + '" alt="' + esc(meta.name) + '"></div>';
+      else if (data && c.headerType === 'video') head = '<div class="wa-media-file"><video class="wa-img" src="' + esc(data) + '" controls preload="metadata"></video></div>';
+      else if (usable && c.headerType === 'document') head = '<div class="wa-doc"><span class="wa-media-ic" aria-hidden="true">📄</span><div><div class="wa-doc-name">' + esc((meta && meta.name) || name || 'Document') + '</div><div class="wa-sub">PDF' + (meta ? ' · ' + esc(S.fmtSize(meta.size)) : '') + '</div></div></div>';
+      else if (usable) head = '<div class="wa-media wa-media-' + c.headerType + ' linked" title="' + esc(url) + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span class="wa-media-name">' + esc(name || label) + '</span></div>';
       else head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
     }
     return head;
@@ -2082,23 +2120,25 @@
         shownFor(c, tr4).footer = false;
         break;
       }
-      case 'pick-header': { var fi = panelOf(lang).querySelector('.file-input'); if (fi) fi.click(); return; }
-      case 'clear-header-file': {
-        editableDraft(c, S.getTr(c, lang)).header = '';
-        refreshSec(lang, 'header'); refreshSec(lang, 'problems'); syncDirty(lang);
-        ui.focusNext = '.panel.edit [data-action="pick-header"]';
-        return;
-      }
+      case 'edit-header': { var fi = panelOf(lang) && panelOf(lang).querySelector('.file-input'); if (fi) fi.click(); return; }   // the pencil on the picture: choose a file
       case 'remove-header': result(S.setHeaderType(c.id, 'none'), 'Header removed from every language'); break;
       case 'csv-all': download('content-' + today() + '.csv', S.toCsv()); return;
       case 'csv-one': download(S.slugOf(c) + '-' + today() + '.csv', S.toCsv([c.id])); return;
       case 'reset':
         if (!window.confirm('Discard all changes and reload the sample data?')) return;
-        S.reset(); ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.editLang = null; ui.refLang = null; ui.renaming = false;
+        S.reset(); mediaClear(); ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.editLang = null; ui.refLang = null; ui.renaming = false;
         break;
     }
     render();
   });
 
   render();
+  // uploaded header files come back from IndexedDB a moment after the first paint
+  mediaLoad().then(function (n) {
+    if (!n) return;
+    var f = document.activeElement;
+    if (ui.nodeEdit || (f && /^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName))) {          // never disturb what is being typed: only the pictures
+      [].forEach.call(document.querySelectorAll('.panel.edit'), function (p) { refreshSec(p.getAttribute('data-lang'), 'header'); });
+    } else render();
+  });
 })();

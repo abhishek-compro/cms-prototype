@@ -32,7 +32,7 @@ function exportsToValidate() {
   scenario('video header, two URL variables, mixed buttons, footer', c => {
     S.setHeaderType(c.id, 'video');
     put(c, 'en', {
-      text: 'Watch this', header: 'abc-123', footer: 'Footer text',
+      text: 'Watch this', header: 'https://cdn.example.org/media/abc-123.mp4', footer: 'Footer text',
       buttons: [
         { type: 'QUICK_REPLY', text: 'Yes', default_payload: 'y' },
         { type: 'URL', text: 'Open', url: 'https://x.org/{{a}}/{{b}}', default_parameters: { a: '1', b: '2' } },

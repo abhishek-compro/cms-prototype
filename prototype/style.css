@@ -699,7 +699,23 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .wa-hctl { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 2px 4px 6px; font-size: 12px; }
 .wa-hctl .btn { padding: 1px 8px; font-size: 12px; }
 .wa-hint { color: var(--wa-meta); }
-.wa-add { margin-top: 8px; width: 94%; }
+.wa-add { margin: 10px auto 0; width: 340px; max-width: 100%; }
 .wa-add .field-select { width: 100%; }
 .wa-details { padding-bottom: 4px; }
 .bdet { padding: 6px 0 2px; }
+
+.wa-media.linked .wa-media-name { overflow-wrap: anywhere; font-weight: 600; font-size: 12px; }
+
+.sec-row .wa-hint { color: var(--muted); }
+
+/* the pencil on the header picture: appears on hover / keyboard focus, top right corner of the picture */
+.wa-edit { position: absolute; top: 6px; right: 6px; z-index: 3; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; opacity: 0; box-shadow: 0 1px 4px var(--shadow); }
+.wa-part-header:hover .wa-edit, .wa-edit:focus-visible { opacity: 1; }
+.wa-edit:hover { color: var(--accent); }
+.wa-part-header .cm-badge { right: auto; left: -4px; }
+
+/* the phone's buttons sit right under the bubble, as close together as WhatsApp draws them */
+.wa-btns-edit { margin-top: 1px; gap: 1px; }
+.wa-btn-edit.bcard { margin: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: var(--wa-bubble); }
+.bdet-label { font-weight: 600; color: var(--text); }
+.bdet { padding: 4px 0 2px; }
