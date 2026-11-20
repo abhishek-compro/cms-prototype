@@ -994,12 +994,26 @@
       else if (what === 'flow') r2 = S.addFlowNode(flow, arg);
       else r2 = S.addTemplateNode(flow, arg);
       result(r2, what === 'flow' ? 'Flow call added' : what === 'tpl' ? 'Added to the flow' : NODE_LABEL[arg] + ' node added');
+      if (r2.ok && r2.node) { var pl = newNodePlace(flow, r2.node.type); if (pl) S.moveNode(flow, r2.node.id, pl.x, pl.y); }     // the middle of what you see, on top
       render();
       return;
     }
     var r = kind === 'addflow' ? S.addFlowNode(flow, id) : S.addTemplateNode(flow, id);
     result(r, kind === 'addflow' ? 'Flow call added' : 'Added to the flow');
     render();
+  }
+
+  // Where a new node goes: the middle of the part of the canvas you can see right now (however far it is scrolled), never exactly on top of another
+  // node (a node already there is cascaded 28px), and above the others (it is the last node, so it is drawn last).
+  var NEW_NODE_SIZE = { template: [270, 130], flow: [270, 110], logic: [270, 170], action: [270, 110], input: [270, 60] };
+  function newNodePlace(flowId, type) {
+    var wrap = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas'), f = S.getFlow(flowId);
+    if (!wrap || !cv || !f) return null;
+    var wr = wrap.getBoundingClientRect(), cr = cv.getBoundingClientRect(), sz = NEW_NODE_SIZE[type] || [270, 120];
+    var cx = wr.left + wrap.clientLeft + wrap.clientWidth / 2 - cr.left, cy = wr.top + wrap.clientTop + wrap.clientHeight / 2 - cr.top;
+    var x = Math.max(20, Math.round(cx - sz[0] / 2)), y = Math.max(20, Math.round(cy - sz[1] / 2));
+    while (f.nodes.some(function (n) { return Math.abs(n.x - x) < 12 && Math.abs(n.y - y) < 12; })) { x += 28; y += 28; }
+    return { x: x, y: y };
   }
 
   // ---- the flow canvas: nodes joined by edges ---------------------------------------------
