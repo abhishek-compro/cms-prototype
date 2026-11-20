@@ -842,3 +842,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .list-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 7px; z-index: 6; cursor: col-resize; background: transparent; }
 .list-resizer:hover, .list-resizer:focus-visible, body.resizing .list-resizer { background: var(--accent-soft); box-shadow: inset -2px 0 0 var(--accent); outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }
+
+/* the top of a flow, simplified: one header row (name + pencil, the timing as text, comments / History at the right), one toolbar row */
+.flow-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px 0; }
+.flow-head h2 { margin: 0; font-size: 17px; }
+.flow-head .rename-row { display: inline-flex; align-items: center; gap: 4px; }
+.flow-head .rename-row input { padding: 3px 8px; border: 1px solid var(--accent); border-radius: 6px; font-size: 15px; }
+.flow-head .flow-card.timing-line { padding: 0 0 0 6px; flex: 1 1 auto; min-width: 0; }
+.flow-head .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.flow-toolbar { margin: 0; padding: 8px 14px 6px; gap: 6px; }
+.flow-toolbar .seg { margin-left: 6px; }
+.flow-toolbar .info-btn { margin-left: auto; }
+.flow-help { padding: 0 14px 6px; }

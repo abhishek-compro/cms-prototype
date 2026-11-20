@@ -29,9 +29,9 @@ uiSuite('timing line: "<n> days <before/after> <ref date> <name>" as plain singl
   await b.fill('.flow-card [data-t=days]', '1000'); await b.key('Enter', 'Enter', 13);
   ok('an invalid number is refused with a message and the line goes back', /whole number from 0 to 999/.test(await toast()) && await val('.flow-card [data-t=days]') === '200');
 
-  // ---- a flow with a graph has the same line, with the flow's name
+  // ---- a flow with a graph has the line too (its name is the heading next to it)
   await b.click('.camp-item[data-id=k1]');
-  ok('a flow shows its own line: 7 days before expected_date_of_delivery Newborn first weeks, on one line above the toolbar of the canvas', await parts() === '7 days before expected_date_of_delivery Newborn first weeks' && await b.ev(`document.querySelector('.flow-card').getBoundingClientRect().height < 46 && document.querySelector('.flow-card').getBoundingClientRect().top < document.querySelector('.flow-toolbar').getBoundingClientRect().top`), await parts());
+  ok('a flow shows its line: 7 days before expected_date_of_delivery, right next to its name (the heading), on one line', await b.ev(`(function(){var c=document.querySelector('.flow-card'), v=function(s){return c.querySelector(s).value}; return v('[data-t=days]') === '7' && v('[data-t=when]') === 'before' && v('[data-t=ref]') === 'expected_date_of_delivery' && !c.querySelector('.tl-name') && c.getBoundingClientRect().height < 46 && document.querySelector('.flow-head h2').textContent === 'Newborn first weeks'})()`));
 
   // ---- theme
   const col = () => b.ev(`getComputedStyle(document.querySelector('.flow-card [data-t=days]')).color`);

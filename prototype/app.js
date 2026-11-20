@@ -6,6 +6,7 @@
 
   var ui = {
     listTab: 'templates', // content sidebar tab: 'templates' | 'flows'
+    flowInfo: false,     // the hint under the flow toolbar is open (under its i button)
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
@@ -1169,18 +1170,20 @@
   }
 
   function flowEditorHtml(f) {
+    // one quiet header row: the name (with a small pencil to rename it), its timing as plain text, and the comments / history buttons at the right.
+    // What the flow holds and its campaigns are in the name's tooltip; the hint about dragging is behind the i button of the toolbar.
+    var tip = 'Flow · ' + flowSummary(f) + (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + f.campaignIds.map(S.campaignName).join(', ') : '');
     var title = ui.renaming
-      ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(f.name) + '">' +
-        '<button class="btn primary" data-action="rename-save">Save</button><button class="btn" data-action="rename-cancel">Cancel</button></div>'
-      : '<h2>' + esc(f.name) + '</h2><button class="btn link" data-action="rename-start">Rename</button>';
+      ? '<span class="rename-row"><input type="text" id="rename-input" value="' + esc(f.name) + '" aria-label="Flow name">' +
+        '<button class="icon-btn sm" data-action="rename-save" aria-label="Save the new name" title="Save the new name">✓</button><button class="icon-btn sm" data-action="rename-cancel" aria-label="Cancel renaming" title="Cancel (Esc)">✕</button></span>'
+      : '<h2 title="' + esc(tip) + '">' + esc(f.name) + '</h2>' +
+        '<button class="icon-btn sm" data-action="rename-start" aria-label="Rename the flow" title="Rename">' + ICON_PENCIL + '</button>';
     var inFlow = S.flowTemplateIds(f);
     var addable = S.list().filter(function (c) { return inFlow.indexOf(c.id) === -1; });
     var size = canvasSize(f);
-    return '<div class="content-head"><div><div class="title">' + title + '</div>' +
-      '<div class="muted small">Flow · ' + flowSummary(f) +
-      (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
+    return '<div class="flow-head">' + title +
+      '<div class="flow-card timing-line">' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div>' +
       '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</div></div>' +
-      '<div class="flow-card timing-line">' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '<span class="tl-name">' + esc(f.name) + '</span></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({
         kind: 'add', attrs: 'data-flow="' + f.id + '"', label: '+ Template…', aria: 'Add a template node', search: 'Search templates…', empty: 'No template matches', disabled: !addable.length,
@@ -1195,7 +1198,8 @@
         var on = S.flowDirection(f) === d[0];
         return '<button type="button" class="btn' + (on ? ' on' : '') + '" data-action="flow-direction" data-dir="' + d[0] + '" aria-pressed="' + on + '">' + d[1] + '</button>';
       }).join('') + '</span>' +
-      '<span class="muted small flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect.</span></div>' +
+      '<button class="info-btn' + (ui.flowInfo ? ' on' : '') + '" data-action="flow-info" aria-expanded="' + !!ui.flowInfo + '" aria-controls="flow-help" aria-label="How to use the canvas" title="How to use the canvas">' + ICON_INFO + '</button></div>' +
+      (ui.flowInfo ? '<div class="muted small flow-help" id="flow-help">Drag a node by its header to move it. Drag from the output dot of a node onto another node to connect.</div>' : '') +
       '<div class="canvas-wrap" id="canvas-wrap"><div class="canvas' + (S.flowDirection(f) === 'td' ? ' td' : '') + '" id="canvas" data-flow="' + f.id + '" style="width:' + size.w + 'px;height:' + size.h + 'px">' +
       '<svg class="edges" id="edges" width="' + size.w + '" height="' + size.h + '"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-head"/></marker></defs><g id="edge-paths"></g></svg>' +
       f.nodes.map(function (n) { return nodeHtml(f, n); }).join('') +
@@ -2134,6 +2138,7 @@
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
       case 'camps-toggle': ui.campCollapsed = !ui.campCollapsed; ui.campBox = false; ui.campError = ''; ui.focusNext = '.campaigns .camp-toggle'; break;
+      case 'flow-info': ui.flowInfo = !ui.flowInfo; break;
       case 'hist-info': ui.histInfo = !ui.histInfo; updateHistoryPane(); return;
       case 'hist-tab': {
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';
