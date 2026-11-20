@@ -314,7 +314,7 @@
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
-      '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '">' + (ui.historyOpen ? 'Hide' : 'Show') + ' history</button>' +
+      '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '" title="' + (ui.historyOpen ? 'Hide' : 'Show') + ' the history sidebar">History</button>' +
       '<button class="btn deploy" data-action="deploy-all"' + (deployable ? ' title="Publish ' + deployable + ' language' + (deployable === 1 ? '' : 's') + '"' : ' disabled') + '>Publish all</button></span></div>';
   }
 
@@ -1124,7 +1124,7 @@
     return '<div class="content-head"><div><div class="title">' + title + '</div>' +
       '<div class="muted small">Flow · ' + flowSummary(f) +
       (f.campaignIds.length ? ' · ' + (f.campaignIds.length === 1 ? 'Campaign' : 'Campaigns') + ': ' + esc(f.campaignIds.map(S.campaignName).join(', ')) : '') + '</div></div>' +
-      '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane">Show history</button>') + '</div></div>' +
+      '<div class="actions">' + cmButtonHtml({ kind: 'flow', id: f.id, f: f }) + (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane" title="Show the history sidebar">History</button>') + '</div></div>' +
       '<div class="flow-card"><div class="flow-card-row"><span class="muted">Sent</span>' + timingEditor(f.timing, 'data-flow-timing="' + f.id + '"') + '</div></div>' +
       '<div class="flow-toolbar">' +
       comboHtml({

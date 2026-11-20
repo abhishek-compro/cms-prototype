@@ -25,7 +25,7 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   await b.click('#comments-pane [data-action=cm-toggle]');
   ok('Hide in the sidebar closes it', !await q('#comments-pane') && await b.ev(`document.querySelector('.cm-open').getAttribute('aria-pressed')`) === 'false');
   await b.click('[data-action=toggle-history-pane]');
-  ok('Show history opens the history in that same sidebar, and comments are not shown with it', await q('#history-pane') && !await q('#comments-pane'));
+  ok('the History button opens the history in that same sidebar, and comments are not shown with it', await q('#history-pane') && !await q('#comments-pane'));
   await b.click('.cm-open');
   ok('and Comments takes the sidebar back (one right sidebar at a time)', await q('#comments-pane') && !await q('#history-pane'));
   ok('Open (1) is the default tab and there is a Resolved (1) tab', /Open \(1\)/.test(await txt('.cm-list .hp-tab.active')) && /Resolved \(1\)/.test(await txt('.cm-list .hp-tab:not(.active)')));
