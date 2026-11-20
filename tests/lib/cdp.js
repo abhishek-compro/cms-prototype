@@ -68,18 +68,31 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
   await send('Page.enable');
   await send('Page.navigate', { url });
-  await sleep(800);
+
+  // Waiting instead of fixed sleeps keeps the suites fast: a page is "ready" when it has loaded and rendered the app, and an
+  // action has "settled" once the browser has run the handlers it triggered, painted twice and drained the zero-delay timers.
+  const waitReady = async oldMarker => {
+    for (let i = 0; i < 500; i++) {
+      let r = false;
+      try { r = await api.ev(`${oldMarker ? '!window.__old && ' : ''}document.readyState === 'complete' && !!document.querySelector('#app > *')`); } catch (e) { /* page is navigating */ }
+      if (r) return;
+      await sleep(20);
+    }
+    throw new Error('the page did not load');
+  };
+  const settle = () => api.ev('new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(function () { setTimeout(r, 0); }); }); })');
 
   const api = {
     errors,
     sleep,
+    settle,
     /** Evaluate an expression in the page and return its (JSON-able) value. */
     ev: async expr => {
       const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
       if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails));
       return r.result.result.value;
     },
-    reload: async () => { await api.ev('location.reload(); 0'); await sleep(900); },
+    reload: async () => { await api.ev('window.__old = 1; location.reload(); 0'); await waitReady(true); },
     /** Wipe saved data and reload: the page starts from the sample data again. */
     fresh: async () => { await api.ev('localStorage.clear(); 0'); await api.reload(); },
     setScheme: v => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: v }] }),
@@ -95,30 +108,30 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c[0], y: c[1] });
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c[0], y: c[1], button: 'left', clickCount: 1 });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c[0], y: c[1], button: 'left', clickCount: 1 });
-      await sleep(80);
+      await settle();
     },
     /** Move the mouse over an element (for :hover effects). */
     hover: async (sel, fx = 0.5, fy = 0.5) => {
       const c = await api.point(sel, fx, fy);
       if (!c) throw new Error('hover: no element ' + sel);
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c[0], y: c[1] });
-      await sleep(180);       // let the hover transition finish
+      await sleep(140);       // let the hover transition finish (transitions in style.css are .12s)
     },
     /** Move the mouse to page coordinates (for :hover effects on things that are not easy to select). */
-    moveTo: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(180); },
+    moveTo: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(140); },
     clickAt: async (x, y) => {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
-      await sleep(80);
+      await settle();
     },
     /** Type into the focused element (replaces the selection). */
-    type: async text => { await send('Input.insertText', { text }); await sleep(60); },
+    type: async text => { await send('Input.insertText', { text }); await settle(); },
     key: async (key, code, vk) => {
       // Enter/Space need a char payload so the browser performs its default action (e.g. activating a focused button)
       const text = key === 'Enter' ? '\r' : key === ' ' ? ' ' : undefined;
       for (const type of ['keyDown', 'keyUp']) {
         await send('Input.dispatchKeyEvent', Object.assign({ type, key, code: code || key, windowsVirtualKeyCode: vk || 0 }, type === 'keyDown' && text ? { text } : {}));
       }
-      await sleep(80);
+      await settle();
     },
     /** Select all text in a field and type over it (Backspace for an empty string). */
     fill: async (sel, text) => {
@@ -137,7 +150,7 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
         await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a[0] + (t[0] - a[0]) * i / 8, y: a[1] + (t[1] - a[1]) * i / 8, button: 'left', buttons: 1 });
         if (dragData) break;
       }
-      for (let i = 0; i < 30 && !dragData; i++) await sleep(50);
+      for (let i = 0; i < 100 && !dragData; i++) await sleep(10);
       if (!dragData) {
         await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
         await send('Input.setInterceptDrags', { enabled: false });
@@ -149,7 +162,7 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       await send('Input.dispatchDragEvent', { type: opts.cancel ? 'dragCancel' : 'drop', x: t[0], y: t[1], data: dragData });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
       await send('Input.setInterceptDrags', { enabled: false });
-      await sleep(150);
+      await settle();
     },
     /**
      * Plain mouse drag (press, move in steps, release) for things that use mousedown/mousemove/mouseup rather than
@@ -170,7 +183,7 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       }
       if (opts.hold) await opts.hold();
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: t[0], y: t[1], button: 'left', clickCount: 1 });
-      await sleep(120);
+      await settle();
     },
     /** PNG screenshot, e.g. when debugging a failing test. */
     shot: async file => { const s = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(file, Buffer.from(s.result.data, 'base64')); },
@@ -180,6 +193,7 @@ async function launch(url, scheme = 'light', size = '1500,1300') {
       try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
     }
   };
+  await waitReady(false);     // the page loaded what Page.navigate asked for
   return api;
 }
 

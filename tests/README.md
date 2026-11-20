@@ -4,13 +4,18 @@ No dependencies and nothing to install. The prototype itself has no build step; 
 
 ```
 npm run test:unit                                  # data layer + parity: about a second, no browser
-npm run test:ui                                    # real browser: a few minutes
-npm test                                           # everything (the slowest)
+npm run test:ui                                    # real browser, suites in parallel: about 20 s
+npm test                                           # unit + ui (parallel); the Flows suite is not included
+npm run test:serial                                # the same, one file at a time (for a flaky check)
+npm run test:flows                                 # the Flows UI suite (tests/flows/), run on its own
+npm run test:watch                                 # unit tests re-run on every save
 node --test tests/ui/drag-drop.test.js             # one file
 node --test --test-name-pattern="drag" tests/ui/   # only tests whose name matches
 ```
 
-The same without npm: `node --test tests/unit/`, `node --test --test-concurrency=1 tests/ui/`, `node --test --test-concurrency=1 tests/`.
+The same without npm: `node --test tests/unit/`, `node --test --test-concurrency=4 tests/ui/`, `node --test tests/flows/`.
+
+Speed: each UI file starts its own Chromium on a free port, so files run in parallel (`--test-concurrency=4`). The driver (`tests/lib/cdp.js`) waits for the page to load and for each click / key / drag to settle (two animation frames and a timer) instead of sleeping fixed times; use `b.settle()` or wait for a condition, never a fixed `sleep`, after an action.
 
 **The full run takes several minutes.** While developing, run the unit suite plus only the UI file for the area you changed; run everything when you have decided it is worth the wait.
 
@@ -35,7 +40,7 @@ run here is reported as **skipped** with the reason, never as a pass.
 | `ui/header-media.test.js` | Uploading the header file: image / video / PDF previewed in the editor, the phone and the reference panel; WhatsApp type and size limits, replace / remove, kept after reload, wrong kind for the header type. (Unit tests cover the rules in `store.test.js`.) |
 | `ui/preview.test.js` | The phone preview dialog: opens only on the Preview button, placeholders filled with defaults, formatting, header / footer / buttons, unsaved edits as a snapshot, reference panel, focus and closing, light / dark. |
 | `ui/template-parts.test.js` | Body-only editor, the + Add dropdown, placeholders (live, rename, merge), buttons (3 quick replies + 1 URL), header, footer, status, publishing, CSV export. |
-| `ui/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
+| `flows/flows.test.js` | Flows tab: the list with the single-template indicator, creating a flow, the canvas (read-only nodes, click to edit with ✓ / ✕ and the edit lock, searchable pickers, flow-call nodes, edge and node hover, connecting and moving by real pointer drags, per-flow placeholder values, the left-to-right / top-down toggle), reordering flows, refer / duplicate / move of a flow, single-template flows dragged like templates. |
 | `ui/core.test.js` | Themes, language rows, side by side, history sidebar, block/publish, CSV downloads, rename, reset. |
 
 ## How the browser tests work

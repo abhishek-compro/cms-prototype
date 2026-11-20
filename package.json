@@ -4,9 +4,12 @@
   "private": true,
   "description": "Clickable prototype for the WhatsApp template content platform (open prototype/index.html). This file only exists to run the tests; there is nothing to install or build.",
   "scripts": {
-    "test": "node --test --test-concurrency=1 tests/",
+    "test": "node --test --test-concurrency=4 tests/unit/ tests/ui/",
     "test:unit": "node --test tests/unit/",
-    "test:ui": "node --test --test-concurrency=1 tests/ui/"
+    "test:ui": "node --test --test-concurrency=4 tests/ui/",
+    "test:flows": "node --test tests/flows/",
+    "test:serial": "node --test --test-concurrency=1 tests/unit/ tests/ui/",
+    "test:watch": "node --test --watch tests/unit/"
   },
   "engines": {
     "node": ">=22"
