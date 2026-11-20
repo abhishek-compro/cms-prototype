@@ -50,21 +50,34 @@ uiSuite('language outline: the focused language panel and the language selected 
 uiSuite('language lock: a small lock in the toolbar while a language is in focus', async ({ b, ok }) => {
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
-  const lockVisible = () => b.ev(`(function(){var e=document.getElementById('lang-lock'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0})()`);
+  const lockVisible = () => b.ev(`(function(){var e=document.getElementById('lang-lock'); return !!e && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0})()`);
+  const spots = () => b.ev(`JSON.stringify(['.stages','[data-action=csv-one]','[data-action=toggle-history-pane]','[data-change=add-lang]'].map(function(s){var r=document.querySelector(s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]}))`);
   const tbH = () => b.ev(`Math.round(document.querySelector('.toolbar').getBoundingClientRect().height)`);
 
   ok('the lock is in the toolbar but not shown while no language is in focus', await q('.toolbar #lang-lock') && !await lockVisible());
   const h0 = await tbH();
+  const spots0 = await spots();
+  const stagesLeft = () => b.ev(`Math.round(document.querySelector('.stages').getBoundingClientRect().left)`);
+  const sl0 = await stagesLeft();
   await b.click('.panel.edit[data-lang=hi] [data-input=text]');
   ok('focusing the Hindi panel shows a small lock in the toolbar, naming Hindi', await lockVisible() && /Hindi/.test(await txt('#lang-lock .lock-name')) && await q('#lang-lock svg'));
   ok('it says what it means: other users cannot edit that language meanwhile (tooltip and accessible name)', /Hindi is locked while you are in it: other users cannot edit it/.test(await b.ev(`document.getElementById('lang-lock').title`)) && await b.ev(`document.getElementById('lang-lock').getAttribute('aria-label')`) === await b.ev(`document.getElementById('lang-lock').title`) && await b.ev(`document.getElementById('lang-lock').getAttribute('role')`) === 'status');
-  ok('it is small and sits in the toolbar strip: same height as the controls, the icon is 14px, and the toolbar does not grow', await b.ev(`(function(){var l=document.getElementById('lang-lock').getBoundingClientRect(), c=document.querySelector('.toolbar [data-action=csv-one]').getBoundingClientRect(), i=document.querySelector('#lang-lock svg').getBoundingClientRect(); return Math.abs(l.height - c.height) < 1.5 && i.width === 14 && l.width < 140 && l.left > document.querySelector('.stages').getBoundingClientRect().right})()`) && await tbH() === h0);
+  ok('it is small and sits in the toolbar strip: same height as the controls, the icon is 14px, and the toolbar does not grow', await b.ev(`(function(){var l=document.getElementById('lang-lock').getBoundingClientRect(), c=document.querySelector('.toolbar [data-action=csv-one]').getBoundingClientRect(), i=document.querySelector('#lang-lock svg').getBoundingClientRect(); return Math.abs(l.height - c.height) < 1.5 && i.width === 14 && l.width < 140 && l.right <= document.querySelector('.stages').getBoundingClientRect().left && l.left >= document.querySelector('[data-change=add-lang]').getBoundingClientRect().right - 1})()`) && await tbH() === h0);
   await b.type('x');
+  ok('nothing in the toolbar moves when the lock appears: its room was reserved (so a click at that moment cannot miss its button)', await spots() === spots0 && await tbH() === h0, spots0 + ' vs ' + await spots());
+    ok('the workflow group in the centre does not move when the lock appears', await stagesLeft() === sl0, sl0 + ' -> ' + await stagesLeft());
   ok('typing keeps it (nothing is re-rendered)', await lockVisible() && /Hindi/.test(await txt('#lang-lock .lock-name')));
   await b.click('.panel.edit[data-lang=en] [data-input=footer]');
   ok('moving to the English panel changes the lock to English', await lockVisible() && /English/.test(await txt('#lang-lock .lock-name')) && !/Hindi/.test(await txt('#lang-lock .lock-name')));
   await b.key('Tab', 'Tab', 9);
   ok('tabbing between fields of the same language keeps it', await lockVisible() && /English/.test(await txt('#lang-lock .lock-name')));
+  await b.fill('.panel.edit[data-lang=en] [data-input=footer]', 'Typed then clicked');
+  await b.click('.cm-open');
+  ok('a toolbar button clicked right after typing works at once (the lock going away does not make the click miss)', await q('#comments-pane'));
+  await b.click('.cm-open');
+  await b.click('.panel.edit[data-lang=en] [data-input=footer]');
+  await b.click('.panel.edit[data-lang=en] .revert');
+  await b.click('.panel.edit[data-lang=en] [data-input=footer]');
   await b.click('[data-action=toggle-history-pane]');
   ok('moving the focus out of the language panels (to the History button / sidebar) removes the lock', !await lockVisible());
   await b.click('.panel.edit[data-lang=hi] [data-input=text]');

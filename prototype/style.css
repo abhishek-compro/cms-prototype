@@ -746,18 +746,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
    the next ones white. The arrows at the two ends move the content. */
 .toolbar .stages { display: flex; align-items: stretch; margin-left: 12px; min-width: 0; }
 .stage-list { list-style: none; display: flex; align-items: stretch; margin: 0; padding: 0 4px; }
-.stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; width: 76px; height: var(--tb-h); box-sizing: border-box; padding-top: 4px; font-size: 11px; line-height: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }
+.stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; width: 66px; height: var(--tb-h); box-sizing: border-box; padding-top: 6px; font-size: 11px; line-height: 12px; font-weight: 600; white-space: nowrap; color: var(--muted); }
 .stage-label { display: block; }
 .stage-dot { position: relative; z-index: 1; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface); }
-.stage:not(:first-child)::before { content: ""; position: absolute; top: 9px; left: -50%; width: 100%; height: 2px; background: var(--border-strong); }   /* the line from the previous dot to this one */
+.stage:not(:first-child)::before { content: ""; position: absolute; top: 11px; left: -50%; width: 100%; height: 2px; background: var(--border-strong); }   /* the line from the previous dot to this one */
 .stage.done .stage-dot, .stage.now .stage-dot { border-color: var(--btn-ok); }
 .stage.done .stage-dot { background: var(--btn-ok); }
 .stage.done { color: var(--stage-done-text); }
 .stage.now { color: var(--stage-now-text); }
 .stage.now .stage-dot { background: var(--stage-now-bg); border-color: var(--stage-dot); box-shadow: 0 0 0 0 var(--stage-glow); animation: stage-blink 2.8s ease-in-out infinite; }
 @keyframes stage-blink { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--stage-glow); } 50% { opacity: .35; box-shadow: 0 0 9px 4px var(--stage-glow); } }
-.stage-arrow { width: var(--tb-h); height: var(--tb-h); padding: 0; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 0; box-sizing: border-box; }
-.stage-arrow:disabled { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .stage.now .stage-dot { animation: none; } }
 
 /* the toolbar's own bottom border is the only horizontal line: its buttons have no top or bottom border (only the left / right lines between them) */
@@ -768,5 +766,19 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* a small lock in the toolbar while a language is in focus: other users cannot edit it meanwhile */
 .toolbar .lang-lock { display: inline-flex; align-items: center; gap: 5px; height: var(--tb-h); box-sizing: border-box; padding: 0 10px; border-left: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text); background: var(--toolbar-bg); }
-.toolbar .lang-lock[hidden] { display: none; }
+.toolbar .lang-lock { min-width: 86px; justify-content: center; }   /* its room is always reserved, so the toolbar never shifts when it appears or goes */
+.toolbar .lang-lock.off { visibility: hidden; }
 .toolbar .lang-lock svg { color: var(--accent); flex: none; }
+
+/* the workflow group is in the centre of the toolbar (left and right parts take equal room); its two end arrows are oval buttons without a border */
+.toolbar .tb-left { flex: 1 1 0; display: flex; align-items: stretch; }
+.toolbar .stages { flex: none; margin-left: 0; align-items: flex-start; }
+.toolbar .tb-group { flex: 1 1 0; margin-left: 0; justify-content: flex-end; }
+.toolbar .stages .stage-arrow { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: var(--hover); color: var(--text); cursor: pointer; }   /* its centre is the centre of the dots row */
+.toolbar .stages .stage-arrow:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.toolbar .stages .stage-arrow:disabled { opacity: .35; cursor: not-allowed; }
+
+/* the language panels are centred in the editor with room at the left and right when they do not fill the width (auto margins, so a long row
+   still starts at the left edge and scrolls instead of being cut off) */
+.panels > .panel:first-child { margin-left: auto; }
+.panels > .panel:last-child { margin-right: auto; }

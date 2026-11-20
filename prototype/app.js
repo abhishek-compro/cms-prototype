@@ -66,6 +66,8 @@
   function langLabel(code) { return esc(S.langName(code)) + ' <code>' + esc(code) + '</code>'; }
   var ICON_PENCIL = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var ICON_INFO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>';
+  var CHEVRON_L = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+  var CHEVRON_R = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
   var ICON_LOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   var ICON_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
@@ -316,21 +318,20 @@
     var idx = S.stageIndex(c), prev = S.STAGES[idx - 1], next = S.STAGES[idx + 1];
     function arrow(dir, target, glyph) {
       var why = dir < 0 ? (target ? 'Move back to ' + target.label : 'Already with the first group') : (target ? 'Move on to ' + target.label : 'Already with the last group');
-      return '<button class="btn stage-arrow" data-action="stage-' + (dir < 0 ? 'back' : 'next') + '"' + (target ? '' : ' disabled') + ' aria-label="' + esc(why) + '" title="' + esc(why) + '">' + glyph + '</button>';
+      return '<button class="stage-arrow" data-action="stage-' + (dir < 0 ? 'back' : 'next') + '"' + (target ? '' : ' disabled') + ' aria-label="' + esc(why) + '" title="' + esc(why) + '">' + glyph + '</button>';
     }
-    return '<div class="stages" role="group" aria-label="Where this content is in the workflow">' + arrow(-1, prev, '‹') +
+    return '<div class="stages" role="group" aria-label="Where this content is in the workflow">' + arrow(-1, prev, CHEVRON_L) +
       '<ol class="stage-list">' + S.STAGES.map(function (st, i) {
         var state = i < idx ? 'done' : i === idx ? 'now' : 'todo';
         return '<li class="stage ' + state + '" data-stage="' + st.id + '"' + (i === idx ? ' aria-current="step" title="This content is with ' + esc(st.label) + ' now"' : '') + '>' +
           '<span class="stage-dot" aria-hidden="true"></span><span class="stage-label">' + esc(st.label) + '</span></li>';
-      }).join('') + '</ol>' + arrow(1, next, '›') + '</div>';
+      }).join('') + '</ol>' + arrow(1, next, CHEVRON_R) + '</div>';
   }
 
   function toolbarHtml(c) {
     var blockWhy = S.blockProblem(c);
     return '<div class="toolbar">' +
-      addLangHtml(c) + stagesHtml(c) + '<span class="tb-group">' +
-      '<span class="lang-lock" id="lang-lock" role="status" hidden>' + ICON_LOCK + '<span class="lock-name"></span></span>' +
+      '<span class="tb-left">' + addLangHtml(c) + '<span class="lang-lock off" id="lang-lock" role="status">' + ICON_LOCK + '<span class="lock-name"></span></span></span>' + stagesHtml(c) + '<span class="tb-group">' +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, this content cannot be published"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
@@ -1303,11 +1304,11 @@
     var el = document.getElementById('lang-lock');
     if (!el) return;
     var a = document.activeElement, p = a && a.closest ? a.closest('.panel.edit') : null;
-    if (!p) { el.hidden = true; return; }
+    if (!p) { el.classList.add('off'); return; }
     var name = S.langName(p.getAttribute('data-lang')), why = name + ' is locked while you are in it: other users cannot edit it';
     el.querySelector('.lock-name').textContent = name;
     el.title = why; el.setAttribute('aria-label', why);
-    el.hidden = false;
+    el.classList.remove('off');
   }
   document.addEventListener('focusin', updateLangLock);
   document.addEventListener('focusout', function () { setTimeout(updateLangLock, 0); });

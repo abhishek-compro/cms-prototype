@@ -56,6 +56,18 @@ uiSuite('phone editor: the editing panel looks like the WhatsApp message, detail
   ok('every language panel has that width, and every phone is as wide as the editing one', await wOf('.panel.edit[data-lang=hi]') === panelW && await wOf('.panel.edit[data-lang=hi] .phone') === pw);
   ok('the panels are in one horizontal strip: English left, Hindi right, same top', await b.ev(`(function(){var a=document.querySelector('.panel.edit[data-lang=en]').getBoundingClientRect(), h=document.querySelector('.panel.edit[data-lang=hi]').getBoundingClientRect(); return a.right <= h.left && Math.abs(a.top - h.top) < 2})()`));
 
+  // ---- the row of language panels is centred when there is room to spare
+  const room = () => b.ev(`(function(){var m=document.querySelector('.panels').getBoundingClientRect(), a=document.querySelector('.panels > .panel:first-child').getBoundingClientRect(), z=document.querySelector('.panels > .panel:last-child').getBoundingClientRect(); return {left: Math.round(a.left - m.left), right: Math.round(m.right - z.right), over: document.querySelector('.panels').scrollWidth > document.querySelector('.panels').clientWidth + 1}})()`);
+  const r2 = await room();
+  ok('two panels are narrower than the editor, so the row is centred: equal room at the left and right, and it is real room', !r2.over && r2.left > 20 && Math.abs(r2.left - r2.right) <= 2, JSON.stringify(r2));
+  ok('the panels still touch each other as one block in the middle', await b.ev(`(function(){var a=document.querySelector('.panel.edit[data-lang=en]').getBoundingClientRect(), h=document.querySelector('.panel.edit[data-lang=hi]').getBoundingClientRect(); return Math.abs(h.left - a.right) <= 1})()`));
+  await b.click('[data-action=toggle-history-pane]');
+  const r3 = await room();
+  ok('when the editor gets too narrow for them (history open) the row starts at the left edge and scrolls: nothing is cut off at the left', r3.over && r3.left === 0, JSON.stringify(r3));
+  await b.click('[data-action=toggle-history-pane]');
+  const r4 = await room();
+  ok('and it is centred again when the room comes back', !r4.over && Math.abs(r4.left - r4.right) <= 2 && r4.left > 20, JSON.stringify(r4));
+
   // ---- the phone has a constant height, a bit shorter than an average phone; a long message scrolls inside the chat
   const phoneH = () => b.ev(`Math.round(document.querySelector('.panel.edit[data-lang=en] .phone').getBoundingClientRect().height)`);
   const h0 = await phoneH();
