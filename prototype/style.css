@@ -222,7 +222,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* panels */
 /* every language is an editing panel, as wide as its phone plus a bit (80px), all in one horizontal strip */
-.panels { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 14px; }
+.panels { display: flex; align-items: flex-start; gap: 0; overflow: auto; flex: 1 1 0; min-height: 0; }
 .panels > .panel { flex: 0 0 var(--panel-w); width: var(--panel-w); }
 .panel .phone { width: 340px; max-width: 100%; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; }
@@ -824,3 +824,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .flow-item .name { display: block; font-weight: 600; }
 .flow-item .fi-ind { display: inline-flex; align-items: center; min-width: 14px; }
 .flow-item .fi-ind .flow-ind { display: inline-flex; padding: 0; border-radius: 0; background: none; }   /* a plain small icon, no text, no box */
+
+/* reorder the language panels (this view only): a grip in each panel head, a marker on the side where the panel will go */
+.lang-grip { display: inline-flex; align-items: center; margin-right: 2px; color: var(--muted); cursor: grab; opacity: .45; }
+.panel-head:hover .lang-grip, .lang-grip:hover { opacity: 1; }
+.panel.edit.dragging { opacity: .55; }
+.panel.edit.drop-before { box-shadow: inset 4px 0 0 var(--accent); }
+.panel.edit.drop-after { box-shadow: inset -4px 0 0 var(--accent); }
+
+/* when the editor shows language panels, the row of panels fills the room under the toolbar and scrolls inside it (both ways): its horizontal
+   scrollbar is at the bottom of the screen, not at the end of a long page */
+.main:has(> .panels) { display: flex; flex-direction: column; overflow: hidden; }
+.main:has(> .panels) > :not(.panels) { flex: none; }

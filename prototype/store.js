@@ -727,6 +727,21 @@
     return { ok: true };
   }
 
+  // The order the languages are SHOWN in (the data keeps the order they were added in): English first, then the others alphabetically by name.
+  // `custom` is an optional list of language codes (a temporary reordering of the view): those come first in that order, any language not in
+  // it (a new one) follows in the default order.
+  function defaultLangOrder(c) {
+    return c.translations.slice().sort(function (a, b) {
+      if (a.lang === 'en' || b.lang === 'en') return a.lang === 'en' ? (b.lang === 'en' ? 0 : -1) : 1;
+      return langName(a.lang).localeCompare(langName(b.lang));
+    });
+  }
+  function orderLangs(c, custom) {
+    var base = defaultLangOrder(c);
+    if (!custom || !custom.length) return base;
+    var known = custom.map(function (l) { return base.filter(function (t) { return t.lang === l; })[0]; }).filter(Boolean);
+    return known.concat(base.filter(function (t) { return known.indexOf(t) === -1; }));
+  }
   function addTranslation(id, lang, text) {
     var c = get(id);
     if (!c) return fail('Content not found');
@@ -1884,6 +1899,8 @@
     CURRENT_USER: CURRENT_USER,
     LANGUAGES: LANGUAGES,
     ACTION_LABELS: ACTION_LABELS,
+    defaultLangOrder: defaultLangOrder,
+    orderLangs: orderLangs,
     STAGES: STAGES,
     USER_GROUPS: USER_GROUPS,
     stageIndex: stageIndex,

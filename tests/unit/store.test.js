@@ -1199,3 +1199,20 @@ test('ANC sample: a saved demo that has the ten English messages gets the Hindi 
   const { S: S3 } = loadStore(mem2);
   assert.equal(S3.historyFor(S3.contentsIn('k4')[0].id, 'all').length, n, 'and not again on the next load');
 });
+
+// ---------------------------------------------------------------- the order the languages are shown in
+test('defaultLangOrder: English first, then the others alphabetically by name (the data order is untouched); orderLangs applies a temporary order', () => {
+  const S = fresh();
+  const c = S.createContent('Order', 'en').content;
+  ['ta', 'hi', 'bn', 'kn'].forEach(l => S.addTranslation(c.id, l, ''));
+  const langs = list => list.map(t => t.lang).join();
+  assert.equal(langs(S.get(c.id).translations), 'en,ta,hi,bn,kn', 'the data order is the order they were added in');
+  assert.equal(langs(S.defaultLangOrder(S.get(c.id))), 'en,bn,hi,kn,ta', 'English, then Bengali, Hindi, Kannada, Tamil');
+  assert.equal(langs(S.orderLangs(S.get(c.id))), 'en,bn,hi,kn,ta');
+  assert.equal(langs(S.orderLangs(S.get(c.id), [])), 'en,bn,hi,kn,ta', 'an empty custom order is the default');
+  assert.equal(langs(S.orderLangs(S.get(c.id), ['ta', 'en'])), 'ta,en,bn,hi,kn', 'listed languages first, in that order; the rest in the default order');
+  assert.equal(langs(S.orderLangs(S.get(c.id), ['kn', 'xx', 'hi', 'en', 'bn', 'ta'])), 'kn,hi,en,bn,ta', 'unknown codes are ignored');
+  assert.equal(langs(S.get(c.id).translations), 'en,ta,hi,bn,kn', 'ordering never reorders the data');
+  const only = S.createContent('Only Hindi first', 'hi').content;
+  assert.equal(langs(S.defaultLangOrder(only)), 'hi', 'a content with no English is just alphabetical');
+});

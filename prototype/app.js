@@ -11,6 +11,7 @@
     selectedId: null,
     histInfo: false,     // the explanation at the top of the history tabs is open (under the i button)
     histLang: null,      // the language the history sidebar shows (one at a time; null = the first language)
+    langOrder: {},       // per content: a temporary order of its language panels (this view only, never saved; the default is English, then alphabetical)
     campCollapsed: false, // the campaigns column is collapsed to a narrow rail with the selected campaign's name turned 90 degrees
     scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
@@ -509,7 +510,7 @@
     var bubble = '<div class="wa-bubble" data-preview="bubble">' + secHeader(c, tr, p) + secBody(c, tr, p) + secFooter(c, tr, p) +
       '<div class="wa-meta"><span class="wa-count small">' + counter('text', p.text.length, S.LIMITS.body) + '</span><span class="wa-time">9:41</span></div></div>';
     return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span>' +
+      '<div class="panel-head"><span class="lang-grip" draggable="true" aria-hidden="true" title="Drag onto another language to reorder the view (not saved)">' + ICON_GRIP + '</span><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span>' +
       (problemCount(c, tr) ? '<span class="badge blocked" title="Problems block publishing">' + problemCount(c, tr) + ' problem' + (problemCount(c, tr) === 1 ? '' : 's') + '</span>' : '') +
       '<span class="head-actions"><button class="btn revert" data-action="revert" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Revert</button>' +
       '<button class="btn primary save" data-action="save" data-lang="' + tr.lang + '"' + (dirty ? '' : ' disabled') + '>Save</button></span></div>' +
@@ -523,7 +524,7 @@
 
   // every language is an editing panel (a phone with its details below), side by side in one horizontal strip
   function editHtml(c) {
-    return toolbarHtml(c) + '<div class="panels">' + c.translations.map(function (tr) { return editPanelHtml(c, tr); }).join('') + '</div>';
+    return toolbarHtml(c) + '<div class="panels">' + S.orderLangs(c, ui.langOrder[c.id]).map(function (tr) { return editPanelHtml(c, tr); }).join('') + '</div>';
   }
 
   function diffHtml(before, after) {
@@ -629,7 +630,7 @@
       opts = opt('general', 'Whole flow', !t || !t.nodeId) + scope.f.nodes.map(function (n) { return opt('node|' + n.id, cmNodeLabel(scope.f, n.id), t && t.nodeId === n.id); }).join('');
     } else {
       var c = scope.c;
-      opts = opt('general', 'Whole template', !t || !t.part) + c.translations.map(function (tr) {
+      opts = opt('general', 'Whole template', !t || !t.part) + S.orderLangs(c, ui.langOrder[c.id]).map(function (tr) {
         var p = currentParts(c, tr), g = [];
         function o(part, label, idx) { var sel = t && t.lang === tr.lang && t.part === part && (part !== 'button' || t.idx === idx); g.push(opt(tr.lang + '|' + part + '|' + (idx === undefined ? '' : idx), label, sel)); }
         o('body', 'Body');
@@ -799,12 +800,12 @@
       '</div></div>';
   }
   // the language the history sidebar shows: the chosen one if the template still has it, else the first
-  function histLangNow(c) { return c && S.getTr(c, ui.histLang) ? ui.histLang : (c && c.translations[0] ? c.translations[0].lang : null); }
+  function histLangNow(c) { return c && S.getTr(c, ui.histLang) ? ui.histLang : (c && c.translations[0] ? S.orderLangs(c, ui.langOrder[c.id])[0].lang : null); }
   // the Language dropdown at the top of the Content tab: the tree shows one language at a time
   function histLangPickHtml(c) {
     var hl = histLangNow(c);
     return '<div class="hp-lang"><select class="field-select" data-change="hist-lang" aria-label="Language shown in the history">' +
-      c.translations.map(function (t) { return '<option value="' + t.lang + '"' + (t.lang === hl ? ' selected' : '') + '>' + esc(S.langName(t.lang)) + ' (' + t.lang + ')</option>'; }).join('') +
+      S.orderLangs(c, ui.langOrder[c.id]).map(function (t) { return '<option value="' + t.lang + '"' + (t.lang === hl ? ' selected' : '') + '>' + esc(S.langName(t.lang)) + ' (' + t.lang + ')</option>'; }).join('') +
       '</select>' + histInfoBtn() + '</div>';
   }
   // the explanations of the history tabs sit under an "i" button (closed by default)
@@ -1268,11 +1269,14 @@
 
   function scrollSnapshot() {
     var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas'), l = document.getElementById('content-list');
-    return { list: l ? l.scrollTop : 0, flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
+    var pn = document.querySelector('.panels');
+    return { strip: pn ? pn.scrollLeft : 0, stripTop: pn ? pn.scrollTop : 0, list: l ? l.scrollTop : 0, flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
   }
   function scrollRestore(snap) {       // re-rendering the flow editor must not throw you back to the top-left of the canvas
     var lst = document.getElementById('content-list');
-    if (lst) lst.scrollTop = snap.list;             // the list keeps its place when the page is redrawn (it is the only thing in the column that scrolls)
+    if (lst) lst.scrollTop = snap.list;
+    var pn2 = document.querySelector('.panels');
+    if (pn2) { pn2.scrollLeft = snap.strip; pn2.scrollTop = snap.stripTop; }           // the row of language panels keeps its place when it is redrawn             // the list keeps its place when the page is redrawn (it is the only thing in the column that scrolls)
     var cv = document.getElementById('canvas');
     if (!cv || cv.getAttribute('data-flow') !== snap.flow) return;
     var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap');
@@ -1825,6 +1829,16 @@
   function placeOf(ev, el) { var r = el.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2 ? 'before' : 'after'; }
 
   document.addEventListener('dragstart', function (ev) {
+    var grip = ev.target.closest && ev.target.closest('.lang-grip');       // a language panel, by its grip: reorder the view
+    if (grip) {
+      var gp = grip.closest('.panel.edit');
+      ui.drag = { kind: 'lang', id: ui.selectedId, lang: gp.getAttribute('data-lang') };
+      try { ev.dataTransfer.setDragImage(gp, 40, 20); } catch (e) { /* ignore */ }
+      ev.dataTransfer.effectAllowed = 'move';
+      try { ev.dataTransfer.setData('text/plain', ui.drag.lang); } catch (e) { /* ignore */ }
+      gp.classList.add('dragging');
+      return;
+    }
     var handle = ev.target.closest && ev.target.closest('.drag-handle');
     if (!handle) return;                               // only a handle starts a drag
     var li = handle.closest('.content-item[data-id]');
@@ -1842,6 +1856,12 @@
   function dropSpot(ev) {
     var d = ui.drag;
     if (!d) return null;
+    if (d.kind === 'lang') {                                              // another language panel of the same content: before / after it
+      var pn = ev.target.closest && ev.target.closest('.panel.edit');
+      if (!pn || pn.getAttribute('data-lang') === d.lang || d.id !== ui.selectedId) return null;
+      var pr = pn.getBoundingClientRect();
+      return { type: 'lang', el: pn, place: ev.clientX < pr.left + pr.width / 2 ? 'before' : 'after' };
+    }
     var camp = dropTarget(ev);
     if (camp && (d.kind === 'content' || d.kind === 'flow')) return { type: 'campaign', el: camp };
     var fi = ev.target.closest && ev.target.closest('.flow-item');      // anything in the Flows list can be moved among the others
@@ -1860,7 +1880,7 @@
   document.addEventListener('dragenter', dragOverTarget);
   document.addEventListener('dragover', dragOverTarget);
   document.addEventListener('dragleave', function (ev) {
-    var el = ev.target.closest && ev.target.closest('.camp-item, .flow-item');
+    var el = ev.target.closest && ev.target.closest('.camp-item, .flow-item, .panel.edit');
     if (el && !(ev.relatedTarget && el.contains(ev.relatedTarget))) el.classList.remove('drop-over', 'drop-before', 'drop-after');
   });
   document.addEventListener('drop', function (ev) {
@@ -1870,6 +1890,15 @@
     var drag = ui.drag;
     clearDropMarks();
     ui.drag = null;
+    if (spot.type === 'lang') {               // a temporary order of the language panels: only this view, nothing is saved
+      var cl = S.get(drag.id), order = S.orderLangs(cl, ui.langOrder[drag.id]).map(function (t) { return t.lang; });
+      order.splice(order.indexOf(drag.lang), 1);
+      var at = order.indexOf(spot.el.getAttribute('data-lang'));
+      order.splice(spot.place === 'before' ? at : at + 1, 0, drag.lang);
+      ui.langOrder[drag.id] = order;
+      render();
+      return;
+    }
     if (spot.type === 'campaign') {
       if (drag.kind === 'flow') openFlowDialog(drag.id, spot.el.getAttribute('data-id'));
       else openDropDialog(drag.id, spot.el.getAttribute('data-id'));
@@ -2131,7 +2160,7 @@
       case 'csv-one': download(S.slugOf(c) + '-' + today() + '.csv', S.toCsv([c.id])); return;
       case 'reset':
         if (!window.confirm('Discard all changes and reload the sample data?')) return;
-        S.reset(); mediaClear(); ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.renaming = false;
+        S.reset(); mediaClear(); ui.langOrder = {}; ui.drafts = {}; ui.shown = {}; ui.campaignId = null; ui.selectedId = null; ui.renaming = false;
         break;
     }
     render();
