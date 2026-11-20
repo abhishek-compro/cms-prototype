@@ -110,7 +110,17 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   await b.fill('.panel.edit[data-lang=en] [data-input=footer]', 'Noora Health Team');
   await b.click('.panel.edit[data-lang=en] .save');
   ok('saving adds a line to the Content tree live: the language and part, who and when', await cnt('#history-pane .tree-row') === before + 1 && /^English · footer/.test(await txt('#history-pane .tree-item:first-child .tree-what')) && /Demo user/.test(await txt('#history-pane .tree-item:first-child .tree-meta')));
-  ok('still just Content | Other, and the languages are named on the lines', await tabs() === 'content:Content | other:Other' && /Hindi · /.test(await txt('#history-pane')) && /English · /.test(await txt('#history-pane')) && !await q('.panel.subject'));
+  ok('the history language control is just a dropdown, with no label or hint text around it', await b.ev(`document.querySelector('#history-pane .hp-lang').children.length === 1 && document.querySelector('#history-pane .hp-lang').textContent.replace(/[A-Za-z]+ \\([a-z-]+\\)/g, '').trim() === ''`));
+  const pickHist = v => b.ev(`(function(){var s=document.querySelector('#history-pane [data-change=hist-lang]'); s.value=${JSON.stringify(v)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
+  ok('still just Content | Other; the history shows one language at a time (English first), named on the lines', await tabs() === 'content:Content | other:Other' && /English · /.test(await txt('#history-pane')) && !/Hindi · /.test(await txt('#history-pane')) && !await q('.panel.subject'));
+  await pickHist('hi');
+  ok('choosing Hindi in the Language dropdown shows Hindi\'s steps and no English ones; the tabs and the tree stay', /Hindi · /.test(await txt('#history-pane .tree')) && !/English · /.test(await txt('#history-pane .tree')) && await tabs() === 'content:Content | other:Other' && await b.ev(`document.querySelector('#history-pane [data-change=hist-lang]').value`) === 'hi');
+  await b.click('.hp-tab[data-tab=other]');
+  ok('the dropdown is inside the Content tab only: the Other tab has none and lists every language\'s activity', !await q('#history-pane [data-change=hist-lang]') && /Hindi/.test(await txt('#history-pane .timeline')) && /English/.test(await txt('#history-pane .timeline')));
+  await b.click('.hp-tab[data-tab=content]');
+  ok('back in the Content tab the dropdown is there and still on Hindi', await b.ev(`document.querySelector('#history-pane [data-change=hist-lang]').value`) === 'hi' && await b.ev(`!!document.querySelector('#history-pane .tab-body, #history-pane .tree') && document.querySelector('#history-pane [data-change=hist-lang]').compareDocumentPosition(document.querySelector('#history-pane .tree')) & Node.DOCUMENT_POSITION_FOLLOWING`));
+  await pickHist('en');
+  ok('the choice is kept when the language panels are used (the dropdown stays on English here)', await b.ev(`document.querySelector('#history-pane [data-change=hist-lang]').value`) === 'en');
   await b.click('[data-action=toggle-history-pane]');
   ok('"Hide" closes the sidebar', !await q('#history-pane'));
 

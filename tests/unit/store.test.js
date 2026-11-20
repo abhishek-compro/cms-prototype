@@ -1037,3 +1037,37 @@ test('migration: data saved before comments gets an empty list', () => {
   assert.deepEqual(S.commentsFor({ contentId: 'c1' }, 'all'), []);
   assert.ok(S.addComment({ contentId: 'c1' }, 'works').ok);
 });
+
+// ---------------------------------------------------------------- history: one language at a time
+test('historyTree(lang): a language\'s steps plus the steps for every language; links skip the steps left out; the current marker follows', () => {
+  const S = fresh();
+  const c = S.createContent('One lang at a time', 'en').content;
+  S.addTranslation(c.id, 'hi', '');
+  patch(S, c, 'en', { text: 'en one' });
+  const enOne = lastEventId(S, c);
+  patch(S, c, 'hi', { text: 'hi one' });
+  const hiOne = lastEventId(S, c);
+  patch(S, c, 'en', { text: 'en two' });
+  const all = S.historyTree(c.id);
+  const en = S.historyTree(c.id, 'en'), hi = S.historyTree(c.id, 'hi');
+  const ids = t => t.rows.map(r => r.event.id);
+  assert.ok(ids(all).includes(hiOne) && ids(all).includes(enOne), 'no language: every step, as before');
+  assert.ok(ids(en).includes(enOne) && !ids(en).includes(hiOne), 'English: its own steps, not Hindi\'s');
+  assert.ok(ids(hi).includes(hiOne) && !ids(hi).includes(enOne), 'Hindi: its own steps, not English\'s');
+  const created = all.rows.find(r => r.event.action === 'content_created').event.id;
+  assert.ok(ids(en).includes(created) && ids(hi).includes(created), 'steps that are not about one language (created) are in every language');
+  assert.ok(en.rows.every(r => r.event.lang == null || r.event.lang === 'en') && hi.rows.every(r => r.event.lang == null || r.event.lang === 'hi'));
+  // the head is the newest step overall (an English one): English marks it, Hindi marks the nearest of its own steps below it
+  assert.equal(en.head, lastEventId(S, c));
+  assert.equal(hi.head, hiOne, 'for Hindi the current marker sits on the nearest Hindi (or every-language) step at or above the current step');
+  // a straight history of one language is one lane, with the links skipping the other language's steps
+  assert.equal(en.width, 1);
+  assert.equal(hi.width, 1);
+  const enTwo = en.rows[0];
+  assert.equal(enTwo.after[enTwo.lane], enOne, 'English two links to English one although a Hindi step is in between');
+  // a rewind is for every language: it shows in both
+  S.rewind(c.id, enOne);
+  const rw = S.historyFor(c.id, 'all').find(e => e.action === 'rewound').id;
+  assert.ok(ids(S.historyTree(c.id, 'en')).includes(rw) && ids(S.historyTree(c.id, 'hi')).includes(rw));
+  assert.equal(S.historyTree(c.id, 'hi').head, rw);
+});

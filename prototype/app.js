@@ -9,6 +9,7 @@
     flowSel: null,       // Flows tab selection: {kind:'flow'|'template', id} ('template' = a template that is a flow by itself)
     campaignId: null,    // campaign filter for the content list (null = all content)
     selectedId: null,
+    histLang: null,      // the language the history sidebar shows (one at a time; null = the first language)
     scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
     commentsOpen: false, // the right sidebar shows comments (instead of history)
@@ -760,11 +761,20 @@
       (row.isHead ? '<div class="muted small">This is the current step.</div>' : row.problem ? '<div class="muted small">Cannot rewind here: ' + esc(row.problem) + '.</div>' : '') +
       '</div></div>';
   }
+  // the language the history sidebar shows: the chosen one if the template still has it, else the first
+  function histLangNow(c) { return c && S.getTr(c, ui.histLang) ? ui.histLang : (c && c.translations[0] ? c.translations[0].lang : null); }
+  // the Language dropdown at the top of the Content tab: the tree shows one language at a time
+  function histLangPickHtml(c) {
+    var hl = histLangNow(c);
+    return '<div class="hp-lang"><select class="field-select" data-change="hist-lang" aria-label="Language shown in the history">' +
+      c.translations.map(function (t) { return '<option value="' + t.lang + '"' + (t.lang === hl ? ' selected' : '') + '>' + esc(S.langName(t.lang)) + ' (' + t.lang + ')</option>'; }).join('') +
+      '</select></div>';
+  }
   function treeHtml(c) {
-    var tree = S.historyTree(c.id), dirty = c.translations.some(function (t) { return isDirty(c, t); });
+    var tree = S.historyTree(c.id, histLangNow(c)), dirty = c.translations.some(function (t) { return isDirty(c, t); });
     var help = '<div class="muted small tree-help">Changes to the content, as a tree. <strong>Details</strong> shows what changed in a step. <strong>Rewind</strong> puts the content (text, header, footer, placeholders, buttons) back as it was after a step. It is recorded as a new step and nothing is deleted: the steps after it stay as another branch you can return to, and editing from here starts a new one. Everything else (publishing, renaming, campaigns, timing) is under <strong>Other</strong>.</div>';
     if (dirty) help += '<div class="tree-note" role="status">Save or revert your unsaved edits to rewind.</div>';
-    return help + '<ol class="tree" aria-label="Content history tree, newest first">' + tree.rows.map(function (row) {
+    return histLangPickHtml(c) + help + '<ol class="tree" aria-label="Content history tree, newest first">' + tree.rows.map(function (row) {
       var e = row.event, what = eventTitle(e), why = dirty ? 'Save or revert your unsaved edits first' : row.problem;
       var tip = what + ' — ' + e.actor + ', ' + fmtTime(e.ts), open = !!ui.treeDetails[e.id];
       return '<li class="tree-item' + (open ? ' open' : '') + '" data-event="' + e.id + '"><div class="tree-row' + (row.isHead ? ' current' : '') + '" title="' + esc(tip) + '">' + treeGraph(row, tree.width) +
@@ -1435,6 +1445,7 @@
     if (what === 'ph-rename' || what === 'btn-ph-rename') { renamePlaceholderFromUi(t, what === 'btn-ph-rename'); return; }
     if (what === 'timing') { saveTimingFromUi(t); return; }
     if (what === 'upload-header') { uploadHeader(t); return; }
+    if (what === 'hist-lang') { ui.histLang = t.value; updateHistoryPane(); return; }
     if (what === 'cm-target') {
       var sc = cmScopeNow(), v = t.value.split('|');
       if (!sc) return;

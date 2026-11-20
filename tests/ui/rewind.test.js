@@ -16,21 +16,22 @@ uiSuite('rewind: the Tree tab, current marker, rewinding as a new step, branches
   ok('the sidebar has exactly two tabs: Content and Other (the tree lives in Content)', await b.ev(`[].map.call(document.querySelectorAll('.hp-tab'), function(t){return t.textContent.trim()}).join('|')`) === 'Content|Other');
   await b.click('[data-tab=content]');
   ok('the Content tab is selected (first) and the sidebar gets wider to fit one line per step', await b.ev(`document.querySelector('[data-tab=content]').getAttribute('aria-selected')`) === 'true' && await b.ev(`document.querySelector('#history-pane').getBoundingClientRect().width`) > 400);
-  const n0 = await b.ev(`Store.historyTree(Store.list()[0].id).rows.length`);
-  ok('there is one line for every CONTENT step of the template (all languages), newest first', await cnt('.tree-row') === n0 && n0 > 8, n0);
+  const n0 = await b.ev(`Store.historyTree(Store.list()[0].id, 'en').rows.length`);
+  ok('the Content tab shows one language at a time: a Language dropdown at its top with every language of the template, English first and selected', await b.ev(`[].map.call(document.querySelectorAll('#history-pane [data-change=hist-lang] option'), function(o){return o.value}).join()`) === 'en,hi' && await b.ev(`document.querySelector('#history-pane [data-change=hist-lang]').value`) === 'en');
+  ok('there is one line for every CONTENT step of that language (plus the steps for every language), newest first', await cnt('.tree-row') === n0 && n0 > 4, n0);
   ok('every line says what, who and when, on one line', await b.ev(`[].every.call(document.querySelectorAll('.tree-row'), function(r){ var w=r.querySelector('.tree-what').textContent, m=r.querySelector('.tree-meta').textContent; return w.length>3 && /Demo user · \\w+ \\d+, /.test(m) && r.getBoundingClientRect().height < 40 })`));
-  ok('lines name the language and the part: "Hindi · edited the buttons", "English · edited the buttons"', (await rows()).some(r => /^Hindi · edited the buttons/.test(r)) && (await rows()).some(r => /^English · edited the buttons/.test(r)), (await rows()).join(' | '));
+  ok('lines name the language and the part ("English · edited the buttons"); no Hindi line is shown while English is selected', (await rows()).some(r => /^English · edited the buttons/.test(r)) && !(await rows()).some(r => /^Hindi · /.test(r)), (await rows()).join(' | '));
   ok('exactly one line is marked current, the newest', await cnt('.tree-cur') === 1 && await q('.tree-item:first-child .tree-row .tree-cur') && await q('.tree-row.current'));
   ok('each line has a graph with a dot, and the dot of the current step is bigger', await cnt('.tree-row .tree-graph circle.node') === n0 && await b.ev(`+document.querySelector('.tree-row.current circle').getAttribute('r')`) > await b.ev(`+document.querySelector('.tree-item:nth-child(2) circle').getAttribute('r')`));
   const allEvents = await eventsCount();
-  ok('the tree has only content steps: publishing, renaming, campaign and timing steps are not in it', n0 < allEvents && !(await rows()).some(r => /published as|Renamed|Copied|Moved to|timing/i.test(r)) && (await rows()).some(r => /^Hindi · footer/.test(r)), (await rows()).join(' | '));
+  ok('the tree has only content steps: publishing, renaming, campaign and timing steps are not in it', n0 < allEvents && !(await rows()).some(r => /published as|Renamed|Copied|Moved to|timing/i.test(r)) && (await rows()).some(r => /^English · footer/.test(r)), (await rows()).join(' | '));
   ok('every step except the current one has a Rewind button, enabled (the sample steps all have snapshots)', await cnt('.tree-rewind') === n0 - 1 && await b.ev(`![].some.call(document.querySelectorAll('.tree-rewind'), function(x){return x.disabled})`));
-  ok('the sample\'s publish steps are not lost: they are in the Other tab, as a plain list', await (async () => {
+  ok('the sample\'s publish steps are not lost: they are in the Other tab, as a plain list (every language)', await (async () => {
     await b.click('.hp-tab[data-tab=other]');
     const o = await b.ev(`[].map.call(document.querySelectorAll('#history-pane .event'), function(e){return e.querySelector('.event-head strong').textContent + '|' + (e.querySelector('.chip')||{}).textContent}).join(' ; ')`);
     const n = await cnt('#history-pane .event');
     await b.click('[data-tab=content]');
-    return n === await b.ev(`Store.historyFor(Store.list()[0].id,'activity').length`) && n === allEvents - n0 && /Published as template\|English/.test(o) && /Published as template\|Hindi/.test(o) && await q('#history-pane .tree');
+    return n === await b.ev(`Store.historyFor(Store.list()[0].id,'activity').length`) && /Published as template\|English/.test(o) && /Published as template\|Hindi/.test(o) && await q('#history-pane .tree');
   })());
 
   // ---- Details

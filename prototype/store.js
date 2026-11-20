@@ -454,6 +454,9 @@
     return out;
   }
 
+  // The Content tab of the history shows one language at a time: the steps of that language plus the steps that are not about one
+  // language (created, header type, rewinds).
+  function inLang(e, lang) { return !lang || e.lang == null || e.lang === lang; }
   function historyFor(contentId, lang) {
     return state.history.filter(function (e) {
       if (e.contentId !== contentId) return false;
@@ -536,17 +539,20 @@
   // "git log --graph": row.lane is the column of the node, row.before / row.after the event id each column is waiting for above /
   // below the node (null = free), row.merge the columns that end here. A step's parent in the tree is its nearest content ancestor
   // (a publish or rename in between is skipped); the current marker is on the nearest content step at or above content.head.
-  function contentParent(e) {
+  // the nearest ancestor that is a content step (of `lang`, or of every language, when a language is given)
+  function contentParent(e, lang) {
     var p = e.parent;
-    while (p != null) { var pe = eventOf(p); if (!pe) return null; if (isContentStep(pe)) return pe.id; p = pe.parent; }
+    while (p != null) { var pe = eventOf(p); if (!pe) return null; if (isContentStep(pe) && inLang(pe, lang)) return pe.id; p = pe.parent; }
     return null;
   }
-  function historyTree(contentId) {
+  // The undo tree of the content steps. With `lang`: only that language's steps and the steps that apply to every language; the links
+  // skip the steps left out, and the "current" marker sits on the nearest shown step at or above the current one.
+  function historyTree(contentId, lang) {
     var c = get(contentId);
     if (!c) return { rows: [], width: 0, head: null };
-    var events = state.history.filter(function (e) { return e.contentId === contentId && isContentStep(e); }).sort(function (a, b) { return b.id - a.id; });
+    var events = state.history.filter(function (e) { return e.contentId === contentId && isContentStep(e) && inLang(e, lang); }).sort(function (a, b) { return b.id - a.id; });
     var head = null, h = c.head;
-    while (h != null) { var he = eventOf(h); if (!he) break; if (isContentStep(he)) { head = he.id; break; } h = he.parent; }
+    while (h != null) { var he = eventOf(h); if (!he) break; if (isContentStep(he) && inLang(he, lang)) { head = he.id; break; } h = he.parent; }
     var lanes = [], width = 0;
     var rows = events.map(function (e) {
       var before = lanes.slice(), mine = [];
@@ -554,7 +560,7 @@
       var lane = mine.length ? mine[0] : lanes.indexOf(null);
       if (lane === -1) { lane = lanes.length; lanes.push(null); }
       mine.forEach(function (k) { lanes[k] = null; });
-      lanes[lane] = contentParent(e);
+      lanes[lane] = contentParent(e, lang);
       while (lanes.length && lanes[lanes.length - 1] === null && lanes.length > lane + 1) lanes.pop();
       var row = { event: e, lane: lane, before: before, after: lanes.slice(), merge: mine.slice(1), isHead: e.id === head, problem: rewindProblem(contentId, e.id) };
       width = Math.max(width, before.length, lanes.length, lane + 1);
