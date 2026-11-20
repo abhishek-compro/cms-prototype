@@ -16,8 +16,9 @@ const problems = (S, c, lang) => S.problems(c, S.partsOf(tr(c, lang))).map(p => 
 // ---------------------------------------------------------------- seed
 test('seed: sample campaigns, content, and a realistic mix of statuses', () => {
   const S = fresh();
-  assert.deepEqual(S.listCampaigns().map(k => k.name), ['Newborn care', 'Postnatal check-ups', 'Immunisation']);
-  assert.deepEqual(S.list().map(c => c.name), ['Welcome message', 'Appointment reminder', 'Daily health tip']);
+  assert.deepEqual(S.listCampaigns().map(k => k.name), ['Newborn care', 'Postnatal check-ups', 'Immunisation', 'ANC']);
+  assert.deepEqual(S.list().slice(0, 3).map(c => c.name), ['Welcome message', 'Appointment reminder', 'Daily health tip']);
+  assert.equal(S.list().length, 13, 'the three samples and the ten ANC messages');
   const w = byName(S, 'Welcome message');
   assert.equal(S.statusOf(tr(w, 'en'), w), 'modified', 'english was edited after it was published');
   assert.equal(S.statusOf(tr(w, 'hi'), w), 'deployed');
@@ -64,17 +65,17 @@ test('createCampaign: trimmed, required, unique case-insensitively, ids never co
   assert.match(S.createCampaign('newborn CARE').error, /already exists/);
   const a = S.createCampaign('  Maternal health ').campaign, b = S.createCampaign('Nutrition').campaign;
   assert.equal(a.name, 'Maternal health');
-  assert.deepEqual([a.id, b.id], ['k4', 'k5']);
+  assert.deepEqual([a.id, b.id], ['k5', 'k6']);
   assert.equal(a.createdBy, S.CURRENT_USER);
   assert.ok(a.createdAt);
-  assert.equal(new Set(S.listCampaigns().map(k => k.id)).size, 5);
+  assert.equal(new Set(S.listCampaigns().map(k => k.id)).size, 6);
 });
 
 test('contentsIn: a campaign lists only its content; null lists everything; new content joins a campaign', () => {
   const S = fresh();
   assert.deepEqual(S.contentsIn('k1').map(c => c.name), ['Welcome message', 'Daily health tip']);
   assert.deepEqual(S.contentsIn('k3'), []);
-  assert.equal(S.contentsIn(null).length, 3);
+  assert.equal(S.contentsIn(null).length, 13);
   const n = S.createContent('Polio drops', 'en', 'k3').content;
   assert.deepEqual(n.campaignIds, ['k3']);
   assert.deepEqual(S.createContent('Other', 'en', 'nope').content.campaignIds, [], 'unknown campaign is ignored');
@@ -512,8 +513,9 @@ const load = state => { const { S, mem } = loadStore({ 'cms-prototype-v1': JSON.
 
 test('migration: data from before campaigns -> sample campaigns, sample content filed, your own content unassigned', () => {
   const { S, saved } = load({ nextId: 9, contents: [content0('Welcome message'), content0('Appointment reminder'), content0('My own')], history: [] });
-  assert.deepEqual(S.listCampaigns().map(k => k.id), ['k1', 'k2', 'k3']);
-  assert.deepEqual(S.list().map(c => c.campaignIds), [['k1'], ['k2'], []]);
+  assert.deepEqual(S.listCampaigns().map(k => k.id), ['k1', 'k2', 'k3', 'k4']);
+  assert.deepEqual(S.list().slice(0, 3).map(c => c.campaignIds), [['k1'], ['k2'], []]);
+  assert.equal(S.contentsIn('k4').length, 10, 'a saved copy of the demo (it has the sample Welcome message) also gets the ANC sample');
   assert.ok(saved.contents.every(c => Array.isArray(c.campaignIds) && !('campaignId' in c)), 'saved back in the new shape');
 });
 
@@ -541,10 +543,10 @@ test('migration: current-shape data is left exactly as it is', () => {
 test('reset: discards saved changes and reloads the sample data', () => {
   const { S, mem } = loadStore();
   S.createContent('Temporary');
-  assert.equal(S.list().length, 4);
+  assert.equal(S.list().length, 14);
   S.reset();
-  assert.equal(S.list().length, 3);
-  assert.equal(JSON.parse(mem['cms-prototype-v1']).contents.length, 3);
+  assert.equal(S.list().length, 13);
+  assert.equal(JSON.parse(mem['cms-prototype-v1']).contents.length, 13);
 });
 
 // ---------------------------------------------------------------- consistency between languages
@@ -1080,7 +1082,7 @@ test('workflow: static steps product -> medical -> content -> translation -> dep
   assert.deepEqual(S.USER_GROUPS, S.STAGES.map(s => s.id), 'the demo user is in every group (a user can be in several)');
   const c = S.createContent('Stage test', 'en').content;
   assert.equal(c.stage, 'product', 'new content starts with the first group');
-  assert.deepEqual(S.list().map(x => x.stage), ['content', 'medical', 'product', 'product'], 'the sample content sits with different groups');
+  assert.deepEqual(S.list().map(x => x.stage), ['content', 'medical', 'product'].concat(Array(10).fill('medical'), ['product']), 'the sample content sits with different groups (the ten ANC messages with Medical)');
   assert.equal(S.stageOf(c).label, 'Product');
   assert.equal(S.stageIndex(c), 0);
 });
@@ -1128,4 +1130,54 @@ test('workflow: the group is saved; older saved data without one starts with the
   const { S: S2 } = loadStore({ 'cms-prototype-v1': JSON.stringify(old) });
   assert.ok(S2.list().every(x => x.stage === 'product'));
   assert.ok(S2.moveStage(S2.list()[0].id, 1).ok);
+});
+
+// ---------------------------------------------------------------- the ANC sample: ten medical messages timed from the expected date of delivery
+test('ANC sample: ten medical messages in the ANC campaign, each sent N days before the expected date of delivery, all publishable', () => {
+  const S = fresh();
+  const anc = S.listCampaigns().find(k => k.name === 'ANC');
+  assert.ok(anc);
+  const list = S.contentsIn(anc.id);
+  assert.equal(list.length, 10);
+  assert.ok(list.every(c => c.campaignIds.length === 1 && c.campaignIds[0] === anc.id), 'only in ANC');
+  assert.ok(list.every(c => c.stage === 'medical'), 'they sit with the Medical group');
+  assert.ok(list.every(c => c.timing.when === 'before' && c.timing.ref === 'expected_date_of_delivery' && c.timing.days > 0 && c.timing.days <= 999), 'based on the EDD');
+  const days = list.map(c => c.timing.days);
+  assert.deepEqual(days, days.slice().sort((a, b) => b - a), 'in the order they are sent: the earliest (most days before) first');
+  assert.equal(new Set(days).size, 10, 'ten different moments');
+  assert.ok(list.every(c => c.translations.length === 1 && c.translations[0].lang === 'en' && c.translations[0].text.length > 40));
+  for (const c of list) {
+    assert.deepEqual(problems(S, c, 'en'), [], c.name);
+    assert.equal(S.canDeploy(c, c.translations[0]), null, c.name + ' can be published');
+    assert.ok(S.positionsOf(c.translations[0].text).name, c.name + ' greets by name');
+  }
+  assert.ok(list.some(c => /\{\{edd\}\}/.test(c.translations[0].text)), 'some messages name the date itself');
+});
+
+test('ANC sample: they show up in the Flows list, each as a single-template flow with its own EDD timing', () => {
+  const S = fresh();
+  const anc = S.listCampaigns().find(k => k.name === 'ANC');
+  const items = S.flowItems(anc.id);
+  assert.equal(items.length, 10);
+  assert.ok(items.every(it => it.kind === 'template' && S.isImplicit(it.content, anc.id)));
+  assert.deepEqual(items.map(it => it.content.name), S.contentsIn(anc.id).map(c => c.name));
+  assert.equal(S.flowItems(null).filter(it => it.kind === 'template' && it.content.campaignIds[0] === anc.id).length, 10, 'and under All content');
+});
+
+test('ANC sample: a saved copy of the demo without it gets it once; data built any other way is left alone', () => {
+  const { S, mem } = loadStore();
+  const saved = JSON.parse(mem['cms-prototype-v1']);
+  const noAnc = JSON.parse(JSON.stringify(saved));
+  const ancIds = noAnc.contents.filter(c => c.campaignIds.includes('k4')).map(c => c.id);
+  noAnc.contents = noAnc.contents.filter(c => !ancIds.includes(c.id));
+  noAnc.history = noAnc.history.filter(e => !ancIds.includes(e.contentId));
+  noAnc.campaigns = noAnc.campaigns.filter(k => k.id !== 'k4');
+  const { S: S2, mem: mem2 } = loadStore({ 'cms-prototype-v1': JSON.stringify(noAnc) });
+  assert.equal(S2.contentsIn(S2.listCampaigns().find(k => k.name === 'ANC').id).length, 10, 'added to the saved demo');
+  assert.equal(S2.list().length, 13);
+  const { S: S3 } = loadStore(mem2);
+  assert.equal(S3.list().length, 13, 'and not again on the next load');
+  const own = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], comments: [], contents: [content0('Only mine', { campaignIds: ['k1'], stage: 'product' })], history: [] };
+  const { S: S4 } = load(own);
+  assert.deepEqual(S4.list().map(c => c.name), ['Only mine'], 'not the demo: nothing is added');
 });

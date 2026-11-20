@@ -118,7 +118,23 @@
   var SAMPLE_CAMPAIGNS = [
     { id: 'k1', name: 'Newborn care' },
     { id: 'k2', name: 'Postnatal check-ups' },
-    { id: 'k3', name: 'Immunisation' }
+    { id: 'k3', name: 'Immunisation' },
+    { id: 'k4', name: 'ANC' }
+  ];
+  // Ten medical messages of the ANC (antenatal care) campaign, each sent a number of days before the expected date of delivery (EDD).
+  // They are templates in no flow, so each is itself a flow in the Flows tab (a single-template flow with its own timing).
+  var ANC_NAME = 'ANC';
+  var ANC_SAMPLE = [
+    { name: 'ANC welcome and registration', days: 240, defaults: { name: 'Mama', edd: '15 March' }, text: 'Hello {{name}}, welcome to Noora Health. Your expected date of delivery is {{edd}}. We will send you tips for a healthy pregnancy.' },
+    { name: 'First ANC checkup', days: 210, defaults: { name: 'Mama' }, text: 'Hi {{name}}, it is time for your first antenatal checkup. Please visit your nearest health facility this week and carry your ANC card.' },
+    { name: 'Iron and folic acid tablets', days: 196, defaults: { name: 'Mama' }, text: '{{name}}, take one iron and folic acid tablet every day after a meal. It keeps you and your baby strong. Do not take it with tea.' },
+    { name: 'Ultrasound scan reminder', days: 154, defaults: { name: 'Mama' }, text: 'Hi {{name}}, you are about five months pregnant. Please get your ultrasound scan done at the health facility this month.' },
+    { name: 'Tetanus injection reminder', days: 140, defaults: { name: 'Mama' }, text: '{{name}}, please get your tetanus (TT) injection at the health facility. It protects you and your baby from infection.' },
+    { name: 'Blood pressure and sugar check', days: 105, defaults: { name: 'Mama' }, text: 'Hi {{name}}, it is time to check your blood pressure, blood sugar and haemoglobin. Please visit the facility for your next ANC visit.' },
+    { name: 'Healthy diet in late pregnancy', days: 84, defaults: { name: 'Mama' }, text: '{{name}}, eat small meals often: dal, green leafy vegetables, eggs, milk and fruit. Drink plenty of clean water.' },
+    { name: 'Birth preparedness plan', days: 56, defaults: { name: 'Mama', weeks: '8' }, text: 'Hi {{name}}, your delivery is about {{weeks}} weeks away. Decide where you will deliver, how you will travel and who will go with you.' },
+    { name: 'Pregnancy danger signs', days: 28, defaults: { name: 'Mama' }, text: '{{name}}, go to the health facility at once if you have heavy bleeding, a severe headache, blurred vision, swelling of the face or hands, fever, or if the baby moves less.' },
+    { name: 'Delivery is close', days: 7, defaults: { name: 'Mama', edd: '15 March' }, text: 'Hi {{name}}, your expected date of delivery is {{edd}}. Keep your bag, ANC card and phone ready. Go to the facility when labour pains start.' }
   ];
   var SAMPLE_FILING = { 'Welcome message': 'k1', 'Daily health tip': 'k1', 'Appointment reminder': 'k2' };
   function migrate() {
@@ -178,6 +194,8 @@
         if (!t.buttons) { t.buttons = []; changed = true; }
       });
     });
+    // Saved copies of the demo (they have the sample "Welcome message") get the ANC sample once; data built any other way is left alone
+    if (state.contents.some(function (c) { return c.name === 'Welcome message'; }) && !state.contents.some(function (c) { return ANC_SAMPLE.some(function (m) { return m.name === c.name; }); })) { addAncSample(); changed = true; }
     if (changed) save();
   }
   function reset() {
@@ -1703,6 +1721,22 @@
   }
 
   // ---- Demo data -------------------------------------------------------------
+  // Adds the ANC campaign (if it is not there) and the ten sample messages that are not there yet. Used by the seed and, once, for older saved data.
+  function addAncSample() {
+    var camp = state.campaigns.filter(function (k) { return k.name.toLowerCase() === ANC_NAME.toLowerCase(); })[0];
+    if (!camp) camp = createCampaign(ANC_NAME).campaign;
+    ANC_SAMPLE.forEach(function (m) {
+      var r = createContent(m.name, 'en', camp.id);
+      if (!r.ok) return;                                         // a content with that name already exists: leave it alone
+      var c = r.content;
+      c.stage = 'medical';
+      var cur = cloneParts(partsOf(getTr(c, 'en')));
+      cur.text = m.text; cur.defaults = m.defaults;
+      saveParts(c.id, 'en', cur);
+      setTemplateTiming(c.id, { days: m.days, when: 'before', ref: 'expected_date_of_delivery' });
+    });
+  }
+
   function seed() {
     state = { nextId: 1, campaigns: SAMPLE_CAMPAIGNS.map(function (c) { return { id: c.id, name: c.name }; }), contents: [], flows: [], comments: [], history: [] };
     var t = Date.now() - 6 * 24 * 3600 * 1000;
@@ -1778,6 +1812,8 @@
     connect(fl.id, nL.id, nL.outs[0].id, nD.id);
     connect(fl.id, nL.id, nL.outs[1].id, nA.id);
     [[nI, 40, 40], [nW, 380, 40], [nL, 720, 40], [nD, 1100, 40], [nA, 1100, 260]].forEach(function (p) { moveNode(fl.id, p[0].id, p[1], p[2]); });   // tidy layout
+
+    addAncSample();            // the ANC campaign: ten medical messages timed from the expected date of delivery
 
     // a few comments, one resolved, to show the lists
     var wt = get(w.id).translations[0].text, qs = 'welcome to Noora Health', at = wt.indexOf(qs);

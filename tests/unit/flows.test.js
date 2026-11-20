@@ -41,12 +41,16 @@ test('seed: one flow in Newborn care made of an input, two templates, a logic no
   assert.ok(f.nodes.every(n => !('timing' in n)), 'nodes carry no timing');
 });
 
+// the ten ANC sample messages are single-template flows too (campaign ANC): they follow everything else under All content
+const ANC = ['ANC welcome and registration', 'First ANC checkup', 'Iron and folic acid tablets', 'Ultrasound scan reminder', 'Tetanus injection reminder', 'Blood pressure and sugar check', 'Healthy diet in late pregnancy', 'Birth preparedness plan', 'Pregnancy danger signs', 'Delivery is close'].map(n => 'T:' + n);
+
 test('the Flows tab lists the flows you made, then templates that no flow of the campaign includes (flows by themselves)', () => {
   const S = fresh();
   assert.deepEqual(listing(S, 'k1'), ['F:Newborn first weeks'], 'both Newborn care templates are in the flow, so none is listed alone');
   assert.deepEqual(listing(S, 'k2'), ['T:Appointment reminder']);
   assert.deepEqual(listing(S, 'k3'), []);
-  assert.deepEqual(listing(S, null), ['F:Newborn first weeks', 'T:Appointment reminder']);
+  assert.deepEqual(listing(S, null), ['F:Newborn first weeks', 'T:Appointment reminder'].concat(ANC));
+  assert.deepEqual(listing(S, 'k4'), ANC, 'the ANC campaign lists its ten messages, each a flow by itself');
 });
 
 test('a template is only "itself a flow" in the campaigns where no flow of that campaign includes it', () => {
@@ -444,7 +448,7 @@ test('the flows you created stay in your order; single-template flows always fol
   const S = fresh();
   const mine = S.createFlow('Mine', null).flow;
   S.reorderFlow(mine.id, flow(S, 'Newborn first weeks').id, 'before');
-  assert.deepEqual(listing(S, null), ['F:Mine', 'F:Newborn first weeks', 'T:Appointment reminder']);
+  assert.deepEqual(listing(S, null), ['F:Mine', 'F:Newborn first weeks', 'T:Appointment reminder'].concat(ANC));
 });
 
 // ---------------------------------------------------------------- refer / duplicate / move a flow to a campaign
@@ -505,7 +509,7 @@ test('duplicateFlow: a new independent flow with its own copy of the whole graph
   assert.ok(copy.nodes.filter(n => n.type === 'logic').every(n => n.outs.every(o => !ids.has(o.id))), 'new edge ids');
   assert.deepEqual(copy.nodes.map(n => [n.x, n.y]), f.nodes.map(n => [n.x, n.y]), 'same layout');
   assert.deepEqual([w.campaignIds, d.campaignIds], [['k1', 'k3'], ['k1', 'k3']], 'templates are shared and added to the target');
-  assert.equal(S.list().length, 3, 'no template was duplicated');
+  assert.equal(S.list().length, 13, 'no template was duplicated');
   // independence
   S.moveNode(copy.id, node(S, copy, 'Welcome message').id, 700, 500);
   S.updateLogic(copy.id, node(S, copy, 'Logic 1').id, [{ id: node(S, copy, 'Logic 1').outs[0].id, label: 'Answered' }, { id: node(S, copy, 'Logic 1').outs[1].id, label: 'No reply' }]);
@@ -832,13 +836,13 @@ test('reorderFlowItem: flows and templates that are flows by themselves are move
   const S = fresh();
   const a = S.createFlow('Flow A', 'k2').flow, b2 = S.createFlow('Flow B', 'k2').flow;
   const names = k => listing(S, k);
-  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow A', 'F:Flow B', 'T:Appointment reminder'], 'default: flows, then single-template flows');
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow A', 'F:Flow B', 'T:Appointment reminder'].concat(ANC), 'default: flows, then single-template flows');
   const appt = tpl(S, 'Appointment reminder');
   assert.equal(S.reorderFlowItem('template', appt.id, 'flow', a.id, 'before').ok, true);
-  assert.deepEqual(names(null), ['F:Newborn first weeks', 'T:Appointment reminder', 'F:Flow A', 'F:Flow B']);
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'T:Appointment reminder', 'F:Flow A', 'F:Flow B'].concat(ANC));
   assert.deepEqual(names('k2'), ['T:Appointment reminder', 'F:Flow A', 'F:Flow B'], 'a campaign shows its own entries in that order');
   assert.equal(S.reorderFlowItem('flow', b2.id, 'template', appt.id, 'before').ok, true);
-  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow B', 'T:Appointment reminder', 'F:Flow A']);
+  assert.deepEqual(names(null), ['F:Newborn first weeks', 'F:Flow B', 'T:Appointment reminder', 'F:Flow A'].concat(ANC));
   assert.deepEqual(S.listFlows().map(f => f.name), ['Newborn first weeks', 'Flow B', 'Flow A'], 'the stored flow order agrees');
   assert.equal(S.reorderFlowItem('flow', a.id, 'template', appt.id, 'after').error, 'No change', 'already there');
   assert.equal(S.reorderFlowItem('flow', a.id, 'flow', a.id, 'before').error, 'No change');

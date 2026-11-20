@@ -11,12 +11,12 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   const reload = async () => { await b.ev(`location.reload(); 0`); await b.sleep(900); };
 
   await b.ev(`localStorage.clear(); 0`); await reload();
-  ok('campaigns sidebar lists names (All content first)', await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation', await camps());
+  ok('campaigns sidebar lists names (All content first)', await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation | ANC', await camps());
   const x = await b.ev(`(function(){var c=document.querySelector('.campaigns').getBoundingClientRect(), s=document.querySelector('.sidebar').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return [c.left,c.right,s.left,s.right,m.left].map(Math.round).join(',')})()`);
   const [cl, cr, sl, sr, ml] = x.split(',').map(Number);
   ok('campaigns sidebar is left-most, then the content sidebar, then main (' + x + ')', cl === 0 && cr <= sl + 1 && sr <= ml + 1 && cr > 100, x);
-  ok('default: All content active, all 3 names, list title "All content"',
-    await b.ev(`document.querySelector('.camp-item.active').textContent`) === 'All content' && await names() === 'Welcome message, Appointment reminder, Daily health tip' && await title() === 'All content', await names());
+  ok('default: All content active, all 13 names (the 3 samples, then the 10 ANC messages), list title "All content"',
+    await b.ev(`document.querySelector('.camp-item.active').textContent`) === 'All content' && (await names()).startsWith('Welcome message, Appointment reminder, Daily health tip, ANC welcome and registration, First ANC checkup') && (await names()).split(', ').length === 13 && await title() === 'All content', await names());
 
   await b.click('[data-action=select-campaign][data-id=k1]');
   ok('Newborn care filters the list (2 names), title follows', await names() === 'Welcome message, Daily health tip' && await title() === 'Newborn care', await names());
@@ -35,7 +35,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
     await names() === 'Polio drops' && await h2() === 'Polio drops' && /in Immunisation/.test(await b.ev(`document.getElementById('toast').textContent`)), await names());
 
   await b.click('[data-action=select-campaign][data-id=""]');
-  ok('All content shows everything incl. the new one (4)', (await names()).split(', ').length === 4, await names());
+  ok('All content shows everything incl. the new one (the 3 samples, the 10 ANC messages and Polio drops)', (await names()).split(', ').length === 14, await names());
 
   await b.click('[data-action=select-campaign][data-id=k1]');
   await b.click('[data-action=open-search]'); await b.type('daily');
@@ -61,7 +61,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.ev(`(function(){var s=JSON.parse(localStorage.getItem('cms-prototype-v1')); delete s.campaigns; s.contents.forEach(function(c){delete c.campaignIds;}); localStorage.setItem('cms-prototype-v1', JSON.stringify(s)); return 1})()`);
   await reload();
   ok('legacy data: campaigns appear and existing content is kept',
-    await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation' && (await names()).split(', ').length >= 5, await camps() + ' / ' + await names());
+    await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation | ANC' && (await names()).split(', ').length >= 5, await camps() + ' / ' + await names());
   await b.click('[data-action=select-campaign][data-id=k1]');
   ok('legacy sample content is filed under its campaign', await names() === 'Welcome message, Daily health tip', await names());
   await b.click('[data-action=select-campaign][data-id=""]');
@@ -70,5 +70,5 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   await b.click('[data-action=select-campaign][data-id=k2]');
   await b.ev(`window.confirm = function(){return true}; 0`);
   await b.click('[data-action=reset]');
-  ok('Reset demo data returns to All content with the sample data', await title() === 'All content' && (await names()).split(', ').length === 3, await title());
+  ok('Reset demo data returns to All content with the sample data', await title() === 'All content' && (await names()).split(', ').length === 13, await title());
 });

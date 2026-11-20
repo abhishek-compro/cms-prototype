@@ -21,7 +21,7 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
 
   await b.type('Maternal health');
   await b.click('.camp-add-confirm');   // real click: the field must not blur-close the box before the click lands
-  ok('Add (real click) creates the campaign, closes the box, appends it to the list', await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation | Maternal health' && !await q('#new-campaign'), await camps());
+  ok('Add (real click) creates the campaign, closes the box, appends it to the list', await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation | ANC | Maternal health' && !await q('#new-campaign'), await camps());
   ok('the new campaign is selected (active, list title) and empty', await b.ev(`document.querySelector('.camp-item.active').textContent`) === 'Maternal health' && await b.ev(`document.getElementById('list-title').textContent`) === 'Maternal health' && await names() === '', await names());
   ok('toast confirms', /Created campaign "Maternal health"/.test(await b.ev(`document.getElementById('toast').textContent`)));
   const st = JSON.parse(await stored()).pop();
@@ -34,7 +34,7 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
   // validation: duplicate (case-insensitive), empty
   await b.click('[data-action=open-add-campaign]'); await b.type('newborn CARE'); await b.key('Enter', 'Enter', 13);
   ok('duplicate name (case-insensitive) shows an error and keeps the box open', await q('#new-campaign') && /already exists/.test(await b.ev(`document.getElementById('camp-error').textContent`)), await b.ev(`document.getElementById('camp-error').textContent`));
-  ok('no campaign was added', (await camps()).split(' | ').length === 5, await camps());
+  ok('no campaign was added', (await camps()).split(' | ').length === 6, await camps());
   await b.ev(`document.getElementById('new-campaign').value=''; 0`); await b.key('Enter', 'Enter', 13);
   ok('empty name shows an error', /required/.test(await b.ev(`document.getElementById('camp-error').textContent`)));
   await b.clickAt(700, 600);
@@ -46,7 +46,7 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
 
   // Enter creates; Tab flow
   await b.click('[data-action=open-add-campaign]'); await b.type('Nutrition'); await b.key('Enter', 'Enter', 13);
-  ok('Enter creates a campaign (second one gets a different id)', (await camps()).endsWith('Nutrition') && new Set(JSON.parse(await stored()).map(k => k.id)).size === 5, await camps());
+  ok('Enter creates a campaign (second one gets a different id)', (await camps()).endsWith('Nutrition') && new Set(JSON.parse(await stored()).map(k => k.id)).size === 6, await camps());
   await b.click('[data-action=open-add-campaign]'); await b.key('Tab', 'Tab', 9);
   ok('Tab from the field to Add keeps the box open', await q('#new-campaign') && await active() === 'btn primary camp-add-confirm', await active());
   await b.key('Tab', 'Tab', 9);
