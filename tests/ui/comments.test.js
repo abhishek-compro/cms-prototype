@@ -7,14 +7,14 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   const cnt = s => b.ev(`document.querySelectorAll(${JSON.stringify(s)}).length`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
   const items = () => b.ev(`[].map.call(document.querySelectorAll('.cm-item'), function(i){return i.querySelector('.chip').textContent + ' | ' + ((i.querySelector('.cm-q')||{}).textContent||'').replace(/\\s+/g,' ').trim() + ' | ' + i.querySelector('.cm-text').textContent})`);
-  const toggleText = () => txt('.cm-open');
+  const toggleText = () => b.ev(`document.querySelector('.cm-open').getAttribute('aria-label')`);
   const select = (sel, s, e) => b.ev(`(function(){var t=document.querySelector(${JSON.stringify(sel)}); t.focus(); t.setSelectionRange(${s},${e}); t.dispatchEvent(new Event('select',{bubbles:true})); return 1})()`);
   const pickTarget = v => b.ev(`(function(){var s=document.getElementById('cm-target-sel'); s.value=${JSON.stringify(v)}; s.dispatchEvent(new Event('change',{bubbles:true})); return 1})()`);
   const say = async t => { await b.fill('#cm-text', t); await b.click('[data-action=cm-add]'); };
   const histCount = () => b.ev(`Store.historyFor(Store.list()[0].id,'all').length`);
 
   // ---- the button at the top, the sidebar
-  ok('the template has no name heading and no description line; "Comments (1)" is a button in the header', !await q('.content-head h2') && !/Template name base/.test(await txt('.content-head')) && /Comments \(1\)/.test(await toggleText()));
+  ok('the template has no name heading and no description line; the comments button in the header is just an icon (no text), with the count in its label', !await q('.content-head h2') && !/Template name base/.test(await txt('.content-head')) && /Comments \(1 open\)/.test(await toggleText()) && /^\d*$/.test((await txt('.cm-open')).trim()) && await q('.cm-open svg'));
   ok('the sidebar is closed until the button is clicked', !await q('#comments-pane') && !await q('#comments'));
   await b.click('.cm-open');
   ok('the button opens the right sidebar (not the history), and it is marked pressed', await q('#comments-pane') && !await q('#history-pane') && await b.ev(`document.querySelector('.cm-open').getAttribute('aria-pressed')`) === 'true');
@@ -41,7 +41,7 @@ uiSuite('comments: a button at the top opens the right sidebar (composer + messa
   await say('   ');
   ok('an empty comment is refused with a message', /Write a comment/.test(await txt('#toast')) && await cnt('.cm-item') === 1);
   await say('Whole template remark');
-  ok('adding a comment with no part chosen is about the whole template; the list updates, the box is cleared', /Comment added/.test(await txt('#toast')) && await cnt('.cm-item') === 2 && /Whole template/.test((await items())[0]) && /Comments \(2\)/.test(await toggleText()) && await b.ev(`document.getElementById('cm-text').value`) === '', (await items()).join('\n'));
+  ok('adding a comment with no part chosen is about the whole template; the list updates, the box is cleared', /Comment added/.test(await txt('#toast')) && await cnt('.cm-item') === 2 && /Whole template/.test((await items())[0]) && /Comments \(2 open\)/.test(await toggleText()) && await b.ev(`document.getElementById('cm-text').value`) === '', (await items()).join('\n'));
   ok('the newest comment is first', /Whole template remark/.test((await items())[0]));
 
   // ---- a selected piece of text in the body

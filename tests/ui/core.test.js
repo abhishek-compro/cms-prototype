@@ -132,11 +132,13 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('the CSV file starts with a UTF-8 BOM (EF BB BF) so Excel reads Hindi correctly', JSON.stringify(bom) === '[239,187,191]' && /नमस्ते/.test(allCsv), JSON.stringify(bom));
 
   // ================= rename =================
-  await b.click('[data-action=rename-start]');
+  ok('Rename is a pencil on the list item (no Rename button in the header)', await q('.content-item.active .ci-edit svg') && !/Rename/.test(await txt('.content-head')) && await b.ev(`document.querySelector('.content-item.active .ci-edit').getAttribute('aria-label')`) !== '');
+  await b.click('.content-item.active [data-action=rename-start]');
+  ok('clicking it turns the name into a text box inside the list item, focused', await b.ev(`document.activeElement.id`) === 'rename-input' && await q('.content-item.active .ci-rename'));
   await b.fill('#rename-input', 'Visit reminder'); await b.key('Enter', 'Enter', 13);
   ok('renaming updates the name in the list', await txt('.content-item.active .name') === 'Visit reminder');
   ok('renaming is logged under Other', (await b.ev(`Store.historyFor(Store.list()[1].id,'content')[0].action`)) === 'renamed');
-  await b.click('[data-action=rename-start]');
+  await b.click('.content-item.active [data-action=rename-start]');
   await b.fill('#rename-input', 'welcome message'); await b.key('Enter', 'Enter', 13);
   ok('renaming to a clashing name is refused with a message', /already maps/.test(await txt('#toast')) && await q('#rename-input'));
   await b.key('Escape', 'Escape', 27);

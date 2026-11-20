@@ -652,7 +652,7 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .tree-detail .event-body { margin-top: 6px; }
 
 /* comments: a button in the header opens the right sidebar; comments are message pills */
-.cm-open.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.btn.on, .cm-open.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .comments { margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
 .cm-on { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .cm-target-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
@@ -677,3 +677,12 @@ table.overview { width: 100%; border-collapse: collapse; background: var(--surfa
 .node-cm .cm-n { margin-left: 2px; padding: 0 5px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 11px; }
 .fnode.flash { animation: cm-flash 1.6s ease-out; }
 @keyframes cm-flash { 0%, 60% { box-shadow: 0 0 0 4px var(--warn); } 100% { box-shadow: none; } }
+
+/* rename: a pencil on the list item, an inline box while renaming */
+.ci-edit { margin-left: auto; padding: 2px 4px; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; opacity: 0; display: inline-flex; }
+.content-item:hover .ci-edit, .ci-edit:focus-visible { opacity: 1; }
+.ci-edit:hover { color: var(--accent); background: var(--hover); }
+.ci-rename { display: flex; align-items: center; gap: 4px; }
+.ci-rename input { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 6px; font-size: 14px; font-weight: 600; }
+.cm-open { position: relative; }
+.cm-open .cm-n { min-width: 16px; padding: 0 4px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 11px; line-height: 16px; text-align: center; }

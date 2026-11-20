@@ -64,6 +64,8 @@
   function draftsByLang(c) { var m = {}; c.translations.forEach(function (t) { m[t.lang] = currentParts(c, t); }); return m; }
   function fmtTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
   function langLabel(code) { return esc(S.langName(code)) + ' <code>' + esc(code) + '</code>'; }
+  var ICON_PENCIL = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  var ICON_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>';
   var ICON_DOWNLOAD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_SEARCH = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
   var ICON_PLUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
@@ -185,12 +187,18 @@
     var items = visibleContent().filter(function (c) { return !q || c.name.toLowerCase().indexOf(q) !== -1; });
     if (!items.length) return '<li class="muted small" style="padding:8px 10px">' + (q ? 'No content found' : 'No content yet') + '</li>';
     return items.map(function (c) {
+      var renamingThis = ui.renaming && c.id === ui.selectedId && !currentFlow();
       var chips = c.translations.map(function (t) {
         return '<span class="chip ' + S.statusOf(t, c) + '" title="' + esc(S.langName(t.lang) + ': ' + STATUS_LABEL[S.statusOf(t, c)]) + '">' + esc(t.lang) + '</span>';
       }).join('');
       return '<li class="content-item' + (c.id === ui.selectedId ? ' active' : '') + '" data-action="select" data-id="' + c.id + '">' +
         '<span class="drag-handle" draggable="true" aria-hidden="true" title="Drag onto a campaign to copy or move it">' + ICON_GRIP + '</span>' +
-        '<div class="ci-body"><div class="name">' + esc(c.name) + (c.blocked ? ' <span class="badge blocked">no template</span>' : '') + '</div>' +
+        '<div class="ci-body">' + (renamingThis
+          ? '<div class="ci-rename"><input type="text" id="rename-input" value="' + esc(c.name) + '" aria-label="Content name">' +
+            '<button class="btn link" data-action="rename-save" title="Save the new name" aria-label="Save the new name">✓</button>' +
+            '<button class="btn link" data-action="rename-cancel" title="Cancel (Esc)" aria-label="Cancel renaming">✕</button></div>'
+          : '<div class="name"><span class="name-text">' + esc(c.name) + '</span>' + (c.blocked ? ' <span class="badge blocked">no template</span>' : '') +
+            '<button class="ci-edit" data-action="rename-start" data-id="' + c.id + '" title="Rename" aria-label="Rename ' + esc(c.name) + '">' + ICON_PENCIL + '</button></div>') +
         '<div class="chips">' + chips + '</div></div></li>';
     }).join('');
   }
@@ -294,17 +302,11 @@
   }
 
   function headHtml(c) {
-    // no name heading and no description line (the name is in the list on the left); Rename sits with the other actions
-    var rename = ui.renaming
-      ? '<div class="rename-row"><input type="text" id="rename-input" value="' + esc(c.name) + '" aria-label="Content name">' +
-        '<button class="btn primary" data-action="rename-save">Save</button><button class="btn" data-action="rename-cancel">Cancel</button></div>'
-      : '';
+    // no name heading and no description line (the name is in the list on the left; Rename is the pencil on its item there)
     var blockWhy = S.blockProblem(c);
     var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="content-head">' +
-      '<div>' + rename + '</div>' +
       '<div class="actions">' + cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
-      (ui.renaming ? '' : '<button class="btn" data-action="rename-start" title="Rename ' + esc(c.name) + '">Rename</button>') +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Block template approval</label>') +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
       '<button class="btn deploy" data-action="deploy-all"' + (deployable ? '' : ' disabled') + '>Publish all' + (deployable ? ' (' + deployable + ')' : '') + '</button>' +
@@ -335,7 +337,7 @@
     return '<div class="toolbar">' +
       '<label><input type="checkbox" data-change="toggle-side"' + (ui.side ? ' checked' : '') + '> Side by side</label>' +
       left + '<span style="flex:1"></span>' +
-      (ui.historyOpen ? '' : '<button class="btn" data-action="toggle-history-pane">Show history</button>') + '</div>';
+      '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '">' + (ui.historyOpen ? 'Hide' : 'Show') + ' history</button></div>';
   }
 
   function waNameHtml(tr) {
@@ -687,7 +689,8 @@
   }
   function cmButtonHtml(scope) {            // "Comments (n)" in the header of a template / flow: opens the right sidebar
     var n = S.commentsFor(cmWhere(scope), 'open').length;
-    return '<button class="btn cm-open' + (ui.commentsOpen ? ' on' : '') + '" data-action="cm-toggle" aria-pressed="' + !!ui.commentsOpen + '" title="' + (ui.commentsOpen ? 'Hide' : 'Show') + ' the comments sidebar">💬 Comments (' + n + ')</button>';
+    var label = 'Comments (' + n + ' open)';
+    return '<button class="btn icon cm-open' + (ui.commentsOpen ? ' on' : '') + '" data-action="cm-toggle" aria-pressed="' + !!ui.commentsOpen + '" aria-label="' + label + '" title="' + label + ' · ' + (ui.commentsOpen ? 'hide' : 'show') + ' the comments sidebar">' + ICON_COMMENT + (n ? '<span class="cm-n">' + n + '</span>' : '') + '</button>';
   }
   // the right sidebar in comments mode: the composer on top, then the comments as message pills (Open | Resolved)
   function commentsPaneInner(scope) {
@@ -1936,6 +1939,7 @@
 
     switch (action) {
       case 'select':
+        if (ev.target.closest && ev.target.closest('.ci-rename')) return;   // clicking inside the rename box is not selecting
         ui.selectedId = el.getAttribute('data-id'); ui.renaming = false; ui.editLang = null; ui.refLang = null;
         break;
       case 'dialog-copy': applyDialog('copy'); return;
@@ -2040,7 +2044,11 @@
         if (!result(S.rewind(c.id, evId), 'Rewound to: ' + label)) return;
         break;
       }
-      case 'rename-start': ui.renaming = true; break;
+      case 'rename-start': {
+        var rid = el.getAttribute('data-id');
+        if (rid && rid !== ui.selectedId) { ui.selectedId = rid; ui.editLang = null; ui.refLang = null; }   // the pencil on a list item selects it, then renames it
+        ui.renaming = true; break;
+      }
       case 'rename-cancel': ui.renaming = false; break;
       case 'rename-save': saveRename(); return;
       case 'save': doSave(lang); return;
