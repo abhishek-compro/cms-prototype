@@ -824,7 +824,8 @@
     if (!c && !currentFlow()) return;
     var pane = document.getElementById('history-pane');
     if (pane) pane.innerHTML = historyPaneInner(c);
-    var lay = document.querySelector('.layout'); if (lay) lay.classList.toggle('tree-on', !!c && ui.histTab === 'content');
+    var lay = document.querySelector('.layout');     // the wide column is only for the Content tree and only while the history pane is really shown
+    if (lay) lay.classList.toggle('tree-on', !!pane && !!c && !currentFlow() && ui.histTab === 'content');
   }
 
   // ---- Flows tab: selection, the flow editor, the card for a template that is a flow by itself ----------

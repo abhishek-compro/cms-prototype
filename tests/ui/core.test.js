@@ -26,6 +26,23 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
+  // ================= the layout does not move when you type (a regression: typing used to add the history column) =================
+  const layoutNow = () => b.ev(`(function(){var l=document.querySelector('.layout'), m=document.querySelector('.main').getBoundingClientRect(); return {cls: l.className, mainW: Math.round(m.width), cols: getComputedStyle(l).gridTemplateColumns.split(' ').length, pageScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight}})()`);
+  const lay0 = await layoutNow();
+  ok('no page-level vertical scrollbar: the layout fits the window (only the editor scrolls inside it)', lay0.pageScroll === false, JSON.stringify(lay0));
+  await b.click('.panel.edit[data-lang=en] [data-input=text]'); await b.type('x');
+  const lay1 = await layoutNow();
+  ok('typing in the phone (history closed) changes nothing about the layout: same classes, same main width, no extra column, still no page scrollbar', lay1.cls === lay0.cls && lay1.mainW === lay0.mainW && lay1.cols === lay0.cols && lay1.pageScroll === false && !/tree-on/.test(lay1.cls), JSON.stringify([lay0, lay1]));
+  await b.click('.panel.edit[data-lang=en] [data-input=footer]'); await b.type('y');
+  await b.click('.panel.edit[data-lang=en] .revert');
+  await b.click('.cm-open');
+  const lay2 = await layoutNow();
+  await b.click('.panel.edit[data-lang=en] [data-input=text]'); await b.type('z');
+  const lay3 = await layoutNow();
+  ok('the same while the comments sidebar is open: typing does not widen it into the history column', lay3.cls === lay2.cls && lay3.mainW === lay2.mainW && lay3.cols === lay2.cols && !/tree-on/.test(lay3.cls), JSON.stringify([lay2, lay3]));
+  await b.click('.panel.edit[data-lang=en] .revert');
+  await b.click('.cm-open');
+
   // ================= theme =================
   ok('theme switch: Light, System, Dark - System is selected by default', await b.ev(`[].map.call(document.querySelectorAll('.theme-btn'), function(x){return x.textContent.trim()}).join('|')`) === 'Light|System|Dark' && await checkedTheme() === 'system' && await theme() === null);
   const lightBg = await bg();
