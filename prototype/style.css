@@ -836,3 +836,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
    scrollbar is at the bottom of the screen, not at the end of a long page */
 .main:has(> .panels) { display: flex; flex-direction: column; overflow: hidden; }
 .main:has(> .panels) > :not(.panels) { flex: none; }
+
+/* the content / flows column can be resized: a thin handle on its right edge */
+.sidebar { position: relative; }
+.list-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 7px; z-index: 6; cursor: col-resize; background: transparent; }
+.list-resizer:hover, .list-resizer:focus-visible, body.resizing .list-resizer { background: var(--accent-soft); box-shadow: inset -2px 0 0 var(--accent); outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }

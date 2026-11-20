@@ -12,6 +12,7 @@
     histInfo: false,     // the explanation at the top of the history tabs is open (under the i button)
     histLang: null,      // the language the history sidebar shows (one at a time; null = the first language)
     langOrder: {},       // per content: a temporary order of its language panels (this view only, never saved; the default is English, then alphabetical)
+    listW: { templates: null, flows: null },   // widths (px) of the content / flows column set by dragging its edge; null = the default for that tab
     campCollapsed: false, // the campaigns column is collapsed to a narrow rail with the selected campaign's name turned 90 degrees
     scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
@@ -288,6 +289,7 @@
       }).join('') + '</div>' +
       '<div class="side-tools" id="side-tools">' + sideToolsInner() + '</div>' +
       '<ul class="content-list' + (ui.listTab === 'flows' ? ' flows-table' : '') + '" id="content-list">' + listHtml() + '</ul>' +
+      '<div class="list-resizer" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the list: drag, or press the left and right arrow keys; double-click to reset" title="Drag to resize (double-click to reset)"></div>' +
       '</aside>';
   }
 
@@ -1335,6 +1337,46 @@
   document.addEventListener('focusin', updateLangLock);
   document.addEventListener('focusout', function () { setTimeout(updateLangLock, 0); });
 
+  // ---- resizing the content / flows column: drag its right edge (double-click resets, left / right arrows resize from the keyboard) ----
+  // A width is kept per tab (Templates and Flows have their own) and remembered in this browser; until you set one the tab has its default
+  // (a fixed width for Templates, as wide as the longest entry for Flows).
+  var LISTW_KEY = 'cms-prototype-list-widths';
+  try { var lw = JSON.parse(localStorage.getItem(LISTW_KEY) || '{}'); ui.listW = { templates: +lw.templates || null, flows: +lw.flows || null }; } catch (e) { /* ignore: the defaults */ }
+  function listWLimits() {
+    var other = (ui.campCollapsed ? 44 : 210) + 360 + ((ui.historyOpen || ui.commentsOpen) ? 340 : 0);      // what the other columns need, at least
+    return { min: 180, max: Math.max(280, window.innerWidth - other) };
+  }
+  function setListW(px, save) {
+    var lay = document.querySelector('.layout'), tab = ui.listTab, lim = listWLimits();
+    if (px === null) { ui.listW[tab] = null; if (lay) lay.style.removeProperty('--list-w'); }
+    else { px = Math.round(Math.max(lim.min, Math.min(lim.max, px))); ui.listW[tab] = px; if (lay) lay.style.setProperty('--list-w', px + 'px'); }
+    if (save) { try { localStorage.setItem(LISTW_KEY, JSON.stringify(ui.listW)); } catch (e) { /* ignore */ } }
+  }
+  var resizing = null;
+  document.addEventListener('mousedown', function (ev) {
+    var h = ev.target.closest && ev.target.closest('.list-resizer');
+    if (!h || ev.button !== 0) return;
+    ev.preventDefault();
+    resizing = { x: ev.clientX, w: document.querySelector('.sidebar').getBoundingClientRect().width };
+    document.body.classList.add('resizing');
+  });
+  document.addEventListener('mousemove', function (ev) { if (resizing) setListW(resizing.w + ev.clientX - resizing.x, false); });
+  document.addEventListener('mouseup', function () {
+    if (!resizing) return;
+    resizing = null; document.body.classList.remove('resizing');
+    setListW(ui.listW[ui.listTab], true);
+  });
+  document.addEventListener('dblclick', function (ev) { if (ev.target.closest && ev.target.closest('.list-resizer')) setListW(null, true); });
+  document.addEventListener('keydown', function (ev) {
+    if (!(ev.target.classList && ev.target.classList.contains('list-resizer'))) return;
+    var step = ev.shiftKey ? 64 : 16, cur = document.querySelector('.sidebar').getBoundingClientRect().width;
+    if (ev.key === 'ArrowLeft') setListW(cur - step, true);
+    else if (ev.key === 'ArrowRight') setListW(cur + step, true);
+    else if (ev.key === 'Home' || ev.key === 'Escape') setListW(null, true);
+    else return;
+    ev.preventDefault();
+  });
+
   function autosize(el) { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }   // the body grows with its text, like the bubble
   function autosizeAll() { [].forEach.call(document.querySelectorAll('.wa-text-in'), autosize); }
 
@@ -1360,7 +1402,7 @@
     var histShown = !cmScope && subject && ui.historyOpen;
     var pane = cmScope ? '<aside class="history-pane comments-pane" id="comments-pane">' + commentsPaneInner(cmScope) + '</aside>'
       : histShown ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.listTab === 'flows' ? ' flows-wide' : '') + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.listTab === 'flows' ? ' flows-wide' : '') + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '"' + (ui.listW[ui.listTab] ? ' style="--list-w:' + ui.listW[ui.listTab] + 'px"' : '') + '>' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
