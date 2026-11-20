@@ -344,11 +344,12 @@
   function toolbarHtml(c) {
     var blockWhy = S.blockProblem(c);
     return '<div class="toolbar">' +
-      '<span class="tb-left">' + addLangHtml(c) + '<span class="lang-lock off" id="lang-lock" role="status">' + ICON_LOCK + '<span class="lock-name"></span></span></span>' + stagesHtml(c) + '<span class="tb-group">' +
+      '<span class="tb-left">' + stagesHtml(c) + '<span class="lang-lock off" id="lang-lock" role="status">' + ICON_LOCK + '<span class="lock-name"></span></span></span><span class="tb-group">' +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, this content cannot be published"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
       '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '" title="' + (ui.historyOpen ? 'Hide' : 'Show') + ' the history sidebar">History</button>' +
+      addLangHtml(c) +                       // the + Add language dropdown is the last control of the strip: the extreme right of the toolbar
       '</span></div>';
   }
 
