@@ -11,6 +11,7 @@
     selectedId: null,
     histInfo: false,     // the explanation at the top of the history tabs is open (under the i button)
     histLang: null,      // the language the history sidebar shows (one at a time; null = the first language)
+    campCollapsed: false, // the campaigns column is collapsed to a narrow rail with the selected campaign's name turned 90 degrees
     scrollLang: null,    // a language panel to bring into view after the next render (a language was just added, or a comment pointed at it)
     historyOpen: false,  // right sidebar visible (hidden by default)
     commentsOpen: false, // the right sidebar shows comments (instead of history)
@@ -229,8 +230,9 @@
         '<button class="btn primary camp-add-confirm" data-action="add-campaign">Add</button></div>' +
         '<div class="form-error" id="camp-error">' + esc(ui.campError) + '</div>';
     }
-    return '<div class="camp-head"><h2 class="side-title">Campaigns</h2>' +
-      '<button class="icon-btn sm" data-action="open-add-campaign" aria-label="New campaign" title="New campaign">' + ICON_PLUS + '</button></div>';
+    return '<div class="camp-head"><h2 class="side-title">Campaigns</h2><span class="camp-btns">' +
+      '<button class="icon-btn sm" data-action="open-add-campaign" aria-label="New campaign" title="New campaign">' + ICON_PLUS + '</button>' +
+      '<button class="icon-btn sm camp-toggle" data-action="camps-toggle" aria-expanded="true" aria-label="Collapse the campaigns" title="Collapse the campaigns">' + CHEVRON_L + '</button></span></div>';
   }
   function updateCampTools() {
     var el = document.getElementById('camp-tools');
@@ -252,6 +254,12 @@
   }
 
   function campaignsHtml() {
+    if (ui.campCollapsed) {                  // a narrow rail: the way back, and the selected campaign's name turned 90 degrees
+      var cur = listTitle();
+      return '<aside class="campaigns collapsed" aria-label="Campaigns (collapsed)">' +
+        '<button class="icon-btn sm camp-toggle camp-expand" data-action="camps-toggle" aria-expanded="false" aria-label="Show the campaigns" title="Show the campaigns">' + CHEVRON_R + '</button>' +
+        '<button class="camp-rail" data-action="camps-toggle" aria-expanded="false" aria-label="Campaign: ' + esc(cur) + '. Show the campaigns" title="' + esc(cur) + ' (click to show the campaigns)"><span class="camp-rail-text">' + esc(cur) + '</span></button></aside>';
+    }
     function item(id, label) {
       var on = (ui.campaignId || '') === id;
       return '<li><button class="camp-item' + (on ? ' active' : '') + '" data-action="select-campaign" data-id="' + esc(id) + '"' + (on ? ' aria-current="true"' : '') + '>' + esc(label) + '</button></li>';
@@ -1251,10 +1259,12 @@
   }
 
   function scrollSnapshot() {
-    var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas');
-    return { flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
+    var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap'), cv = document.getElementById('canvas'), l = document.getElementById('content-list');
+    return { list: l ? l.scrollTop : 0, flow: cv ? cv.getAttribute('data-flow') : null, main: m ? m.scrollTop : 0, left: w ? w.scrollLeft : 0, top: w ? w.scrollTop : 0 };
   }
   function scrollRestore(snap) {       // re-rendering the flow editor must not throw you back to the top-left of the canvas
+    var lst = document.getElementById('content-list');
+    if (lst) lst.scrollTop = snap.list;             // the list keeps its place when the page is redrawn (it is the only thing in the column that scrolls)
     var cv = document.getElementById('canvas');
     if (!cv || cv.getAttribute('data-flow') !== snap.flow) return;
     var m = document.querySelector('.main'), w = document.getElementById('canvas-wrap');
@@ -1338,7 +1348,7 @@
     var histShown = !cmScope && subject && ui.historyOpen;
     var pane = cmScope ? '<aside class="history-pane comments-pane" id="comments-pane">' + commentsPaneInner(cmScope) + '</aside>'
       : histShown ? '<aside class="history-pane" id="history-pane">' + historyPaneInner(c) + '</aside>' : '';
-    $app.innerHTML = topbarHtml() + '<div class="layout' + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
+    $app.innerHTML = topbarHtml() + '<div class="layout' + (ui.campCollapsed ? ' camps-collapsed' : '') + (pane ? '' : ' hist-off') + (histShown && ui.histTab === 'content' && !currentFlow() ? ' tree-on' : '') + '">' + campaignsHtml() + sidebarHtml() + '<main class="main">' + main + '</main>' + pane + '</div>';
     if (ui.focusNext) {
       var fields = document.querySelectorAll(ui.focusNext);
       if (fields.length) { var fld = fields[fields.length - 1]; fld.focus(fld.closest('.fnode') ? { preventScroll: true } : undefined); }   // a node field must not scroll the canvas
@@ -2044,6 +2054,7 @@
       case 'new-content': addContent(); return;
       case 'set-theme': setTheme(el.getAttribute('data-theme')); return;
       case 'toggle-history-pane': ui.historyOpen = !ui.historyOpen; if (ui.historyOpen) ui.commentsOpen = false; break;   // one right sidebar: history or comments
+      case 'camps-toggle': ui.campCollapsed = !ui.campCollapsed; ui.campBox = false; ui.campError = ''; ui.focusNext = '.campaigns .camp-toggle'; break;
       case 'hist-info': ui.histInfo = !ui.histInfo; updateHistoryPane(); return;
       case 'hist-tab': {
         ui.histTab = el.getAttribute('data-tab') === 'other' ? 'other' : 'content';

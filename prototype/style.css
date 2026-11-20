@@ -167,9 +167,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* layout */
 #app { height: 100vh; display: flex; flex-direction: column; }   /* the layout takes what the top bar leaves: no page-level scrollbar, whatever the bar's height */
-.layout { display: grid; grid-template-columns: 210px 260px minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
-.layout.hist-off { grid-template-columns: 210px 260px minmax(0, 1fr); }
-.sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: auto; padding: 12px; }
+.layout { --camp-w: 210px; display: grid; grid-template-columns: var(--camp-w) 260px minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
+.layout.hist-off { grid-template-columns: var(--camp-w) 260px minmax(0, 1fr); }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; padding: 12px; display: flex; flex-direction: column; }   /* only the list scrolls: the tabs, the search / add buttons and the title stay put */
+.sidebar > .list-tabs, .sidebar > .side-tools, .sidebar > .side-title { flex: none; }
 .main { overflow: auto; padding: 0; }
 
 /* buttons */
@@ -181,7 +182,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* sidebar */
 .form-error { color: var(--bad); font-size: 12px; margin-top: 4px; }
-.content-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.content-list { list-style: none; padding: 0 2px 0 0; margin: 8px 0 0; flex: 1 1 0; min-height: 0; overflow-y: auto; }
 .content-item { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; }
 .content-item:hover { background: var(--hover); }
 .content-item.active { background: var(--accent-soft); border-color: var(--accent-border); }
@@ -274,8 +275,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .timeline.compact .event::before { left: -22px; top: 13px; }
 .timeline.compact .event-head .when { margin-left: 0; flex-basis: 100%; font-size: 11px; }
 @media (max-width: 1180px) {
-  .layout { grid-template-columns: 180px 220px minmax(0, 1fr) 300px; }
-  .layout.hist-off { grid-template-columns: 180px 220px minmax(0, 1fr); }
+  .layout { --camp-w: 180px; grid-template-columns: var(--camp-w) 220px minmax(0, 1fr) 300px; }
+  .layout.hist-off { grid-template-columns: var(--camp-w) 220px minmax(0, 1fr); }
 }
 
 
@@ -593,8 +594,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .wa-doc-name { color: inherit; font-weight: 600; overflow-wrap: anywhere; }
 
 /* the undo tree */
-.layout.tree-on { grid-template-columns: 210px 260px minmax(0, 1fr) 520px; }
-@media (max-width: 1180px) { .layout.tree-on { grid-template-columns: 180px 220px minmax(0, 1fr) 460px; } }
+.layout.tree-on { grid-template-columns: var(--camp-w) 260px minmax(0, 1fr) 520px; }
+@media (max-width: 1180px) { .layout.tree-on { grid-template-columns: var(--camp-w) 220px minmax(0, 1fr) 460px; } }
 @media (max-width: 900px) { .layout.tree-on { grid-template-columns: 1fr; } }
 .tree-note { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-size: 12px; }
 .tree { list-style: none; margin: 0; padding: 0; }
@@ -782,3 +783,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
    still starts at the left edge and scrolls instead of being cut off) */
 .panels > .panel:first-child { margin-left: auto; }
 .panels > .panel:last-child { margin-right: auto; }
+
+/* the campaigns column collapses to a narrow rail: the way back and the selected campaign's name turned 90 degrees */
+.camp-btns { display: flex; align-items: center; gap: 2px; }
+.layout.camps-collapsed { --camp-w: 44px; }
+.campaigns.collapsed { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; overflow: hidden; }
+.camp-rail { flex: 1 1 0; min-height: 0; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; display: flex; align-items: flex-start; justify-content: center; color: var(--accent); }
+.camp-rail:hover { background: var(--hover); }
+.camp-rail:focus-visible, .camp-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.camp-rail-text { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-weight: 600; font-size: 13px; letter-spacing: .02em; padding: 6px 0; max-height: 100%; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .layout.camps-collapsed { --camp-w: auto; } }
