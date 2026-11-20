@@ -173,12 +173,16 @@
     return items.map(function (it) {
       var isFlow = it.kind === 'flow', id = isFlow ? it.flow.id : it.content.id;
       var on = ui.flowSel && ui.flowSel.kind === it.kind && ui.flowSel.id === id;
-      var name = isFlow ? it.flow.name : it.content.name, timing = S.timingText(isFlow ? it.flow.timing : it.content.timing);
+      var name = isFlow ? it.flow.name : it.content.name, t = isFlow ? it.flow.timing : it.content.timing, timing = S.timingText(t);
       var tip = timing + ' ' + name + (isFlow ? ' (' + flowSummary(it.flow) + ')' : ' (a template that is itself a flow)');
-      // one line of flowing text:  <n> days <before/after> <reference date> <name>   (the grip is only for dragging; a flow made from one template has a small icon)
+      // a row of a table (the columns line up across all rows): grip | icon | n days | before/after | reference date | name
       return '<li class="content-item flow-item single-line' + (on ? ' active' : '') + '" data-action="select-flow" data-kind="' + it.kind + '" data-id="' + id + '" title="' + esc(tip) + '">' +
         '<span class="drag-handle" draggable="true" aria-hidden="true" title="' + 'Drag to reorder, or onto a campaign to copy or move it' + '">' + ICON_GRIP + '</span>' +
-        '<div class="ci-line">' + (isFlow ? '' : FLOW_IND) + '<span class="ci-timing">' + esc(timing) + '</span> <span class="name">' + esc(name) + '</span></div></li>';
+        '<span class="fi-ind">' + (isFlow ? '' : FLOW_IND) + '</span> ' +
+        '<span class="fi-days">' + (t.days === 0 ? '' : t.days + (t.days === 1 ? ' day' : ' days')) + '</span> ' +
+        '<span class="fi-when">' + (t.days === 0 ? 'on' : esc(t.when)) + '</span> ' +
+        '<span class="fi-ref">' + esc(t.ref) + '</span> ' +
+        '<span class="name">' + esc(name) + '</span></li>';
     }).join('');
   }
 
@@ -282,8 +286,7 @@
         return '<button class="list-tab' + (ui.listTab === t[0] ? ' active' : '') + '" role="tab" aria-selected="' + (ui.listTab === t[0]) + '" data-action="set-list-tab" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div>' +
       '<div class="side-tools" id="side-tools">' + sideToolsInner() + '</div>' +
-      '<h2 class="side-title" id="list-title">' + esc(listTitle()) + '</h2>' +
-      '<ul class="content-list" id="content-list">' + listHtml() + '</ul>' +
+      '<ul class="content-list' + (ui.listTab === 'flows' ? ' flows-table' : '') + '" id="content-list">' + listHtml() + '</ul>' +
       '</aside>';
   }
 

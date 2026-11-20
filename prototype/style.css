@@ -170,7 +170,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .layout { --camp-w: 210px; --list-w: 260px; display: grid; grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr) 340px; flex: 1 1 0; min-height: 0; }
 .layout.hist-off { grid-template-columns: var(--camp-w) var(--list-w) minmax(0, 1fr); }
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; padding: 0; display: flex; flex-direction: column; }   /* only the list scrolls: the tabs, the search / add buttons and the title stay put */
-.sidebar > .list-tabs, .sidebar > .side-tools, .sidebar > .side-title { flex: none; }
+.sidebar > .list-tabs, .sidebar > .side-tools { flex: none; }
 .main { overflow: auto; padding: 0; }
 
 /* buttons */
@@ -319,7 +319,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* campaigns sidebar (far left) */
 .campaigns { background: var(--surface-2); border-right: 1px solid var(--border); overflow: auto; padding: 12px 8px; }
 .side-title { margin: 0 0 8px; padding: 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-.sidebar .side-title { padding: 0 2px; margin-top: 14px; }
 .camp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .camp-item { width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: var(--radius); background: none; color: var(--text); overflow-wrap: anywhere; }
 .camp-item:hover { background: var(--hover); }
@@ -811,10 +810,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* the Flows tab makes room: its list is as wide as its longest entry (up to a limit), so each entry is one line of flowing text */
 .layout.flows-wide { --list-w: fit-content(min(680px, 44vw)); }
-.flow-item.single-line { align-items: center; padding: 7px 10px 7px 6px; }
-.flow-item .ci-line { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-.flow-item .ci-line .flow-ind { display: inline-flex; vertical-align: -2px; margin-right: 6px; padding: 0; border-radius: 0; background: none; }   /* a plain small icon, no text, no box */
-.flow-item .ci-timing { color: var(--muted); font-weight: 400; }
-.flow-item .ci-line .name { display: inline; font-weight: 600; }
 
 .content-item.flow-item { border: 0; }   /* the entries of the flows list have no border (the selected one is shown by its background) */
+
+/* the Flows list is a table: every entry is a row of aligned columns  grip | icon | n days | before/after | reference date | name  */
+#content-list.flows-table { display: grid; grid-template-columns: max-content max-content max-content max-content max-content minmax(0, 1fr); align-content: start; column-gap: 0; }
+#content-list.flows-table > li:not(.flow-item) { grid-column: 1 / -1; }
+#content-list.flows-table > li.flow-item { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; column-gap: 10px; align-items: center; padding: 7px 10px 7px 6px; white-space: nowrap; }
+.flow-item > span, .flow-item > .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.flow-item .fi-days { text-align: right; color: var(--muted); }
+.flow-item .fi-when, .flow-item .fi-ref { color: var(--muted); }
+.flow-item .name { display: block; font-weight: 600; }
+.flow-item .fi-ind { display: inline-flex; align-items: center; min-width: 14px; }
+.flow-item .fi-ind .flow-ind { display: inline-flex; padding: 0; border-radius: 0; background: none; }   /* a plain small icon, no text, no box */

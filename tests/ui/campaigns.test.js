@@ -7,7 +7,7 @@ uiSuite('campaigns sidebar: filter, create under a campaign, legacy data, reset'
   const names = () => b.ev(`[].map.call(document.querySelectorAll('.content-item .name'), e => e.childNodes[0].textContent.trim()).join(', ')`);
   const camps = () => b.ev(`[].map.call(document.querySelectorAll('.camp-item'), e => e.textContent.trim()).join(' | ')`);
   const h2 = () => b.ev(`(document.querySelector('.content-item.active .name')||{}).textContent || ''`);   // the open template = the selected item in the list (the editor has no name heading)
-  const title = () => b.ev(`document.getElementById('list-title').textContent`);
+  const title = () => b.ev(`document.querySelector('.camp-item.active').textContent`);   // the list has no heading any more: the selected campaign is the highlighted one on the left
   const reload = async () => { await b.ev(`location.reload(); 0`); await b.sleep(900); };
 
   await b.ev(`localStorage.clear(); 0`); await reload();

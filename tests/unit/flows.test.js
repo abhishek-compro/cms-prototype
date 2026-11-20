@@ -36,7 +36,12 @@ test('seed: one flow in Newborn care made of an input, two templates, a logic no
   ]);
   const input = node(S, f, 'Input 1');
   assert.deepEqual([input.type, input.next !== null], ['input', true]);
-  assert.deepEqual(Object.keys(input).sort(), ['id', 'next', 'title', 'type', 'x', 'y'], 'an input node has nothing to fill in: no name, type or description');
+  assert.deepEqual(Object.keys(input).sort(), ['alt', 'id', 'next', 'title', 'type', 'x', 'y'], 'an input node has nothing to fill in: no name, type or description (alt = its place in the other direction)');
+  assert.equal(S.flowDirection(f), 'td', 'the demo flow opens top down');
+  const ys = ['Input 1', 'Welcome message', 'Logic 1', 'Daily health tip'].map(t => node(S, f, t).y);
+  assert.deepEqual(ys, ys.slice().sort((a, b) => a - b), 'in the top-down layout the steps follow the edges downwards');
+  assert.ok(ys[0] < ys[3]);
+  assert.deepEqual([input.alt.x, input.alt.y], [40, 40], 'and the left-to-right layout is kept for the other direction');
   assert.match(node(S, f, 'Alert health worker').definition, /community health worker/);
   assert.ok(f.nodes.every(n => !('timing' in n)), 'nodes carry no timing');
 });
@@ -503,7 +508,7 @@ test('duplicateFlow: a new independent flow with its own copy of the whole graph
   assert.deepEqual(f.campaignIds, ['k1']);
   assert.deepEqual(edges(S, copy).sort(), edges(S, f).sort(), 'the same nodes and edges (by name)');
   assert.deepEqual(copy.nodes.map(n => n.type).sort(), f.nodes.map(n => n.type).sort());
-  assert.deepEqual(Object.keys(copy.nodes.find(n => n.type === 'input')).sort(), ['id', 'next', 'title', 'type', 'x', 'y'], 'the copy of an input node is plain too');
+  assert.deepEqual(Object.keys(copy.nodes.find(n => n.type === 'input')).sort(), ['alt', 'id', 'next', 'title', 'type', 'x', 'y'], 'the copy of an input node is plain too');
   const ids = new Set(f.nodes.map(n => n.id).concat(f.nodes.filter(n => n.type === 'logic').flatMap(n => n.outs.map(o => o.id))));
   assert.ok(copy.nodes.every(n => !ids.has(n.id)), 'new node ids');
   assert.ok(copy.nodes.filter(n => n.type === 'logic').every(n => n.outs.every(o => !ids.has(o.id))), 'new edge ids');
@@ -773,28 +778,31 @@ test('changing the template of a node (with values) saves both together; the old
 });
 
 // ---------------------------------------------------------------- direction: left to right or top down
-test('setFlowDirection: lr by default; switching swaps in that direction\'s own layout (auto layered the first time), and back restores the original', () => {
+test('setFlowDirection: the demo flow is top down; switching swaps in that direction\'s own layout (auto layered the first time), and back restores the original', () => {
   const S = fresh();
   const f = flow(S, 'Newborn first weeks');
   const pos = () => Object.fromEntries(f.nodes.map(n => [S.nodeTitle(n), [n.x, n.y]]));
-  const lr = pos();
-  assert.equal(S.flowDirection(f), 'lr');
-  assert.equal(S.setFlowDirection(f.id, 'lr').error, 'No change');
+  const td = pos();
+  assert.equal(S.flowDirection(f), 'td', 'the demo data opens top down');
+  assert.equal(S.setFlowDirection(f.id, 'td').error, 'No change');
   assert.match(S.setFlowDirection(f.id, 'diagonal').error, /left to right or top down/);
   assert.equal(S.setFlowDirection('nope', 'td').error, 'Flow not found');
-  assert.equal(S.setFlowDirection(f.id, 'td').ok, true);
-  const td = pos();
   assert.deepEqual([td['Input 1'], td['Welcome message'], td['Logic 1']], [[40, 40], [40, 260], [40, 480]], 'ranks follow the edges, top to bottom, in one column');
   assert.equal(td['Daily health tip'][1], 700);
   assert.equal(td['Alert health worker'][1], 700);
   assert.notEqual(td['Daily health tip'][0], td['Alert health worker'][0], 'siblings sit side by side');
   const moved = f.nodes[0];
-  S.moveNode(f.id, moved.id, 500, 500);
+  S.moveNode(f.id, moved.id, 500, 500);                       // moved in the top-down layout
   assert.equal(S.setFlowDirection(f.id, 'lr').ok, true);
-  assert.deepEqual(pos(), lr, 'the left-to-right layout is exactly as it was');
-  S.setFlowDirection(f.id, 'td');
+  const lr = pos();
+  assert.deepEqual([lr['Input 1'], lr['Welcome message'], lr['Logic 1'], lr['Daily health tip'], lr['Alert health worker']], [[40, 40], [380, 40], [720, 40], [1100, 40], [1100, 260]], 'the left-to-right layout is the tidy one from the demo data');
+  assert.equal(S.setFlowDirection(f.id, 'td').ok, true);
   assert.deepEqual([moved.x, moved.y], [500, 500], 'and the top-down layout keeps what was moved in it');
+  S.setFlowDirection(f.id, 'lr');
+  assert.deepEqual(pos(), lr, 'back to left to right: exactly as it was');
   assert.equal(S.historyForFlow(f.id).filter(e => /direction/i.test(e.action)).length, 0, 'layout only: not a history event');
+  const fresh2 = S.createFlow('Brand new', null).flow;
+  assert.equal(S.flowDirection(fresh2), 'lr', 'a new flow still starts left to right (only the demo flow is top down)');
 });
 
 test('a duplicate keeps the direction and both layouts; new nodes in a top-down flow land on the grid', () => {

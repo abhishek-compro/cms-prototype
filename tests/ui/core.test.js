@@ -184,5 +184,5 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   // ================= reset =================
   await b.ev(`window.confirm = function(){ return true }; 0`);
   await b.click('[data-action=reset]');
-  ok('Reset demo data brings back the sample content and All content', await txt('#list-title') === 'All content' && await cnt('.content-item') === 13 && await txt('.content-item.active .name') === 'Welcome message');
+  ok('Reset demo data brings back the sample content and All content', await txt('.camp-item.active') === 'All content' && await cnt('.content-item') === 13 && await txt('.content-item.active .name') === 'Welcome message');
 });

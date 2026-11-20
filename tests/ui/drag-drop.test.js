@@ -6,7 +6,7 @@ uiSuite('drag a template onto a campaign: copy / move / cancel dialog', async ({
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
   const names = () => b.ev(`[].map.call(document.querySelectorAll('.content-item .name'), e => e.childNodes[0].textContent.trim()).join(', ')`);
-  const title = () => b.ev(`document.getElementById('list-title').textContent`);
+  const title = () => b.ev(`document.querySelector('.camp-item.active').textContent`);
   const reload = async () => { await b.ev(`location.reload(); 0`); await b.sleep(900); };
   const store = () => b.ev(`JSON.stringify(JSON.parse(localStorage.getItem('cms-prototype-v1')).contents.map(c => [c.name, c.campaignIds]))`);
   const item = name => `.content-item[data-id="${name}"]`;

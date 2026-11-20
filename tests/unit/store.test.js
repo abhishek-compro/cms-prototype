@@ -1145,10 +1145,14 @@ test('ANC sample: ten medical messages in the ANC campaign, each sent N days bef
   const days = list.map(c => c.timing.days);
   assert.deepEqual(days, days.slice().sort((a, b) => b - a), 'in the order they are sent: the earliest (most days before) first');
   assert.equal(new Set(days).size, 10, 'ten different moments');
-  assert.ok(list.every(c => c.translations.length === 1 && c.translations[0].lang === 'en' && c.translations[0].text.length > 40));
+  assert.ok(list.every(c => c.translations.map(t => t.lang).join() === 'en,hi,kn' && c.translations.every(t => t.text.length > 40)), 'English, Hindi and Kannada');
+  assert.ok(list.every(c => /[\u0900-\u097F]/.test(tr(c, 'hi').text) && /[\u0C80-\u0CFF]/.test(tr(c, 'kn').text)), 'really in Devanagari and Kannada script');
+  assert.ok(list.every(c => ['hi', 'kn'].every(l => JSON.stringify(Object.keys(S.positionsOf(tr(c, l).text)).sort()) === JSON.stringify(Object.keys(S.positionsOf(tr(c, 'en').text)).sort()))), 'the same placeholders in every language');
+  assert.ok(list.every(c => c.translations.every(t => Object.keys(S.positionsOf(t.text)).every(n => (S.partsOf(t).defaults[n] || '').length > 0))), 'every placeholder has a default in its own language');
+  assert.deepEqual(tr(byName(S, 'ANC welcome and registration'), 'hi').defaults, { name: 'माँ', edd: '15 मार्च' });
   for (const c of list) {
-    assert.deepEqual(problems(S, c, 'en'), [], c.name);
-    assert.equal(S.canDeploy(c, c.translations[0]), null, c.name + ' can be published');
+    for (const l of ['en', 'hi', 'kn']) { assert.deepEqual(problems(S, c, l), [], c.name + '/' + l); assert.equal(S.canDeploy(c, tr(c, l)), null, c.name + '/' + l + ' can be published'); }
+    assert.deepEqual([S.consistency(c).errors.length, S.consistency(c).warnings.length], [0, 0], c.name + ': the three languages match');
     assert.ok(S.positionsOf(c.translations[0].text).name, c.name + ' greets by name');
   }
   assert.ok(list.some(c => /\{\{edd\}\}/.test(c.translations[0].text)), 'some messages name the date itself');
@@ -1180,4 +1184,18 @@ test('ANC sample: a saved copy of the demo without it gets it once; data built a
   const own = { nextId: 9, campaigns: [{ id: 'k1', name: 'A' }], flows: [], comments: [], contents: [content0('Only mine', { campaignIds: ['k1'], stage: 'product' })], history: [] };
   const { S: S4 } = load(own);
   assert.deepEqual(S4.list().map(c => c.name), ['Only mine'], 'not the demo: nothing is added');
+});
+
+test('ANC sample: a saved demo that has the ten English messages gets the Hindi and Kannada versions once', () => {
+  const { S, mem } = loadStore();
+  const saved = JSON.parse(mem['cms-prototype-v1']);
+  const ids = saved.contents.filter(c => c.campaignIds.includes('k4')).map(c => c.id);
+  saved.contents.forEach(c => { if (ids.includes(c.id)) c.translations = c.translations.filter(t => t.lang === 'en'); });
+  saved.history = saved.history.filter(e => !(ids.includes(e.contentId) && e.action === 'language_added'));
+  const { S: S2, mem: mem2 } = loadStore({ 'cms-prototype-v1': JSON.stringify(saved) });
+  assert.ok(S2.contentsIn('k4').every(c => c.translations.map(t => t.lang).join() === 'en,hi,kn'), 'the missing languages were added');
+  assert.equal(S2.list().length, 13);
+  const n = S2.historyFor(S2.contentsIn('k4')[0].id, 'all').length;
+  const { S: S3 } = loadStore(mem2);
+  assert.equal(S3.historyFor(S3.contentsIn('k4')[0].id, 'all').length, n, 'and not again on the next load');
 });

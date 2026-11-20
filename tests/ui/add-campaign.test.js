@@ -22,7 +22,7 @@ uiSuite('adding a campaign: + button, text box, validation, focus behaviour', as
   await b.type('Maternal health');
   await b.click('.camp-add-confirm');   // real click: the field must not blur-close the box before the click lands
   ok('Add (real click) creates the campaign, closes the box, appends it to the list', await camps() === 'All content | Newborn care | Postnatal check-ups | Immunisation | ANC | Maternal health' && !await q('#new-campaign'), await camps());
-  ok('the new campaign is selected (active, list title) and empty', await b.ev(`document.querySelector('.camp-item.active').textContent`) === 'Maternal health' && await b.ev(`document.getElementById('list-title').textContent`) === 'Maternal health' && await names() === '', await names());
+  ok('the new campaign is selected (active) and empty', await b.ev(`document.querySelector('.camp-item.active').textContent`) === 'Maternal health' && await names() === '', await names());
   ok('toast confirms', /Created campaign "Maternal health"/.test(await b.ev(`document.getElementById('toast').textContent`)));
   const st = JSON.parse(await stored()).pop();
   ok('persisted with id, who and when (' + JSON.stringify(st) + ')', st.name === 'Maternal health' && /^k\d+$/.test(st.id) && st.createdBy === 'Demo user' && !!st.createdAt);

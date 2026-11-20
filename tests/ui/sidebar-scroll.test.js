@@ -6,9 +6,10 @@ uiSuite('content list: only the list scrolls (tabs, search and + stay fixed)', a
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const top = s => b.ev(`Math.round(document.querySelector(${JSON.stringify(s)}).getBoundingClientRect().top)`);
   const scroll = (s, n) => b.ev(`document.querySelector(${JSON.stringify(s)}).scrollTop = ${n}; document.querySelector(${JSON.stringify(s)}).scrollTop`);
-  const fixed = () => b.ev(`JSON.stringify(['.list-tabs','#side-tools','#list-title'].map(function(s){var r=document.querySelector(s).getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]}))`);
+  const fixed = () => b.ev(`JSON.stringify(['.list-tabs','#side-tools','#content-list'].map(function(s){var r=document.querySelector(s).getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]}))`);
 
   await b.click('.camp-item:first-child');                      // All content: 13 items, more than a short window shows
+  ok('the list has no campaign-name heading above it (the Templates and Flows lists start right under the search and + buttons)', !await q('#list-title') && !await q('.sidebar .side-title') && await b.ev(`(function(){var a=document.getElementById('side-tools').getBoundingClientRect(), l=document.getElementById('content-list').getBoundingClientRect(); return l.top - a.bottom < 24})()`));
   ok('the content column (aside.sidebar) has no padding at all', await b.ev(`(function(){var s=getComputedStyle(document.querySelector('aside.sidebar')); return ['Top','Right','Bottom','Left'].every(function(k){return s['padding'+k] === '0px'})})()`));
   ok('the tabs start at the very edge of the column', await b.ev(`(function(){var s=document.querySelector('.sidebar').getBoundingClientRect(), t=document.querySelector('.list-tabs').getBoundingClientRect(); return Math.round(t.left - s.left) <= 1 && Math.round(t.top - s.top) <= 1})()`));
   const radiusOfTemplates = await b.ev(`getComputedStyle(document.querySelector('#content-list .content-item')).borderTopLeftRadius`);

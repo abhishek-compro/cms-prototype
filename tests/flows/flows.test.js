@@ -78,7 +78,7 @@ uiSuite('flows: list, node canvas, edges, reordering, refer/duplicate/move', asy
   ok('Postnatal check-ups: Appointment reminder is a flow by itself', await flowNames() === 'Appointment reminder');
   await camp('k3');
   ok('Immunisation: nothing yet', await flowNames() === '' && /No flows yet/.test(await txt('#content-list')));
-  ok('the list heading follows the campaign', await txt('#list-title') === 'Immunisation');
+  ok('the selected campaign follows (the list has no heading)', await txt('.camp-item.active') === 'Immunisation');
   await b.click('[data-action=open-add]');
   ok('the + box says "New flow name" in this tab', await b.ev(`document.getElementById('new-name').placeholder`) === 'New flow name');
   await b.key('Escape', 'Escape', 27);

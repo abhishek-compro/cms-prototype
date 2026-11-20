@@ -194,8 +194,8 @@
         if (!t.buttons) { t.buttons = []; changed = true; }
       });
     });
-    // Saved copies of the demo (they have the sample "Welcome message") get the ANC sample once; data built any other way is left alone
-    if (state.contents.some(function (c) { return c.name === 'Welcome message'; }) && !state.contents.some(function (c) { return ANC_SAMPLE.some(function (m) { return m.name === c.name; }); })) { addAncSample(); changed = true; }
+    // Saved copies of the demo (they have the sample "Welcome message") get the ANC sample and its Hindi / Kannada versions, once; data built any other way is left alone
+    if (state.contents.some(function (c) { return c.name === 'Welcome message'; }) && addAncSample()) changed = true;
     if (changed) save();
   }
   function reset() {
@@ -1721,20 +1721,73 @@
   }
 
   // ---- Demo data -------------------------------------------------------------
-  // Adds the ANC campaign (if it is not there) and the ten sample messages that are not there yet. Used by the seed and, once, for older saved data.
+  // Hindi and Kannada versions of the ten messages (same placeholders, so the languages match); the default values are in the language too.
+  var ANC_TRANSLATIONS = {
+    'ANC welcome and registration': {
+      hi: 'नमस्ते {{name}}, नूरा हेल्थ में आपका स्वागत है। आपकी प्रसव की अपेक्षित तारीख {{edd}} है। हम आपको स्वस्थ गर्भावस्था के लिए सुझाव भेजेंगे।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನೂರಾ ಹೆಲ್ತ್‌ಗೆ ಸ್ವಾಗತ. ನಿಮ್ಮ ನಿರೀಕ್ಷಿತ ಹೆರಿಗೆಯ ದಿನಾಂಕ {{edd}}. ಆರೋಗ್ಯಕರ ಗರ್ಭಾವಸ್ಥೆಗಾಗಿ ನಾವು ನಿಮಗೆ ಸಲಹೆಗಳನ್ನು ಕಳುಹಿಸುತ್ತೇವೆ.' },
+    'First ANC checkup': {
+      hi: 'नमस्ते {{name}}, आपकी पहली प्रसवपूर्व जाँच का समय हो गया है। कृपया इस सप्ताह अपने नज़दीकी स्वास्थ्य केंद्र जाएँ और अपना एएनसी कार्ड साथ ले जाएँ।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನಿಮ್ಮ ಮೊದಲ ಗರ್ಭಿಣಿ ತಪಾಸಣೆಯ ಸಮಯ ಬಂದಿದೆ. ಈ ವಾರ ಹತ್ತಿರದ ಆರೋಗ್ಯ ಕೇಂದ್ರಕ್ಕೆ ಭೇಟಿ ನೀಡಿ ಮತ್ತು ನಿಮ್ಮ ಎಎನ್‌ಸಿ ಕಾರ್ಡ್ ತೆಗೆದುಕೊಂಡು ಹೋಗಿ.' },
+    'Iron and folic acid tablets': {
+      hi: '{{name}}, रोज़ खाने के बाद आयरन और फोलिक एसिड की एक गोली लें। इससे आप और आपका बच्चा मज़बूत रहेंगे। इसे चाय के साथ न लें।',
+      kn: '{{name}}, ಪ್ರತಿದಿನ ಊಟದ ನಂತರ ಒಂದು ಕಬ್ಬಿಣ ಮತ್ತು ಫೋಲಿಕ್ ಆಮ್ಲದ ಮಾತ್ರೆ ತೆಗೆದುಕೊಳ್ಳಿ. ಇದು ನಿಮ್ಮನ್ನು ಮತ್ತು ನಿಮ್ಮ ಮಗುವನ್ನು ಬಲಿಷ್ಠವಾಗಿಡುತ್ತದೆ. ಚಹಾದೊಂದಿಗೆ ತೆಗೆದುಕೊಳ್ಳಬೇಡಿ.' },
+    'Ultrasound scan reminder': {
+      hi: 'नमस्ते {{name}}, आप लगभग पाँच महीने की गर्भवती हैं। कृपया इस महीने स्वास्थ्य केंद्र में अपना अल्ट्रासाउंड करवाएँ।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನೀವು ಸುಮಾರು ಐದು ತಿಂಗಳ ಗರ್ಭಿಣಿ. ಈ ತಿಂಗಳು ಆರೋಗ್ಯ ಕೇಂದ್ರದಲ್ಲಿ ಅಲ್ಟ್ರಾಸೌಂಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿಸಿಕೊಳ್ಳಿ.' },
+    'Tetanus injection reminder': {
+      hi: '{{name}}, कृपया स्वास्थ्य केंद्र में टिटनेस (टीटी) का टीका लगवाएँ। यह आपको और आपके बच्चे को संक्रमण से बचाता है।',
+      kn: '{{name}}, ದಯವಿಟ್ಟು ಆರೋಗ್ಯ ಕೇಂದ್ರದಲ್ಲಿ ಧನುರ್ವಾಯು (ಟಿಟಿ) ಚುಚ್ಚುಮದ್ದು ಹಾಕಿಸಿಕೊಳ್ಳಿ. ಇದು ನಿಮ್ಮನ್ನು ಮತ್ತು ನಿಮ್ಮ ಮಗುವನ್ನು ಸೋಂಕಿನಿಂದ ರಕ್ಷಿಸುತ್ತದೆ.' },
+    'Blood pressure and sugar check': {
+      hi: 'नमस्ते {{name}}, अब आपका ब्लड प्रेशर, ब्लड शुगर और हीमोग्लोबिन जाँचने का समय है। अगली एएनसी जाँच के लिए कृपया स्वास्थ्य केंद्र आएँ।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನಿಮ್ಮ ರಕ್ತದೊತ್ತಡ, ರಕ್ತದ ಸಕ್ಕರೆ ಮತ್ತು ಹಿಮೋಗ್ಲೋಬಿನ್ ಪರೀಕ್ಷಿಸುವ ಸಮಯ ಬಂದಿದೆ. ಮುಂದಿನ ಎಎನ್‌ಸಿ ಭೇಟಿಗಾಗಿ ದಯವಿಟ್ಟು ಆರೋಗ್ಯ ಕೇಂದ್ರಕ್ಕೆ ಬನ್ನಿ.' },
+    'Healthy diet in late pregnancy': {
+      hi: '{{name}}, थोड़ा-थोड़ा करके बार-बार खाएँ: दाल, हरी पत्तेदार सब्ज़ियाँ, अंडे, दूध और फल। खूब साफ़ पानी पिएँ।',
+      kn: '{{name}}, ಸ್ವಲ್ಪ ಸ್ವಲ್ಪವಾಗಿ ಆಗಾಗ್ಗೆ ತಿನ್ನಿರಿ: ಬೇಳೆ, ಹಸಿರು ಸೊಪ್ಪು ತರಕಾರಿಗಳು, ಮೊಟ್ಟೆ, ಹಾಲು ಮತ್ತು ಹಣ್ಣು. ಸಾಕಷ್ಟು ಶುದ್ಧ ನೀರು ಕುಡಿಯಿರಿ.' },
+    'Birth preparedness plan': {
+      hi: 'नमस्ते {{name}}, आपकी डिलीवरी लगभग {{weeks}} हफ़्ते दूर है। तय कर लें कि कहाँ डिलीवरी होगी, कैसे जाएँगी और आपके साथ कौन जाएगा।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನಿಮ್ಮ ಹೆರಿಗೆ ಸುಮಾರು {{weeks}} ವಾರಗಳ ದೂರದಲ್ಲಿದೆ. ಎಲ್ಲಿ ಹೆರಿಗೆ ಮಾಡಿಸಿಕೊಳ್ಳುತ್ತೀರಿ, ಹೇಗೆ ಹೋಗುತ್ತೀರಿ ಮತ್ತು ನಿಮ್ಮೊಂದಿಗೆ ಯಾರು ಬರುತ್ತಾರೆ ಎಂದು ನಿರ್ಧರಿಸಿ.' },
+    'Pregnancy danger signs': {
+      hi: '{{name}}, अगर भारी रक्तस्राव, तेज़ सिरदर्द, धुंधला दिखना, चेहरे या हाथों में सूजन, बुखार हो या बच्चा कम हिले, तो तुरंत स्वास्थ्य केंद्र जाएँ।',
+      kn: '{{name}}, ಭಾರೀ ರಕ್ತಸ್ರಾವ, ತೀವ್ರ ತಲೆನೋವು, ಮಂಜಾದ ದೃಷ್ಟಿ, ಮುಖ ಅಥವಾ ಕೈಗಳ ಊತ, ಜ್ವರ ಅಥವಾ ಮಗು ಕಡಿಮೆ ಚಲಿಸಿದರೆ ತಕ್ಷಣ ಆರೋಗ್ಯ ಕೇಂದ್ರಕ್ಕೆ ಹೋಗಿ.' },
+    'Delivery is close': {
+      hi: 'नमस्ते {{name}}, आपकी प्रसव की अपेक्षित तारीख {{edd}} है। अपना बैग, एएनसी कार्ड और फोन तैयार रखें। प्रसव पीड़ा शुरू होते ही स्वास्थ्य केंद्र जाएँ।',
+      kn: 'ನಮಸ್ಕಾರ {{name}}, ನಿಮ್ಮ ನಿರೀಕ್ಷಿತ ಹೆರಿಗೆಯ ದಿನಾಂಕ {{edd}}. ನಿಮ್ಮ ಬ್ಯಾಗ್, ಎಎನ್‌ಸಿ ಕಾರ್ಡ್ ಮತ್ತು ಫೋನ್ ಸಿದ್ಧವಾಗಿಡಿ. ಹೆರಿಗೆ ನೋವು ಶುರುವಾದಾಗ ಆರೋಗ್ಯ ಕೇಂದ್ರಕ್ಕೆ ಹೋಗಿ.' }
+  };
+  var ANC_DEFAULTS = { hi: { name: 'माँ', edd: '15 मार्च', weeks: '8' }, kn: { name: 'ಅಮ್ಮ', edd: '15 ಮಾರ್ಚ್', weeks: '8' } };
+  var ANC_LANGS = ['hi', 'kn'];
+
+  // Adds the ANC campaign (if it is not there), the ten sample messages that are not there yet, and the Hindi and Kannada versions that are
+  // missing. Idempotent. Used by the seed and for saved copies of the demo. Returns true when it added anything.
   function addAncSample() {
+    var changed = false;
     var camp = state.campaigns.filter(function (k) { return k.name.toLowerCase() === ANC_NAME.toLowerCase(); })[0];
-    if (!camp) camp = createCampaign(ANC_NAME).campaign;
+    if (!camp) { camp = createCampaign(ANC_NAME).campaign; changed = true; }
     ANC_SAMPLE.forEach(function (m) {
-      var r = createContent(m.name, 'en', camp.id);
-      if (!r.ok) return;                                         // a content with that name already exists: leave it alone
-      var c = r.content;
-      c.stage = 'medical';
-      var cur = cloneParts(partsOf(getTr(c, 'en')));
-      cur.text = m.text; cur.defaults = m.defaults;
-      saveParts(c.id, 'en', cur);
-      setTemplateTiming(c.id, { days: m.days, when: 'before', ref: 'expected_date_of_delivery' });
+      var c = state.contents.filter(function (x) { return x.name === m.name; })[0];
+      if (!c) {
+        var r = createContent(m.name, 'en', camp.id);
+        if (!r.ok) return;
+        c = r.content; changed = true;
+        c.stage = 'medical';
+        var cur = cloneParts(partsOf(getTr(c, 'en')));
+        cur.text = m.text; cur.defaults = m.defaults;
+        saveParts(c.id, 'en', cur);
+        setTemplateTiming(c.id, { days: m.days, when: 'before', ref: 'expected_date_of_delivery' });
+      }
+      if (c.campaignIds.indexOf(camp.id) === -1) return;         // a content of that name that is not the sample's: leave it alone
+      ANC_LANGS.forEach(function (lang) {
+        var text = (ANC_TRANSLATIONS[m.name] || {})[lang];
+        if (!text || getTr(c, lang)) return;
+        addTranslation(c.id, lang, text);
+        var part = cloneParts(partsOf(getTr(c, lang))), names = Object.keys(positionsOf(text)), d = {};
+        names.forEach(function (n) { d[n] = ANC_DEFAULTS[lang][n]; });
+        part.defaults = d;
+        saveParts(c.id, lang, part);
+        changed = true;
+      });
     });
+    return changed;
   }
 
   function seed() {
@@ -1812,6 +1865,7 @@
     connect(fl.id, nL.id, nL.outs[0].id, nD.id);
     connect(fl.id, nL.id, nL.outs[1].id, nA.id);
     [[nI, 40, 40], [nW, 380, 40], [nL, 720, 40], [nD, 1100, 40], [nA, 1100, 260]].forEach(function (p) { moveNode(fl.id, p[0].id, p[1], p[2]); });   // tidy layout
+    setFlowDirection(fl.id, 'td');   // the demo flow opens top down (its left-to-right layout above is kept for the other direction)
 
     addAncSample();            // the ANC campaign: ten medical messages timed from the expected date of delivery
 
