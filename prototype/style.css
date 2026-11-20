@@ -682,7 +682,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .wa-btn-ic { flex: none; }
 .wa-btn-in { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--wa-btn-text); text-align: center; font-size: 13px; font-weight: 600; }
 .wa-hvis { margin-bottom: 4px; }
-.wa-hnote { padding: 0 4px 2px; color: var(--wa-meta); overflow-wrap: anywhere; }
 .wa-hctl { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 2px 4px 6px; font-size: 12px; }
 .wa-hctl .btn { padding: 1px 8px; font-size: 12px; }
 .wa-hint { color: var(--wa-meta); }

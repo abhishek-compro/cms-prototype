@@ -32,7 +32,7 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   const waitFor = async (fn, ms = 3000) => { for (let t = 0; t < ms; t += 50) { if (await fn()) return true; await b.sleep(50); } return false; };
 
   // ---- the sample: a dummy CDN link shown as a tile
-  ok('the English header is the sample (dummy) CDN link: the bubble shows a tile with the file name, the link as its tooltip', await q(E('.wa-bubble .wa-media-image.linked')) && /welcome-en\.png/.test(await txt(E('.wa-media-image .wa-media-name'))) && await attr(E('.wa-media-image'), 'title') === EN && /welcome-en\.png/.test(await txt(E('.wa-hnote'))));
+  ok('the English header is the sample (dummy) CDN link: the bubble shows a tile with the file name, the link as its tooltip', await q(E('.wa-bubble .wa-media-image.linked')) && /welcome-en\.png/.test(await txt(E('.wa-media-image .wa-media-name'))) && await attr(E('.wa-media-image'), 'title') === EN);
   ok('nothing is fetched: no image, video, frame or external resource is in the page, and no request left it', await cnt('img, video, audio, iframe, source, embed, object') === 0 && await noNetwork());
   ok('the link is edited below the phone, labelled as a CDN link, not inside the bubble', await val(E('[data-input=header]')) === EN && /Media link/.test(await txt(E('[data-sec=header-url]'))) && !await q(E('.phone [data-input=header]')));
   ok('the header type dropdown, its limits and the Remove header button are below the phone (the only control in the bubble is the cross on the picture)', await q(E('[data-sec=header-url] [data-change=set-header-type]')) && /JPEG or PNG, up to 5 MB/.test(await txt(E('[data-sec=header-url]'))) && await q(E('[data-sec=header-url] [data-action=remove-header]')) && !await q(E('.phone [data-change=set-header-type]')) && await cnt(E('.phone [data-action=remove-header]')) === 1 && await q(E('.wa-hbtns .wa-remove')));
@@ -60,7 +60,7 @@ uiSuite('header media: a dummy CDN link; the pencil uploads a file kept in Index
   const link = await val(E('[data-input=header]'));
   ok('an uploaded image gets a randomly generated dummy CDN link that keeps the extension, and the link field shows it', LINK.test(link) && /\.png$/.test(link) && link !== EN, link);
   ok('the bubble shows the real picture (from local data, not from the link), with no tile', await q(E('.wa-bubble .wa-media-file img.wa-img')) && /^blob:/.test(await attr(E('.wa-img'), 'src')) && await b.ev(`document.querySelector('.panel.edit[data-lang=en] .wa-img').naturalWidth`) === 1 && !await q(E('.wa-media.linked')));
-  ok('under the picture: the file name and size', /baby\.png · 1 KB/.test(await txt(E('.wa-hnote'))), await txt(E('.wa-hnote')));
+  ok('only the preview: no caption under the picture (the file name and size are its tooltip)', !await q(E('.wa-hnote')) && await attr(E('.wa-media-file'), 'title') === 'baby.png · 1 KB' && !await q(E('.wa-hvis > :not(.wa-media-file):not(.wa-media):not(.wa-doc)')), await attr(E('.wa-media-file'), 'title'));
   ok('the file is stored as data in IndexedDB under that link', JSON.stringify(await idbKeys()) === JSON.stringify([link]));
   ok('the language is marked edited (Save enabled); nothing is saved yet', !await b.ev(`document.querySelector('.panel.edit[data-lang=en] .save').disabled`) && await saved() === EN);
   ok('still nothing was requested from the network', await noNetwork());

@@ -339,18 +339,8 @@
   // Containers data-sec="header|body|footer|buttons|add" (in the phone) and "header-id|placeholders|button-details|problems"
   // (below it) always exist or can appear while typing; never re-render the field being typed in.
 
-  // what the header link is, in a few words (shown under the picture while editing)
-  function mediaNote(c, url) {
-    url = (url || '').trim();
-    if (!url) return 'No ' + c.headerType + ' yet. Hover the picture and click the pencil to upload one, or paste a CDN link below the phone.';
-    var why = S.checkMediaUrl(c.headerType, url);
-    if (why) return why;
-    var m = S.getMedia(url);
-    if (m) return m.name + ' · ' + S.fmtSize(m.size) + (mediaUrls[url] ? '' : ' · the file is not kept in this browser any more, only the link');
-    return S.mediaFileName(url) || url;
-  }
   function headerVisualHtml(c, p) {
-    return waHeaderHtml(c, p) + '<div class="wa-hnote small" data-note="header">' + esc(mediaNote(c, p.header)) + '</div>';
+    return waHeaderHtml(c, p);                 // only the picture: no caption under it
   }
 
   // Header type is one per template (name level); each language has its own link. In the phone: only the header as it looks
@@ -1652,8 +1642,8 @@
       // link as a tile with the file's name
       var url = (p.header || '').trim(), usable = url && !S.checkMediaUrl(c.headerType, url), name = usable ? S.mediaFileName(url) : '';
       var meta = usable ? S.getMedia(url) : null, data = meta && meta.kind === c.headerType ? mediaUrls[url] : null;
-      if (data && c.headerType === 'image') head = '<div class="wa-media-file"><img class="wa-img" src="' + esc(data) + '" alt="' + esc(meta.name) + '"></div>';
-      else if (data && c.headerType === 'video') head = '<div class="wa-media-file"><video class="wa-img" src="' + esc(data) + '" controls preload="metadata"></video></div>';
+      if (data && c.headerType === 'image') head = '<div class="wa-media-file" title="' + esc(meta.name + ' · ' + S.fmtSize(meta.size)) + '"><img class="wa-img" src="' + esc(data) + '" alt="' + esc(meta.name) + '"></div>';
+      else if (data && c.headerType === 'video') head = '<div class="wa-media-file" title="' + esc(meta.name + ' · ' + S.fmtSize(meta.size)) + '"><video class="wa-img" src="' + esc(data) + '" controls preload="metadata"></video></div>';
       else if (usable && c.headerType === 'document') head = '<div class="wa-doc"><span class="wa-media-ic" aria-hidden="true">📄</span><div><div class="wa-doc-name">' + esc((meta && meta.name) || name || 'Document') + '</div><div class="wa-sub">PDF' + (meta ? ' · ' + esc(S.fmtSize(meta.size)) : '') + '</div></div></div>';
       else if (usable) head = '<div class="wa-media wa-media-' + c.headerType + ' linked" title="' + esc(url) + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span class="wa-media-name">' + esc(name || label) + '</span></div>';
       else head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
