@@ -310,12 +310,12 @@
     var blockWhy = S.blockProblem(c);
     var deployable = c.translations.filter(function (t) { return !S.canDeploy(c, t); }).length;
     return '<div class="toolbar">' +
-      addLangHtml(c) + '<span style="flex:1"></span>' +
+      addLangHtml(c) + '<span class="tb-group">' +
       (blockWhy ? '' : '<label class="block-switch' + (c.blocked ? ' on' : '') + '" title="When on, Publish all does nothing for this content"><input type="checkbox" data-change="toggle-block"' + (c.blocked ? ' checked' : '') + '> Free text</label>') +
       cmButtonHtml({ kind: 'content', id: c.id, c: c }) +
       '<button class="btn icon" data-action="csv-one" title="Download CSV of this content (' + esc(c.name) + ')" aria-label="Download CSV of this content">' + ICON_DOWNLOAD + '<span>CSV</span></button>' +
       '<button class="btn' + (ui.historyOpen ? ' on' : '') + '" data-action="toggle-history-pane" aria-pressed="' + !!ui.historyOpen + '">' + (ui.historyOpen ? 'Hide' : 'Show') + ' history</button>' +
-      '<button class="btn deploy" data-action="deploy-all"' + (deployable ? ' title="Publish ' + deployable + ' language' + (deployable === 1 ? '' : 's') + '"' : ' disabled') + '>Publish all</button></div>';
+      '<button class="btn deploy" data-action="deploy-all"' + (deployable ? ' title="Publish ' + deployable + ' language' + (deployable === 1 ? '' : 's') + '"' : ' disabled') + '>Publish all</button></span></div>';
   }
 
   function waNameHtml(tr) {
