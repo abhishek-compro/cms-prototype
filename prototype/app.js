@@ -353,48 +353,49 @@
   function shownFor(c, tr) { var k = draftKey(c.id, tr.lang); return ui.shown[k] || (ui.shown[k] = {}); }
   function footerShown(c, tr, p) { var sh = ui.shown[draftKey(c.id, tr.lang)]; return p.footer.length > 0 || !!(sh && sh.footer); }
 
-  // The header file as it looks to the author: the image, a video player, or a card for a document (or only its id when the file is
-  // not known here: sample data, or a big file that was not kept after a reload)
-  function mediaHtml(id, type) {
+  // ---- the editing panel IS the phone ----------------------------------------------------------------------------------
+  // The language's message is edited in place as WhatsApp shows it: the header media at the top of the bubble, the body text, the
+  // footer and the time, and the buttons under the bubble. What is not part of the picture sits below the phone: the header media
+  // id, the placeholders (names, WhatsApp positions, default values), the buttons' payloads / URLs, and the problems.
+  // Containers data-sec="header|body|footer|buttons|add" (in the phone) and "header-id|placeholders|button-details|problems"
+  // (below it) always exist or can appear while typing; never re-render the field being typed in.
+
+  // what the media of the header is, in a few words (shown under the picture while editing)
+  function mediaNote(c, id) {
     id = (id || '').trim();
-    if (!id) return '<div class="media-card empty"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[type] + '</span><span>No ' + type + ' uploaded yet</span></div>';
-    var m = S.getMedia(id), url = m && S.mediaData(id);
-    if (!m) return '<div class="media-card"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[type] + '</span><span>Media id <code>' + esc(id) + '</code><br><span class="muted small">No file in this prototype, so nothing to preview</span></span></div>';
-    var info = '<div class="media-name" title="' + esc(m.name) + '">' + esc(m.name) + '</div><div class="muted small">' + esc(S.fmtSize(m.size)) + '</div>';
-    if (url && m.kind === 'image') return '<div class="media-box"><img class="media-img" src="' + esc(url) + '" alt="' + esc(m.name) + '"></div>' + info;
-    if (url && m.kind === 'video') return '<div class="media-box"><video class="media-video" src="' + esc(url) + '" controls preload="metadata"></video></div>' + info;
-    return '<div class="media-card"><span class="media-ic" aria-hidden="true">' + HEADER_ICON[m.kind] + '</span><span>' + info +
-      (url ? '' : '<span class="muted small">Preview is not kept after a reload for a file this big</span>') + '</span></div>';
+    if (!id) return 'No ' + c.headerType + ' uploaded yet';
+    var m = S.getMedia(id);
+    if (!m) return 'Media id ' + id + ' · no file in this prototype, so nothing to preview';
+    return m.name + ' · ' + S.fmtSize(m.size) + (S.mediaData(id) ? '' : ' · preview is not kept after a reload for a file this big');
+  }
+  function headerVisualHtml(c, p) {
+    return waHeaderHtml(c, p) + '<div class="wa-hnote small" data-note="header">' + esc(mediaNote(c, p.header)) + '</div>';
   }
 
   // Header type is one per template (name level); each language has its own media file (stored as a media id)
-  function secHeader(c, tr, p, ro) {
+  function secHeader(c, tr, p) {
     if (c.headerType === 'none') return '';
-    var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
-    if (ro) {
-      return '<div class="sec" data-sec="header">' + lbl('Header', '· ' + label.toLowerCase() + ' media') +
-        '<div class="media" data-media="' + tr.lang + '">' + mediaHtml(p.header, c.headerType) + '</div></div>';
-    }
     var has = !!(p.header || '').trim();
-    return '<div class="sec" data-sec="header"><div class="sec-label sec-row"><span>Header' + cmBadge(c, tr.lang, 'header') + '</span>' +
-      '<select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
+    return '<div class="wa-part wa-part-header" data-sec="header">' + cmBadge(c, tr.lang, 'header') +
+      '<div class="wa-hvis" data-media="' + tr.lang + '">' + headerVisualHtml(c, p) + '</div>' +
+      '<div class="wa-hctl"><select class="field-select sm" data-change="set-header-type" aria-label="Header type" title="Applies to every language of this template">' +
       S.HEADER_TYPES.filter(function (h) { return h.id !== 'none'; }).map(function (h) { return '<option value="' + h.id + '"' + (h.id === c.headerType ? ' selected' : '') + '>' + h.label + '</option>'; }).join('') + '</select>' +
-      '<span class="grow"></span><button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove</button></div>' +
-      '<div class="media" data-media="' + tr.lang + '">' + mediaHtml(p.header, c.headerType) + '</div>' +
-      '<div class="media-actions"><button class="btn" data-action="pick-header" data-lang="' + tr.lang + '">' + (has ? 'Replace ' : 'Upload ') + c.headerType + '</button>' +
+      '<button class="btn" data-action="pick-header" data-lang="' + tr.lang + '">' + (has ? 'Replace ' : 'Upload ') + c.headerType + '</button>' +
       (has ? '<button class="btn link" data-action="clear-header-file" data-lang="' + tr.lang + '">Remove file</button>' : '') +
-      '<span class="muted small">' + esc(S.mediaHint(c.headerType)) + '</span>' +
-      '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div>' +
+      '<button class="btn link" data-action="remove-header" title="Remove the header from every language">Remove header</button>' +
+      '<span class="wa-hint small">' + esc(S.mediaHint(c.headerType)) + '</span>' +
+      '<input type="file" class="file-input" data-change="upload-header" data-lang="' + tr.lang + '" accept="' + esc(S.mediaAccept(c.headerType)) + '" tabindex="-1" aria-hidden="true"></div></div>';
+  }
+  // below the phone: the media id (set by the upload, or a TurnMedia uuid pasted by hand)
+  function secHeaderId(c, tr, p) {
+    if (c.headerType === 'none') return '<div data-sec="header-id"></div>';
+    return '<div class="sec" data-sec="header-id">' + lbl('Header media id') +
       '<input class="field" data-input="header" data-lang="' + tr.lang + '" value="' + esc(p.header) + '" placeholder="Media ID (set by the upload, or paste a TurnMedia uuid)" aria-label="Media ID" autocomplete="off" spellcheck="false"></div>';
   }
 
-  function secBody(c, tr, p, ro) {
-    if (ro) {
-      var empty = !p.text.trim();
-      return '<div class="sec" data-sec="body">' + lbl('Body') + '<div class="ref-text' + (empty ? ' empty' : '') + '">' + (empty ? 'No text yet in this language' : esc(p.text)) + '</div></div>';
-    }
-    return '<div class="sec" data-sec="body">' + lbl('Body' + cmBadge(c, tr.lang, 'body'), '· ' + counter('text', p.text.length, S.LIMITS.body)) +
-      '<textarea data-input="text" data-lang="' + tr.lang + '" placeholder="Write the ' + esc(S.langName(tr.lang)) + ' text here. Use {{name}} for a placeholder." spellcheck="false">' + esc(p.text) + '</textarea></div>';
+  function secBody(c, tr, p) {
+    return '<div class="wa-part wa-part-body" data-sec="body">' + cmBadge(c, tr.lang, 'body') +
+      '<textarea class="wa-text-in" rows="3" data-input="text" data-lang="' + tr.lang + '" aria-label="Body" placeholder="Write the ' + esc(S.langName(tr.lang)) + ' text here. Use {{name}} for a placeholder." spellcheck="false">' + esc(p.text) + '</textarea></div>';
   }
 
   // An editable placeholder name: {{ [name] }}. Committed on Enter / blur (the `change` event), not per keystroke,
@@ -430,27 +431,33 @@
       }).join('') + '</tbody></table></div>';
   }
 
-  // Buttons: limits are 3 quick replies and 1 URL button. They are added with the + Add dropdown.
-  function secButtons(c, tr, p, ro) {
+  // Buttons, in the phone under the bubble: the text of each is typed on the button itself. Limits: 3 quick replies and 1 URL button.
+  function secButtons(c, tr, p) {
     var bs = p.buttons || [];
-    if (ro) {
-      if (!bs.length) return '';
-      return '<div class="sec" data-sec="buttons">' + lbl('Buttons') + bs.map(function (b, i) {
-        var url = b.type === 'URL';
-        return '<div class="bro"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span> “' + esc(b.text) + '” <span class="muted">→</span> ' +
-          (url ? esc(b.url) : esc(b.default_payload)) + (url ? btnParams(tr, b, i, true) : '') + '</div>';
-      }).join('') + '</div>';
-    }
     if (!bs.length) return '<div data-sec="buttons"></div>';
+    return '<div class="wa-btns wa-btns-edit" data-sec="buttons">' + bs.map(function (b, i) {
+      var url = b.type === 'URL';
+      return '<div class="bcard wa-btn wa-btn-edit" data-idx="' + i + '">' +
+        '<span class="wa-btn-ic" title="' + (url ? 'URL button' : 'Quick reply') + '" aria-hidden="true">' + (url ? '↗' : '↩') + '</span>' +
+        '<input class="wa-btn-in" data-input="btn-text" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.text) + '" placeholder="' + (url ? 'URL button' : 'Quick reply') + '" aria-label="Button ' + (i + 1) + ' text" autocomplete="off">' +
+        '<span class="wa-count small">' + counter('btn-text-' + i, (b.text || '').length, S.LIMITS.buttonText) + '</span>' + cmBadge(c, tr.lang, 'button', i) +
+        '<button class="wa-x" data-action="btn-remove" data-lang="' + tr.lang + '" data-idx="' + i + '" aria-label="Remove button ' + (i + 1) + '" title="Remove this button">×</button></div>';
+    }).join('') + '</div>';
+  }
+  // below the phone: what each button does (quick reply payload, or the URL and its variables)
+  function secButtonDetails(c, tr, p, ro) {
+    var bs = p.buttons || [];
+    if (!bs.length) return ro ? '' : '<div data-sec="button-details"></div>';
     var n = S.buttonCounts(bs);
-    return '<div class="sec" data-sec="buttons">' + lbl('Buttons', '· quick replies ' + n.quickReply + ' / ' + S.LIMITS.quickReplies + ' · URL ' + n.url + ' / ' + S.LIMITS.urlButtons) +
+    return '<div class="sec" data-sec="button-details">' + lbl('Buttons', '· quick replies ' + n.quickReply + ' / ' + S.LIMITS.quickReplies + ' · URL ' + n.url + ' / ' + S.LIMITS.urlButtons) +
       bs.map(function (b, i) {
         var url = b.type === 'URL';
-        return '<div class="bcard" data-idx="' + i + '"><div class="bcard-head"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span>' +
-          '<span class="muted small">Button ' + (i + 1) + '</span>' + cmBadge(c, tr.lang, 'button', i) + '<span class="grow"></span>' +
-          '<button class="btn link" data-action="btn-remove" data-lang="' + tr.lang + '" data-idx="' + i + '" aria-label="Remove button ' + (i + 1) + '">Remove</button></div>' +
-          '<label class="fld"><span>Text <span class="muted small">' + counter('btn-text-' + i, (b.text || '').length, S.LIMITS.buttonText) + '</span></span>' +
-          '<input class="field" data-input="btn-text" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.text) + '" autocomplete="off"></label>' +
+        if (ro) {
+          return '<div class="bro"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span> “' + esc(b.text) + '” <span class="muted">→</span> ' +
+            (url ? esc(b.url) : esc(b.default_payload)) + (url ? btnParams(tr, b, i, true) : '') + '</div>';
+        }
+        return '<div class="bdet" data-idx="' + i + '"><div class="bcard-head"><span class="btype">' + (url ? 'URL' : 'Quick reply') + '</span>' +
+          '<span class="muted small">Button ' + (i + 1) + (b.text ? ' · ' + esc(b.text) : '') + '</span></div>' +
           (url
             ? '<label class="fld"><span>URL <span class="muted small">use {{name}} for a variable part</span></span>' +
               '<input class="field" data-input="btn-url" data-lang="' + tr.lang + '" data-idx="' + i + '" value="' + esc(b.url) + '" placeholder="https://" autocomplete="off" spellcheck="false"></label>' + btnParams(tr, b, i, false)
@@ -460,12 +467,12 @@
   }
 
   // Footer is per language and optional: shown when it has text, or after it was added with the + Add dropdown
-  function secFooter(c, tr, p, ro) {
-    if (ro) return p.footer ? '<div class="sec" data-sec="footer">' + lbl('Footer') + '<div class="ro-val">' + esc(p.footer) + '</div></div>' : '';
+  function secFooter(c, tr, p) {
     if (!footerShown(c, tr, p)) return '';
-    return '<div class="sec" data-sec="footer"><div class="sec-label sec-row"><span>Footer' + cmBadge(c, tr.lang, 'footer') + ' <span class="muted">· ' + counter('footer', p.footer.length, S.LIMITS.footer) + '</span></span>' +
-      '<span class="grow"></span><button class="btn link" data-action="remove-footer" data-lang="' + tr.lang + '">Remove</button></div>' +
-      '<input class="field" data-input="footer" data-lang="' + tr.lang + '" value="' + esc(p.footer) + '" placeholder="No placeholders." autocomplete="off"></div>';
+    return '<div class="wa-part wa-part-footer" data-sec="footer">' + cmBadge(c, tr.lang, 'footer') +
+      '<input class="wa-foot-in" data-input="footer" data-lang="' + tr.lang + '" value="' + esc(p.footer) + '" placeholder="Footer (no placeholders)" aria-label="Footer" autocomplete="off">' +
+      '<span class="wa-count small">' + counter('footer', p.footer.length, S.LIMITS.footer) + '</span>' +
+      '<button class="wa-x" data-action="remove-footer" data-lang="' + tr.lang + '" aria-label="Remove footer" title="Remove the footer">×</button></div>';
   }
 
   // The one place to add things: a header (type chosen here), a footer, quick-reply / URL buttons.
@@ -478,14 +485,14 @@
     if (!footerShown(c, tr, p)) sections += opt('footer', 'Footer');
     var buttons = opt('button:QUICK_REPLY', 'Quick reply button (' + n.quickReply + ' of ' + S.LIMITS.quickReplies + ' used)', !canQr) +
       opt('button:URL', 'URL button' + (canUrl ? '' : ' (already added)'), !canUrl);
-    return '<div class="sec add-row" data-sec="add"><select class="field-select" data-change="add-part" data-lang="' + tr.lang + '" aria-label="Add a header, footer or button">' +
+    return '<div class="wa-add add-row" data-sec="add"><select class="field-select" data-change="add-part" data-lang="' + tr.lang + '" aria-label="Add a header, footer or button">' +
       '<option value="">+ Add…</option>' + (sections ? '<optgroup label="Sections">' + sections + '</optgroup>' : '') + '<optgroup label="Buttons">' + buttons + '</optgroup></select></div>';
   }
 
   // Only shown when there is something wrong (the container stays so it can appear while typing)
   // Errors block publishing (this language's own, and mismatches between the languages of the template, which use the
   // unsaved drafts too); warnings do not (a placeholder used in some languages and not in others).
-  function secProblems(c, p) {
+  function secProblems(c, tr, p) {
     var cross = S.consistency(c, draftsByLang(c));
     var list = S.problems(c, p).filter(function (x) { return x.code !== 'empty'; }).concat(cross.errors), warns = cross.warnings;
     if (!list.length && !warns.length) return '<div data-sec="problems"></div>';
@@ -495,20 +502,25 @@
       (warns.length ? '<div class="warns"><div class="sec-label">Warnings (' + warns.length + ') <span class="muted">· these do not block publishing</span></div><ul>' + items(warns) + '</ul></div>' : '') + '</div>';
   }
 
+  // The reference panel (side by side): the saved message as the same phone, read-only, and the details under it
   function refPanelHtml(c, tr) {
     var p = S.partsOf(tr);
     return '<section class="panel ref" data-role="ref" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="ref" data-lang="' + tr.lang + '" title="Show this template as a WhatsApp message on a phone">Preview</button><span class="role">Reference (read-only)</span></div>' +
-      secHeader(c, tr, p, true) + secBody(c, tr, p, true) + secPlaceholders(c, tr, p, true) + secButtons(c, tr, p, true) + secFooter(c, tr, p, true) +
+      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Reference (read-only)</span></div>' +
+      '<div class="wa-editor">' + phoneHtml(c, p) + '</div>' +
+      '<div class="wa-details">' + secPlaceholders(c, tr, p, true) + secButtonDetails(c, tr, p, true) + '</div>' +
       '<div class="panel-foot">' + waNameHtml(tr) + '</div></section>';
   }
 
   function editPanelHtml(c, tr) {
     var p = currentParts(c, tr);
     var dirty = isDirty(c, tr);
+    var bubble = '<div class="wa-bubble" data-preview="bubble">' + secHeader(c, tr, p) + secBody(c, tr, p) + secFooter(c, tr, p) +
+      '<div class="wa-meta"><span class="wa-count small">' + counter('text', p.text.length, S.LIMITS.body) + '</span><span class="wa-time">9:41</span></div></div>';
     return '<section class="panel edit" data-role="edit" data-lang="' + tr.lang + '">' +
-      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><button class="btn link preview-btn" data-action="preview" data-role="edit" data-lang="' + tr.lang + '" title="Show this template (with your unsaved edits) as a WhatsApp message on a phone">Preview</button><span class="role">Editing</span></div>' +
-      secHeader(c, tr, p, false) + secBody(c, tr, p, false) + secPlaceholders(c, tr, p, false) + secButtons(c, tr, p, false) + secFooter(c, tr, p, false) + secAdd(c, tr, p) + secProblems(c, p) +
+      '<div class="panel-head"><strong>' + langLabel(tr.lang) + '</strong><span class="badge ' + S.statusOf(tr, c) + '">' + STATUS_LABEL[S.statusOf(tr, c)] + '</span><span class="role">Editing</span></div>' +
+      '<div class="wa-editor">' + phoneShell(bubble + secButtons(c, tr, p) + secAdd(c, tr, p), ' editable') + '</div>' +
+      '<div class="wa-details">' + secHeaderId(c, tr, p) + secPlaceholders(c, tr, p, false) + secButtonDetails(c, tr, p, false) + secProblems(c, tr, p) + '</div>' +
       '<div class="panel-foot">' +
       '<span class="dirty-note small" style="color:var(--warn)">' + (dirty ? 'Unsaved changes' : '') + '</span>' +
       '<span class="grow"></span>' + waNameHtml(tr) +
@@ -1273,6 +1285,9 @@
     if (w) { w.scrollLeft = snap.left; w.scrollTop = snap.top; }
   }
 
+  function autosize(el) { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }   // the body grows with its text, like the bubble
+  function autosizeAll() { [].forEach.call(document.querySelectorAll('.wa-text-in'), autosize); }
+
   function render() {
     if (ui.nodeEdit) {
       var shown = currentFlow(), here = shown && shown.id === ui.nodeEdit.flow && S.getNode(shown, ui.nodeEdit.node);
@@ -1305,6 +1320,7 @@
     else if (ui.sideBox) focusSideBox();
     else if (ui.campBox) focusCampBox();
     drawEdges();
+    autosizeAll();
     scrollRestore(snap);
   }
 
@@ -1340,14 +1356,18 @@
   function panelOf(lang) { return document.querySelector('.panel.edit[data-lang="' + lang + '"]'); }
 
   // Re-render one section of the editing panel. Only sections that do not contain the field being typed in
+  var SEC_HTML = {
+    placeholders: function (c, tr, p) { return secPlaceholders(c, tr, p, false); }, buttons: secButtons, 'button-details': function (c, tr, p) { return secButtonDetails(c, tr, p, false); },
+    problems: secProblems, add: secAdd, header: secHeader, 'header-id': secHeaderId
+  };
   function refreshSec(lang, sec) {
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang), panel = panelOf(lang);
     if (!tr || !panel) return;
-    var el = panel.querySelector('[data-sec="' + sec + '"]');
-    if (!el) return;
     var p = currentParts(c, tr);
-    var html = sec === 'placeholders' ? secPlaceholders(c, tr, p, false) : sec === 'buttons' ? secButtons(c, tr, p, false) : sec === 'problems' ? secProblems(c, p) : sec === 'add' ? secAdd(c, tr, p) : sec === 'header' ? secHeader(c, tr, p, false) : null;
-    if (html !== null) el.outerHTML = html;
+    (sec === 'buttons' ? ['buttons', 'button-details'] : sec === 'header' ? ['header', 'header-id'] : [sec]).forEach(function (k) {
+      var el = panel.querySelector('[data-sec="' + k + '"]');
+      if (el && SEC_HTML[k]) el.outerHTML = SEC_HTML[k](c, tr, p);
+    });
   }
   function refreshParams(lang, idx) {
     var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang), panel = panelOf(lang);
@@ -1386,7 +1406,7 @@
       panel.querySelector('[data-input="btn-url"][data-idx="' + idx + '"]').value = r.text;
     } else {
       d.text = r.text; d.defaults = r.defaults;
-      panel.querySelector('[data-input="text"]').value = r.text;
+      var bodyEl = panel.querySelector('[data-input="text"]'); bodyEl.value = r.text; autosize(bodyEl);
       setCount(lang, 'text', r.text.length, S.LIMITS.body);
     }
     restore(); refreshSec(lang, 'problems'); syncDirty(lang);
@@ -1430,9 +1450,9 @@
     if (kind) {
       var c = S.get(ui.selectedId), lang = t.getAttribute('data-lang'), tr = S.getTr(c, lang);
       var d = editableDraft(c, tr), idx = parseInt(t.getAttribute('data-idx'), 10), name = t.getAttribute('data-name');
-      if (kind === 'text') { d.text = t.value; setCount(lang, 'text', t.value.length, S.LIMITS.body); refreshSec(lang, 'placeholders'); }
+      if (kind === 'text') { d.text = t.value; autosize(t); setCount(lang, 'text', t.value.length, S.LIMITS.body); refreshSec(lang, 'placeholders'); }
       else if (kind === 'footer') { d.footer = t.value; setCount(lang, 'footer', t.value.length, S.LIMITS.footer); }
-      else if (kind === 'header') { d.header = t.value; var mbox = panelOf(lang).querySelector('[data-media]'); if (mbox) mbox.innerHTML = mediaHtml(d.header, c.headerType); }
+      else if (kind === 'header') { d.header = t.value; var mbox = panelOf(lang).querySelector('[data-media]'); if (mbox) mbox.innerHTML = headerVisualHtml(c, d); }
       else if (kind === 'default') { d.defaults[name] = t.value; }
       else if (kind === 'btn-text') { d.buttons[idx].text = t.value; setCount(lang, 'btn-text-' + idx, t.value.length, S.LIMITS.buttonText); }
       else if (kind === 'btn-payload') { d.buttons[idx].default_payload = t.value; }
@@ -1578,7 +1598,6 @@
   var dialogReturnFocus = null;
 
   function dialogHtml() {
-    if (ui.dialog.kind === 'preview') return previewHtml(ui.dialog);
     var d = ui.dialog, isFlow = d.kind === 'flow';
     var item = isFlow ? S.getFlow(d.flowId) : S.get(d.contentId);
     var plan = isFlow ? S.planFlowDrop(d.flowId, d.targetId) : S.planDrop(d.contentId, d.targetId);
@@ -1655,7 +1674,7 @@
   }
   var HEADER_ICON = { image: '🖼', video: '▶', document: '📄' };
   // The phone with the message in it: the template's header type + these parts (header, text, defaults, footer, buttons)
-  function phoneHtml(c, p) {
+  function waHeaderHtml(c, p) {
     var head = '';
     if (c.headerType !== 'none') {
       var label = S.HEADER_TYPES.filter(function (h) { return h.id === c.headerType; })[0].label;
@@ -1665,28 +1684,25 @@
       else if (hm && hm.kind === 'document' && c.headerType === 'document') head = '<div class="wa-doc"><span class="wa-media-ic" aria-hidden="true">📄</span><div><div class="wa-doc-name">' + esc(hm.name) + '</div><div class="wa-sub">PDF · ' + esc(S.fmtSize(hm.size)) + '</div></div></div>';
       else head = '<div class="wa-media wa-media-' + c.headerType + '"><span class="wa-media-ic" aria-hidden="true">' + HEADER_ICON[c.headerType] + '</span><span>' + esc(label) + '</span></div>';
     }
+    return head;
+  }
+  // the phone around a chat: status bar, WhatsApp header with the sender, the chat background
+  function phoneShell(chat, cls) {
+    return '<div class="phone' + (cls || '') + '" aria-label="Phone showing the WhatsApp message">' +
+      '<div class="phone-bar"><span>9:41</span><span class="phone-icons" aria-hidden="true">▂▄▆ ▮</span></div>' +
+      '<div class="wa-head"><span aria-hidden="true">‹</span><span class="wa-avatar" aria-hidden="true">N</span><div><div class="wa-contact">Noora Health</div><div class="wa-sub">Business account</div></div></div>' +
+      '<div class="wa-chat">' + chat + '</div></div>';
+  }
+  function phoneHtml(c, p) {
+    var head = waHeaderHtml(c, p);
     var body = p.text.trim() ? '<div class="wa-text">' + waBodyHtml(p.text, p.defaults) + '</div>' : '<div class="wa-text muted">No text yet in this language</div>';
     var buttons = (p.buttons || []).map(function (b) {
       var url = b.type === 'URL';
       return '<div class="wa-btn">' + (url ? '<span aria-hidden="true">↗</span> ' : '<span aria-hidden="true">↩</span> ') + esc(b.text || (url ? 'URL button' : 'Quick reply')) + '</div>';
     }).join('');
-    return '<div class="phone" aria-label="Phone showing the WhatsApp message">' +
-      '<div class="phone-bar"><span>9:41</span><span class="phone-icons" aria-hidden="true">▂▄▆ ▮</span></div>' +
-      '<div class="wa-head"><span aria-hidden="true">‹</span><span class="wa-avatar" aria-hidden="true">N</span><div><div class="wa-contact">Noora Health</div><div class="wa-sub">Business account</div></div></div>' +
-      '<div class="wa-chat"><div class="wa-bubble" data-preview="bubble">' + head + body +
+    return phoneShell('<div class="wa-bubble" data-preview="bubble">' + head + body +
         (p.footer ? '<div class="wa-foot">' + esc(p.footer) + '</div>' : '') +
-        '<div class="wa-time">9:41</div></div>' + (buttons ? '<div class="wa-btns">' + buttons + '</div>' : '') + '</div></div>';
-  }
-  function previewHtml(d) {
-    var c = S.get(d.contentId), p = d.parts, tr = c && S.getTr(c, d.lang);
-    if (!c || !tr) return '';
-    return '<div class="modal-backdrop" data-action="dialog-backdrop">' +
-      '<div class="modal modal-phone" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
-      '<div class="dlg-head"><h2 id="dlg-title">Preview · ' + esc(S.langName(d.lang)) + ' <code>' + esc(d.lang) + '</code></h2>' +
-      '<button class="btn dlg-close" data-action="dialog-cancel" aria-label="Close preview">Close</button></div>' +
-      phoneHtml(c, p) +
-      '<div class="muted small phone-note">Placeholders show their default values; one without a default is marked. ' + (d.role === 'ref' ? 'This is the saved reference text.' : 'Unsaved edits are included.') + '</div>' +
-      '</div></div>';
+        '<div class="wa-time">9:41</div></div>' + (buttons ? '<div class="wa-btns">' + buttons + '</div>' : ''));
   }
   // While a template node is edited: a read-only phone beside the node showing the message with this node's values
   // (draft values over the template's defaults), updated as you type or pick; it exists only while the node is edited.
@@ -1706,12 +1722,6 @@
   function refreshNodePreview() {                 // after a value was typed: only the preview changes, never the field being typed in
     var el = document.querySelector('.fnode.editing .node-preview');
     if (el && ui.nodeEdit) el.outerHTML = nodePreviewHtml(ui.nodeEdit.draft);
-  }
-
-  function openPreview(lang, role) {
-    var c = S.get(ui.selectedId), tr = c && S.getTr(c, lang);
-    if (!tr) return;
-    showDialog({ kind: 'preview', contentId: c.id, lang: lang, role: role, parts: S.cloneParts(role === 'ref' ? S.partsOf(tr) : currentParts(c, tr)) });
   }
 
   function showDialog(dialog) {
@@ -1946,7 +1956,6 @@
       case 'dialog-duplicate': applyDialog('duplicate'); return;
       case 'dialog-move': applyDialog('move'); return;
       case 'dialog-cancel': closeDialog(); return;
-      case 'preview': openPreview(el.getAttribute('data-lang'), el.getAttribute('data-role')); return;
       case 'dialog-backdrop': if (ev.target === el) closeDialog(); return;
       case 'open-add-campaign': openCampBox(); return;
       case 'add-campaign': addCampaign(); return;

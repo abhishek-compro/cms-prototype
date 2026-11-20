@@ -1,74 +1,60 @@
-// The phone preview: a dialog that renders a template as a WhatsApp message, only when the Preview button is clicked.
+// The editing panel IS the WhatsApp phone: the message is edited in place; there is no Preview button or dialog.
+// Placeholders, button payloads / URLs, the header media id and the problems sit below the phone.
 'use strict';
 const { uiSuite } = require('../lib/harness');
 
-uiSuite('preview: the template as a WhatsApp message on a phone, in a dialog', async ({ b, ok }) => {
+uiSuite('phone editor: the editing panel looks like the WhatsApp message, details below it', async ({ b, ok }) => {
   const q = s => b.ev(`!!document.querySelector(${JSON.stringify(s)})`);
   const cnt = s => b.ev(`document.querySelectorAll(${JSON.stringify(s)}).length`);
   const txt = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).textContent || ''`);
-  const html = s => b.ev(`(document.querySelector(${JSON.stringify(s)})||{}).innerHTML || ''`);
-  const open = () => b.click('.panel.edit [data-action=preview]');
-  const active = () => b.ev(`document.activeElement.className + '|' + (document.activeElement.getAttribute('data-action')||'')`);
-  const bubble = () => txt('.wa-bubble [data-x], .wa-bubble .wa-text');
+  const val = s => b.ev(`document.querySelector(${JSON.stringify(s)}).value`);
+  const E = s => '.panel.edit ' + s;
+  const rect = s => b.ev(`(function(){var r=document.querySelector(${JSON.stringify(s)}).getBoundingClientRect(); return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,h:r.height}})()`);
 
-  ok('nothing is rendered until Preview is clicked: no dialog, no phone', !await q('.modal') && !await q('.phone'));
-  ok('each editing panel has a Preview button', await cnt('.panel.edit [data-action=preview]') === 1);
-  await b.click('.panel.edit [data-action=preview]');
-  ok('clicking it opens a modal dialog titled with the language, containing a phone', await q('.modal[role=dialog]') && await q('.phone') && /Preview · English/.test(await txt('#dlg-title')));
-  ok('the phone looks like WhatsApp: header with the sender, a chat area, one message bubble', await q('.wa-head') && /Noora Health/.test(await txt('.wa-contact')) && await cnt('.wa-bubble') === 1 && await q('.wa-chat'));
-  ok('the body has its placeholder filled with the default value, highlighted', /^Hello Friend, welcome to Noora Health\./.test((await txt('.wa-text')).trim()) && await txt('.wa-var') === 'Friend' && !/\{\{/.test(await txt('.wa-text')));
-  ok('the header media shows as an image box, the footer under the body, a time at the bottom', await q('.wa-media-image') && (await txt('.wa-foot')).trim() === 'Noora Health' && /\d:\d\d/.test(await txt('.wa-time')));
-  ok('the buttons are shown under the bubble: Tell me more (quick reply), Visit website (URL)', await b.ev(`[].map.call(document.querySelectorAll('.wa-btn'), function(x){return x.textContent.replace(/[↩↗]/g,'').trim()}).join('|')`) === 'Tell me more|Visit website');
-  ok('focus moves into the dialog', /dlg-close/.test(await active()));
-  await b.key('Tab', 'Tab', 9);
-  ok('Tab stays inside the dialog (only the Close button to cycle through)', /dlg-close/.test(await active()));
-  await b.key('Escape', 'Escape', 27);
-  ok('Escape closes it and puts focus back on the Preview button', !await q('.modal') && /preview-btn/.test(await active()));
-  await open();
-  await b.click('.wa-chat');
-  ok('clicking inside the dialog does not close it', await q('.modal'));
-  await b.clickAt(5, 5);
-  ok('clicking the backdrop closes it', !await q('.modal'));
-  await open(); await b.click('.dlg-close');
-  ok('the Close button closes it', !await q('.modal'));
+  // ---- there is no separate render
+  ok('there is no Preview button and no preview dialog anywhere', !await q('[data-action=preview]') && !await q('.preview-btn') && !await q('.modal'));
+  ok('the editing panel has the phone: sender header, a chat area, one message bubble', await q(E('.phone.editable')) && /Noora Health/.test(await txt(E('.wa-contact'))) && await q(E('.wa-chat')) && await cnt(E('.wa-bubble')) === 1);
 
-  // ---- unsaved edits are included, but only when Preview is clicked (the dialog is a snapshot, not live)
-  await b.fill('.panel.edit [data-input=text]', 'Hi {{first}}, *welcome* to _Noora_ and {{name}}.\nSecond line');
-  ok('typing in the editor renders nothing by itself', !await q('.modal') && !await q('.phone'));
-  await open();
-  const t = await html('.wa-text');
-  ok('the unsaved text is shown: *bold*, _italic_ and a line break are rendered; a placeholder without a default is marked', /<strong>welcome<\/strong>/.test(t) && /<em>Noora<\/em>/.test(t) && /<br>/.test(t) && await q('.wa-var.missing') && await txt('.wa-var.missing') === '{{first}}', t);
-  ok('the placeholder that has a default (name) is still filled in', /<span class="wa-var"[^>]*>Friend<\/span>/.test(t));
-  await b.key('Escape', 'Escape', 27);
-  ok('the editor still has the unsaved text (the preview changed nothing)', await b.ev(`document.querySelector('.panel.edit [data-input=text]').value`) === 'Hi {{first}}, *welcome* to _Noora_ and {{name}}.\nSecond line' && !await b.ev(`document.querySelector('.panel.edit .save').disabled`));
-  await b.click('.panel.edit [data-action=revert]');
+  // ---- what is in the phone: header media, body, footer, time; the buttons under the bubble
+  ok('the bubble holds the header picture, the body text (editable), the footer (editable) and a time', await q(E('.wa-bubble .wa-media-image')) && await q(E('.wa-bubble textarea[data-input=text]')) && await q(E('.wa-bubble input[data-input=footer]')) && /\d:\d\d/.test(await txt(E('.wa-bubble .wa-time'))));
+  ok('the body shows the authored text with its {{placeholder}}', /^Hello {{name}}, welcome to Noora Health\./.test(await val(E('[data-input=text]'))));
+  ok('the buttons are under the bubble, as WhatsApp shows them, and their text is typed on the button', await cnt(E('.wa-chat > .wa-btns .wa-btn-edit')) === 2 && !await q(E('.wa-bubble .wa-btn-edit')) && await b.ev(`[].map.call(document.querySelectorAll('.panel.edit .wa-btn-in'), function(i){return i.value}).join('|')`) === 'Tell me more|Visit website');
+  ok('there are no section labels (Body, Footer, Buttons…) inside the phone', !await q(E('.wa-chat .sec-label')) && !await q(E('.wa-chat .bcard-head')));
 
-  // ---- another language, another template without header / footer / buttons
+  // ---- what is NOT in the phone sits below it
+  const phone = await rect(E('.phone'));
+  const below = async s => (await rect(E(s))).top >= phone.bottom - 1;
+  ok('the placeholders table is below the phone', await q(E('[data-sec=placeholders]')) && await below('[data-sec=placeholders]'));
+  ok('the buttons\' payloads and URLs are below the phone, with the URL variables', await below('[data-input=btn-payload]') && await below('[data-input=btn-url]') && await below('[data-input=btn-param]'));
+  ok('the header media id is below the phone', await below('[data-input=header]'));
+  ok('none of those fields is inside the phone', !await q(E('.phone [data-input=btn-payload]')) && !await q(E('.phone [data-input=btn-url]')) && !await q(E('.phone [data-input=default]')) && !await q(E('.phone [data-input=header]')));
+
+  // ---- typing in the phone
+  await b.fill(E('[data-input=text]'), 'Hi {{first}}, *welcome*');
+  ok('typing in the bubble keeps focus, updates the counter, and the new placeholder appears below the phone', await b.ev(`document.activeElement.getAttribute('data-input')`) === 'text' && await txt(E('[data-count=text]')) === '23' && await q(E('[data-sec=placeholders] [data-name=first]')));
+  const h1 = (await rect(E('[data-input=text]'))).h;
+  await b.fill(E('[data-input=text]'), 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight');
+  ok('the body grows with its text, like the bubble does', (await rect(E('[data-input=text]'))).h > h1 + 40, h1 + ' -> ' + (await rect(E('[data-input=text]'))).h);
+  await b.click(E('.revert'));
+
+  // ---- another language, another template with no header, footer or buttons
   await b.click('tr.clickable[data-lang=hi]');
-  await open();
-  ok('the preview follows the language picked in the table (Hindi text, its own default)', /Preview · Hindi/.test(await txt('#dlg-title')) && /नमस्ते दोस्त/.test(await txt('.wa-text')));
-  await b.key('Escape', 'Escape', 27);
+  ok('picking another language row puts that language in the phone', /^नमस्ते {{name}}/.test(await val(E('[data-input=text]'))));
   await b.click('.content-item:nth-child(3)');
-  await open();
-  ok('a template with no header, footer or buttons shows only the body', !await q('.wa-media') && !await q('.wa-foot') && !await q('.wa-btn') && /Tip of the day/.test(await txt('.wa-text')));
-  await b.key('Escape', 'Escape', 27);
+  ok('a template with no header, footer or buttons shows only the body in the bubble (and + Add under the phone)', !await q(E('.wa-media')) && !await q(E('[data-input=footer]')) && !await q(E('.wa-btn-edit')) && await q(E('[data-change=add-part]')) && /Tip of the day/.test(await val(E('[data-input=text]'))));
   await b.click('.content-item:nth-child(1)');
   await b.click('tr.clickable[data-lang=en]');
 
-  // ---- the reference panel (side by side) previews its saved text
+  // ---- the reference panel is the same phone, read-only, with the defaults filled in
   await b.click('[data-change=toggle-side]');
-  await b.fill('.panel.edit [data-input=text]', 'Edited but not saved {{name}}');
-  await b.click('.panel.ref [data-action=preview]');
-  ok('a reference panel has its own Preview, of the saved text (not the unsaved edit in the other panel)', await q('.modal') && /नमस्ते दोस्त/.test(await txt('.wa-text')) && !/Edited but not saved/.test(await txt('.wa-text')) && /saved reference/.test(await txt('.phone-note')));
-  await b.key('Escape', 'Escape', 27);
+  ok('the reference panel shows the saved message as a read-only phone, placeholders filled with their defaults', await q('.panel.ref .phone') && !await q('.panel.ref input, .panel.ref textarea') && /दोस्त/.test(await txt('.panel.ref .wa-var')) && !/\{\{/.test(await txt('.panel.ref .wa-text')));
+  ok('the reference details (placeholders, button payloads) are below its phone, read-only', await q('.panel.ref [data-sec=placeholders]') && /welcome_more/.test(await txt('.panel.ref [data-sec=button-details]')));
   await b.click('[data-change=toggle-side]');
-  await b.click('.panel.edit [data-action=revert]');
 
-  // ---- themes: the dialog follows the colour scheme (no hard-coded colours)
-  await open();
-  const light = await b.ev(`getComputedStyle(document.querySelector('.wa-chat')).backgroundColor`);
-  await b.setScheme('dark'); await b.sleep(200);
-  const dark = await b.ev(`getComputedStyle(document.querySelector('.wa-chat')).backgroundColor`);
+  // ---- themes: the phone follows the colour scheme (no hard-coded colours)
+  const chat = () => b.ev(`getComputedStyle(document.querySelector('.panel.edit .wa-chat')).backgroundColor`);
+  await b.setScheme('light'); const light = await chat();
+  await b.setScheme('dark'); const dark = await chat();
   await b.setScheme('light');
   ok('the phone has light and dark colours', light !== dark, light + ' / ' + dark);
 });
