@@ -26,6 +26,7 @@ uiSuite('core: layout, themes, languages, history, publishing, downloads', async
   ok('"Publish all" is the only publish action (no per-language Deploy/Publish button)', await cnt('[data-action=deploy-all]') === 1 && !await q('[data-action=deploy]'));
   ok('the UI says Publish, never Deploy', !/deploy/i.test(await b.ev(`document.getElementById('app').innerText`)));
 
+  ok('the language panels sit right under the toolbar (no big gap), and the toolbar right under the top bar', await b.ev(`(function(){var tb=document.querySelector('.toolbar').getBoundingClientRect(), p=document.querySelector('.panels').getBoundingClientRect(), m=document.querySelector('.main').getBoundingClientRect(); return p.top - tb.bottom <= 6 && tb.top - m.top <= 12})()`));
   // ================= the layout does not move when you type (a regression: typing used to add the history column) =================
   const layoutNow = () => b.ev(`(function(){var l=document.querySelector('.layout'), m=document.querySelector('.main').getBoundingClientRect(); return {cls: l.className, mainW: Math.round(m.width), cols: getComputedStyle(l).gridTemplateColumns.split(' ').length, pageScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight}})()`);
   const lay0 = await layoutNow();
